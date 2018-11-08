@@ -8,7 +8,7 @@ This project is a hands-on way of learning how parsers and compilers operate. Th
 
 ## Getting Started
 
-## Installation / Build
+### Installation / Build
 
 There are currently no working binaries for the program; you must build it yourself using the main file. As the parser is not even fully built (only the lexer is functional at this point), the build process should be fairly painless.
 

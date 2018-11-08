@@ -1,0 +1,90 @@
+AST.TXT
+
+An overview of the parser's construction of abstract syntax trees (ASTs) from the lexer.
+
+All nodes on the tree will have an associated /type/ along with some extra information. These types are slightly different from the types we get from the lexer's tokens, as the parser will further process those tokens and make decisions about how they are to be used--i.e., their function within the trees and what sort of information will be stored alongside the type.
+
+The parser will generate the following types of nodes:
+
+	int			-	an integer number
+		{ type: "int", value: INT }
+		example: 30	->	{ type: "int", value: 30 }
+
+	float		-	a floating-point decimal number
+		{ type: "float", value: FLOAT }
+		example: 3.14	->	{ type: "float", value: 3.14 }
+
+	str			-	a string of characters
+		{ type: "str", value: STRING }
+		example: "hello, world!"	->	{ type: "str", value: "hello, world!" }
+
+	bool		-	a boolean value
+		{ type: "bool", value: true or false }
+		example: true	->	{ type: "bool", value: true }
+
+	var			-	the name of a variable or function (an identifier)
+		{ type: "iden", value: NAME }
+		example: foo(int)	->	{ type: "var", value: "foo" }
+		example: pi(float)	->	{ type: "var", value: "pi" }
+
+	function	-	a function
+		{ type: "func", vars: [ NAME ... ], body: AST }
+
+	call		-	a function call	( uses @ symbol )
+		{ type: "call", func: AST, args: [ AST ... ] }
+
+	conditional	-	a conditional test and block
+		{ type: "if", cond: AST, then: AST, else, AST }
+
+	assign		-	an assignment of a value to a variable
+		{ type: "assign", operator: "=", left: AST, right: AST }
+
+	unary		-	a unary expression
+		{ type: "unary", operator: OPERATOR, exp: AST }
+
+	binary		-	a binary operation
+		{ type: "binary", operator: OPERATOR, left: AST, right: AST }
+
+	prog		-	a sequence of events / statements in a block of curly braces
+		{ type: "prog", prog: [ AST ... ] }
+
+	while		-	a while loop; execute a block of code while another block of code is true
+		{ type: "while", cond: AST, do: AST }
+
+Here is an example of how a simple block of code gets turned into an AST:
+	alloc int a;
+	alloc int b;
+	let a = 10;
+	let b = 20;
+	@print(a + b);
+
+	...
+
+	BEGIN_PROGRAM:
+	{
+		{	"type"	:	"allocation",
+			"value"	:	{	"type"	:	"var",	"value" :	"a"	}
+		}
+		{	"type"	:	"allocation",
+			"value" :	{	"type"	:	"var",	"value"	:	"b"	}
+		}
+		{	"type"	:	"assignment",
+			"left"	:	{	"type"	:	"var",	"value" :	"a"	}
+			"right"	:	{	"type"	:	"num",	"value"	:	"10"}
+		}
+		{	"type"	:	"assignment",
+			"left"	:	{	"type"	:	"var",	"value" :	"b"	}
+			"right"	:	{	"type"	:	"num",	"value"	:	"20"}
+		}
+		{	"type"	:	"call",
+			"func"	:	{	"type"	:	"var",	"value"	:	"print"	}
+			"args"	:	[
+				{	"type"	:	"binary",
+					"operator"	:	"+"	,
+					"left"	:	{	"type"	:	"var",	"value"	:	"a"	}
+					"right"	:	{	"type"	:	"var",	"value"	:	"b"	}
+				}
+			]
+		}
+	}
+	:END_PROGRAM

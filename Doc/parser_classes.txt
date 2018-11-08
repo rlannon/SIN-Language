@@ -1,0 +1,11 @@
+PARSER_CLASSES.TXT
+
+A description of the various classes implemented in the parser, expression, and statement files for use in the abstract syntax tree.
+
+The SIN Parser's abstract syntax tree (AST) is made up of a two key pieces:
+	- Statements
+	- Expressions
+
+Each statement is made up of a variety of expressions, which in turn may also be made up of expressions. They are all pieced together through the use of pointers, using `std::shared_ptr`. This allows us to create expressions for pieces of another expression that are also expressions. For example, we can create a binary expression where one of the operands is itself a binary.
+
+There are two parent classes, 'Statement' and 'Expression', each with its own set of derived classes. Using shared_ptr allows us to pass a pointer of a derived class where the program expects an instance of the parent class without seeing any object slicing.

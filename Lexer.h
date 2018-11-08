@@ -9,7 +9,13 @@
 
 /*
 
-The `InputStream` class is used to handle the stream of input that we wish to parse.
+The Lexer class is used to handle the stream of input that we wish to parse. It takes a stream of input and returns tokens, each with a type and a value.
+A lexeme may be returned from the stream using the read_next() function.
+
+Note that the Lexer class does /not/ parse source files; it simply puts those files in a format that is usable by the language's parser, which is contained within the Parser class.
+
+NOTE:
+	Add in a function to allow this to be saved to a json file
 
 */
 
@@ -20,6 +26,8 @@ class Lexer
 	bool exit_flag;
 
 	int stream_length;	// the length of ifstream* stream, without the ultimate \n character (if present)
+
+	std::tuple<std::string, std::string> lexeme;
 public:
 	static const std::vector<std::string> keywords;	// our keyword vector
 
@@ -77,14 +85,18 @@ public:
 	std::string read_while(bool (*predicate)(char));
 	
 	std::tuple<std::string, std::string> read_next();
+	void read_lexeme();
 
 	std::string read_string();
 	std::string read_ident();	// read the full identifier
 
 	bool exit_flag_is_set();	// check to see the status of the exit flag
 
+	std::ostream& write(std::ostream& os) const;	// allows a lexeme to be written to an ostream
+
 	Lexer(std::ifstream* input);
 	~Lexer();
 };
 
-
+// overload the << operator
+std::ostream& operator<<(std::ostream& os, const Lexer& lexer);

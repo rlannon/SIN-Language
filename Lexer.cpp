@@ -3,12 +3,12 @@
 
 // keywords is an alphabetized list of the keywords in SIN
 // it must be alphabetized in order to use the find algorithm from the standard library
-const std::vector<std::string> Lexer::keywords{ "alloc", "and", "else", "if", "int", "let", "or", "while", "xor"};
+const std::vector<std::string> Lexer::keywords{ "alloc", "and", "bool", "else", "float", "if", "int", "let", "or", "print", "string", "while", "xor"};
 
 // Our regular expressions
-const std::string punc_exp = "[\\.',;\\[\\]\\{\\}\\(\\)]";	// expression for punctuation
-const std::string op_exp = "[\\+\\-\\*/%=\\&\\|\\^<>\\$\\?@]";	// expression for operations
-const std::string id_exp = "[_0-9a-zA-Z]";	// expression for interior id letters
+const std::string Lexer::punc_exp = "[\\.',;\\[\\]\\{\\}\\(\\)]";	// expression for punctuation
+const std::string Lexer::op_exp = "[\\+\\-\\*/%=\\&\\|\\^<>\\$\\?!@]";	// expression for operations
+const std::string Lexer::id_exp = "[_0-9a-zA-Z]";	// expression for interior id letters
 
 
 // Our stream access and test functions
@@ -262,7 +262,7 @@ std::tuple<std::string, std::string> Lexer::read_next() {
 		}
 		else if (this->is_punc(ch)) {
 			type = "punc";
-			value = this->read_while(&this->is_punc);
+			value = this->next();	// we only want to read one punctuation mark at a time, so do not use "read_while"; they are to be kept separate
 		}
 		else if (this->is_op_char(ch)) {
 			type = "op_char";
@@ -298,6 +298,10 @@ std::tuple<std::string, std::string> Lexer::read_next() {
 		std::cout << "end of file reached." << std::endl;
 		this->exit_flag = true;
 	}
+}
+
+void Lexer::read_lexeme() {
+	this->lexeme = this->read_next();
 }
 
 std::string Lexer::read_string() {
@@ -341,6 +345,12 @@ bool Lexer::exit_flag_is_set() {
 	return exit_flag;
 }
 
+// allow a lexeme to be written to an ostream
+
+std::ostream& Lexer::write(std::ostream& os) const {
+	return os << "{ \"" << std::get<0>(this->lexeme) << "\" : \"" << std::get<1>(this->lexeme) << "\" }";
+}
+
 // Constructor and Destructor
 
 Lexer::Lexer(std::ifstream* input)
@@ -354,3 +364,8 @@ Lexer::Lexer(std::ifstream* input)
 Lexer::~Lexer()
 {
 }
+
+std::ostream& operator<<(std::ostream& os, const Lexer& lexer) {
+	return lexer.write(os);
+}
+
