@@ -36,6 +36,8 @@ const enum Type {
 
 const bool is_literal(std::string candidate_type);
 
+const Type get_type(std::string candidate);
+
 
 // Base class for all expressions
 class Expression
@@ -72,6 +74,7 @@ public:
 	std::string getValue();
 	void setValue(std::string new_value);
 
+	LValue(std::string value, std::string LValue_Type);
 	LValue(std::string value);
 	LValue();
 };
@@ -96,4 +99,16 @@ public:
 
 	Unary(std::shared_ptr<Expression> operand, exp_operator op);
 	Unary();
+};
+
+
+// Functions are expressions if they return a value
+
+class ValueReturningFunction : public Expression
+{
+	std::shared_ptr<Expression> name;
+	std::vector<std::shared_ptr<Expression>> args;
+public:
+	ValueReturningFunction(std::shared_ptr<Expression> name, std::vector<std::shared_ptr<Expression>> args);
+	ValueReturningFunction();
 };

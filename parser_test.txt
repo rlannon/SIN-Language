@@ -1,1 +1,1 @@
-alloc int a;
+@print("hello");

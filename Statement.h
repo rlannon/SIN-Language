@@ -23,7 +23,7 @@ public:
 class StatementBlock
 {
 public:
-	std::vector<std::unique_ptr<Statement>> StatementsList;
+	std::vector<std::shared_ptr<Statement>> StatementsList;
 
 	StatementBlock();
 	~StatementBlock();
@@ -65,5 +65,6 @@ class Call : public Statement
 	std::shared_ptr<Expression> func;	// the function name
 	std::vector<std::shared_ptr<Expression>> args;	// arguments to the function
 public:
+	Call(std::shared_ptr<Expression> func, std::vector<std::shared_ptr<Expression>> args);
 	Call();
 };

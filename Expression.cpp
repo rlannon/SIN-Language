@@ -29,6 +29,27 @@ const bool is_literal(std::string candidate_type) {
 	}
 }
 
+const Type get_type(std::string candidate) {
+	// if it can, this function gets the proper type of an input string
+	// an array of the valid types as strings
+	std::string string_types[] = { "int", "float", "string", "bool" };
+	Type _types[] = { INT, FLOAT, STRING, BOOL };
+
+	// for test our candidate against each item in the array of string_types; if we have a match, return the Type at the same position
+	for (int i = 0; i < 4; i++) {
+		if (candidate == string_types[i]) {
+			// if we have a match, return it
+			return _types[i];
+		}
+		else {
+			continue;
+		}
+	}
+
+	// if we arrive here, we have not found the type we were looking for
+	return NONE;
+}
+
 std::string Expression::getExpType() {
 	return this->type;
 }
@@ -70,6 +91,12 @@ std::string LValue::getValue() {
 
 void LValue::setValue(std::string new_value) {
 	this->value = new_value;
+}
+
+LValue::LValue(std::string value, std::string LValue_Type) {
+	LValue::value = value;
+	LValue::type = "LValue";
+	LValue::LValue_Type = LValue_Type;
 }
 
 LValue::LValue(std::string value) {
@@ -115,4 +142,16 @@ Unary::Unary(std::shared_ptr<Expression> operand, exp_operator op) {
 
 Unary::Unary() {
 	Unary::type = "unary";
+}
+
+
+
+// Parsing function calls
+
+ValueReturningFunction::ValueReturningFunction(std::shared_ptr<Expression> name, std::vector<std::shared_ptr<Expression>> args) {
+	ValueReturningFunction::name = name;
+	ValueReturningFunction::args = args;
+}
+
+ValueReturningFunction::ValueReturningFunction() {
 }

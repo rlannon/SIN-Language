@@ -93,5 +93,10 @@ IfThenElse::IfThenElse() {
 
 /*******************	FUNCTION CALL CLASS		********************/
 
+Call::Call(std::shared_ptr<Expression> func, std::vector<std::shared_ptr<Expression>> args) {
+	Call::func = func;
+	Call::args = args;
+}
+
 Call::Call() {
 }

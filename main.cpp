@@ -21,6 +21,7 @@ For a documentation of the language, see either the doc folder in this project o
 #include "Lexer.h"
 #include "Parser.h"
 
+
 int main() {
 	/*
 	
@@ -29,30 +30,20 @@ int main() {
 	*/
 	
 	// our source file we want to use the lexer on
-	std::ifstream src_file;
-	src_file.open("parser_test.txt", std::ios::in);
-	Lexer stream(&src_file);
-	std::tuple<std::string, std::string> lex;
+	
+	std::ifstream infile;
+	infile.open("tokens.txt");
 
-	src_file.close();
+	Parser parser(&infile);
 
-	// our token file
-	std::ifstream token_file;
-	token_file.open("tokens.txt", std::ios::in);
-	Parser parser(&token_file);
-
-	std::cout << "Parsing..." << std::endl << std::endl;
-
+	std::shared_ptr<Statement> some_stmt;
+	StatementBlock prog;
 	try {
-		parser.parse_top();
+		prog = parser.parse_top();
 	}
-	catch (int code) {
-		std::cerr << "The parser encountered a fatal error and was forced to abort. Error code: " << code << std::endl;
+	catch (int e) {
+		std::cout << e << std::endl;
 	}
-
-	std::cout << "Done." << std::endl;
-
-	token_file.close();
 
 	// wait until user hits enter before closing the program
 	std::cin.get();
