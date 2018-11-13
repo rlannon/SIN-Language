@@ -3,7 +3,7 @@
 
 // keywords is an alphabetized list of the keywords in SIN
 // it must be alphabetized in order to use the find algorithm from the standard library
-const std::vector<std::string> Lexer::keywords{ "alloc", "and", "bool", "else", "float", "if", "int", "let", "or", "print", "string", "while", "xor"};
+const std::vector<std::string> Lexer::keywords{ "alloc", "and", "bool", "def", "else", "float", "if", "int", "let", "or", "string", "while", "xor"};
 
 // Our regular expressions
 const std::string Lexer::punc_exp = "[\\.',;\\[\\]\\{\\}\\(\\)]";	// expression for punctuation

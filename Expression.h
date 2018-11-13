@@ -104,11 +104,11 @@ public:
 
 // Functions are expressions if they return a value
 
-class ValueReturningFunction : public Expression
+class ValueReturningFunctionCall : public Expression
 {
 	std::shared_ptr<Expression> name;
 	std::vector<std::shared_ptr<Expression>> args;
 public:
-	ValueReturningFunction(std::shared_ptr<Expression> name, std::vector<std::shared_ptr<Expression>> args);
-	ValueReturningFunction();
+	ValueReturningFunctionCall(std::shared_ptr<Expression> name, std::vector<std::shared_ptr<Expression>> args);
+	ValueReturningFunctionCall();
 };

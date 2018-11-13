@@ -80,7 +80,7 @@ lexeme Parser::back() {
 }
 
 void Parser::error(std::string message, int code) {
-	std::cerr << std::endl << "ERROR:" << "\n\t" << message << std::endl;
+	std::cerr << std::endl << "PARSER ERROR:" << "\n\t" << message << std::endl;
 	std::cerr << "\tError occurred at position: " << this->position << std::endl << std::endl;
 throw code;
 }
@@ -108,14 +108,14 @@ StatementBlock Parser::parse_top() {
 	int index = 0;
 
 	// Parse a token file
-	while (!this->is_at_end() && !this->quit) {
+	while (!this->is_at_end() && !this->quit && !(std::get<1>(this->peek()) == "}")) {
 		this->skip_punc(';');
 		this->skip_punc('\n');
 
 		prog.StatementsList.push_back(this->parse_atomic());
 
 		index += 1;
-		if (!this->is_at_end()) {
+		if (!this->is_at_end() && !(std::get<1>(this->peek()) == "}")) {
 			this->next();
 		}
 	}
@@ -138,8 +138,59 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 		// Check to see what the keyword is
 
 		if (lex_val == "if") {
+			// Get the next lexeme
+			lexeme next = this->next();
 
-			// TODO: parse if/then/else
+			// Check to see if condition is enclosed in parens
+			if (std::get<1>(next) == "(") {
+				// get the condition
+				std::shared_ptr<Expression> condition = this->parse_expression();
+				// Initialize the if_block
+				StatementBlock if_branch;
+				StatementBlock else_branch;
+				// Check to make sure a curly brace follows the condition
+				next = this->peek();
+				if (std::get<1>(next) == "{") {
+					this->next();
+					this->next();	// skip ahead to the first character of the statementblock
+					if_branch = this->parse_top();
+					this->next();	// skip the closing curly brace
+
+					// First, check for an else clause
+					if (!this->is_at_end()) {
+						// Now, check to see if we have an 'else' clause
+						next = this->peek();
+						std::cout << std::endl;
+
+						if (std::get<1>(next) == "else") {
+							this->next();
+							next = this->peek();
+							// Again, check for curlies
+							if (std::get<1>(next) == "{") {
+								this->next();
+								this->next();	// skip ahead to the first character of the statementblock
+								else_branch = this->parse_top();
+								this->next();	// skip the closing curly brace
+
+								return std::make_shared<IfThenElse>(condition, std::make_shared<StatementBlock>(if_branch), std::make_shared<StatementBlock>(else_branch));
+							}
+							else {
+								this->error("Expected '{' after 'else' in conditional", 331);
+							}
+						}
+					}
+
+					return std::make_shared<IfThenElse>(condition, std::make_shared<StatementBlock>(if_branch));
+				}
+				// If our condition is not followed by an opening curly
+				else {
+					this->error("Expected '{' after condition in conditional", 331);
+				}
+			}
+			// If condition is not enclosed in parens
+			else {
+				this->error("Condition must be enclosed in parens", 331);
+			}
 
 		}
 		else if (lex_val == "alloc") {
@@ -171,7 +222,7 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 				}
 			}
 			else {
-				this->error("Expected a variable type; must be a keyword", 111);
+				this->error("Expected a variable type; token type must be a keyword", 111);
 			}
 		}
 		// Parse an assignment
@@ -206,9 +257,49 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 		}
 		// Parse a function declaration
 		else if (lex_val == "def") {
+			// Get the function name and verify it is of the correct type
+			lexeme func_name = this->next();
+			if (std::get<0>(func_name) == "ident") {
+				lexeme _peek = this->peek();
+				if (std::get<1>(_peek) == "(") {
+					this->next();
+					// Create our arguments vector and our StatementBlock variable
+					StatementBlock procedure;
+					std::vector<std::shared_ptr<Statement>> args;
+					// Populate our arguments vector if there are arguments
+					if (std::get<1>(this->peek()) != ")") {
+						this->next();
+						while (std::get<1>(this->current_token()) != ")") {
+							args.push_back(this->parse_atomic());
+							this->next();
+						}
+					}
+					else {
+						this->next();	// skip the closing paren
+					}
+					// Args should be empty if we don't have any
+					// Now, check to make sure we have a curly brace
+					if (std::get<1>(this->peek()) == "{") {
+						this->next();
+						this->next();
+						procedure = this->parse_top();
+						this->next();	// skip closing curly brace
 
-			// TODO: parse function definition
-
+						// Return the pointer to our function
+						std::shared_ptr<LValue> _func = std::make_shared<LValue>(std::get<1>(func_name), "func");
+						return std::make_shared<Definition>(_func, args, std::make_shared<StatementBlock>(procedure));
+					}
+					else {
+						this->error("Function definition requires use of curly braces after arguments", 331);
+					}
+				}
+				else {
+					this->error("Function definition requires '(' and ')'", 331);
+				}
+			}
+			else {
+				this->error("Expected identifier", 330);
+			}
 		}
 		// if none of the keywords were valid, throw an error
 		else {
@@ -257,7 +348,7 @@ std::shared_ptr<Expression> Parser::parse_expression() {
 		left = this->parse_expression();
 		this->next();
 		// if our next character is a semicolon or closing paren, then we should just return the expression we just parsed
-		if (std::get<1>(this->peek()) == ";" || std::get<1>(this->peek()) == ")") {
+		if (std::get<1>(this->peek()) == ";" || std::get<1>(this->peek()) == ")" || std::get<1>(this->peek()) == "{") {
 			return left;
 		}
 		// if our next character is an op_char, returning the expression would skip it, so we need to parse a binary using the expression in parens as our left expression
@@ -292,7 +383,7 @@ std::shared_ptr<Expression> Parser::parse_expression() {
 				this->next();
 			}
 			this->next();
-			return std::make_shared<ValueReturningFunction>(std::make_shared<LValue>(lex_val, "func"), args);
+			return std::make_shared<ValueReturningFunctionCall>(std::make_shared<LValue>(lex_val, "func"), args);
 		}
 		else {
 			this->error("Expected identifier in function call", 330);

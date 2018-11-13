@@ -1,1 +1,10 @@
-@print("hello");
+@print("Test!");
+
+def myFunc(alloc int a) {
+	let a = 5;
+}
+
+alloc int a;
+let a = 15;
+
+@myFunc(a);

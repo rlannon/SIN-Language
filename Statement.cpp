@@ -85,18 +85,52 @@ Assignment::Assignment() {
 	Assignment::statement_type = "assign";
 }
 
+
+
+/*******************	ITE CLASS		********************/
+
+IfThenElse::IfThenElse(std::shared_ptr<Expression> condition_ptr, std::shared_ptr<StatementBlock> if_branch_ptr, std::shared_ptr<StatementBlock> else_branch_ptr) {
+	IfThenElse::statement_type = "ite";
+	IfThenElse::condition = condition_ptr;
+	IfThenElse::if_branch = if_branch_ptr;
+	IfThenElse::else_branch = else_branch_ptr;
+}
+
+IfThenElse::IfThenElse(std::shared_ptr<Expression> condition_ptr, std::shared_ptr<StatementBlock> if_branch_ptr) {
+	IfThenElse::statement_type = "ite";
+	IfThenElse::condition = condition_ptr;
+	IfThenElse::if_branch = if_branch_ptr;
+	IfThenElse::else_branch = NULL;
+}
+
 IfThenElse::IfThenElse() {
-	IfThenElse::statement_type = "ITE";
+	IfThenElse::statement_type = "ite";
 }
 
 
 
 /*******************	FUNCTION CALL CLASS		********************/
 
+Definition::Definition(std::shared_ptr<Expression> name_ptr, std::vector<std::shared_ptr<Statement>> args_ptr, std::shared_ptr<StatementBlock> procedure_ptr) {
+	Definition::name = name_ptr;
+	Definition::args = args_ptr;
+	Definition::procedure = procedure_ptr;
+	Definition::statement_type = "def";
+}
+
+Definition::Definition() {
+	Definition::statement_type = "def";
+}
+
+
+/*******************	FUNCTION CALL CLASS		********************/
+
 Call::Call(std::shared_ptr<Expression> func, std::vector<std::shared_ptr<Expression>> args) {
+	Call::statement_type = "call";
 	Call::func = func;
 	Call::args = args;
 }
 
 Call::Call() {
+	Call::statement_type = "call";
 }

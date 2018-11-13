@@ -53,11 +53,23 @@ public:
 
 class IfThenElse : public Statement
 {
-	Expression condition;
-	StatementBlock if_branch;
-	StatementBlock else_branch;
+	std::shared_ptr<Expression> condition;
+	std::shared_ptr<StatementBlock> if_branch;
+	std::shared_ptr<StatementBlock> else_branch;
 public:
+	IfThenElse(std::shared_ptr<Expression> condition_ptr, std::shared_ptr<StatementBlock> if_branch_ptr, std::shared_ptr<StatementBlock> else_branch_ptr);
+	IfThenElse(std::shared_ptr<Expression> condition_ptr, std::shared_ptr<StatementBlock> if_branch_ptr);
 	IfThenElse();
+};
+
+class Definition : public Statement
+{
+	std::shared_ptr<Expression> name;
+	std::vector<std::shared_ptr<Statement>> args;
+	std::shared_ptr<StatementBlock> procedure;
+public:
+	Definition(std::shared_ptr<Expression> name_ptr, std::vector<std::shared_ptr<Statement>> args_ptr, std::shared_ptr<StatementBlock> procedure_ptr);
+	Definition();
 };
 
 class Call : public Statement

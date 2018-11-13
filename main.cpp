@@ -29,7 +29,22 @@ int main() {
 	
 	*/
 	
-	// our source file we want to use the lexer on
+	//First, test the lexer
+	std::ifstream src_file;
+	src_file.open("parser_test.txt", std::ios::in);
+	Lexer lex(&src_file);
+
+	std::ofstream token_file;
+	token_file.open("tokens.txt", std::ios::out);
+
+	while (!lex.eof() && !lex.exit_flag_is_set()) {
+		std::tuple<std::string, std::string> token = lex.read_next();
+		token_file << std::get<0>(token) << "\n" << std::get<1>(token) << "\n";
+	}
+
+	token_file.close();
+	src_file.close();
+	// Now, test the parser
 	
 	std::ifstream infile;
 	infile.open("tokens.txt");

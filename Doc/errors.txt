@@ -11,6 +11,7 @@ An overview of the error codes and their meanings.
 300		-	Invalid syntax & unexpected tokens
 	312	-	Token was inappropriate for this context in both type and value; e.g., writing "3 3" as an expression is invalid, as is "3 ("
 	330	-	Expected a token of a particular type given the context in which it occurred, but such a token was not found.
+	331	-	Expected a particular token for the context, but said token was not found
 
 400		-	Unknowns
 

@@ -148,10 +148,10 @@ Unary::Unary() {
 
 // Parsing function calls
 
-ValueReturningFunction::ValueReturningFunction(std::shared_ptr<Expression> name, std::vector<std::shared_ptr<Expression>> args) {
-	ValueReturningFunction::name = name;
-	ValueReturningFunction::args = args;
+ValueReturningFunctionCall::ValueReturningFunctionCall(std::shared_ptr<Expression> name, std::vector<std::shared_ptr<Expression>> args) {
+	ValueReturningFunctionCall::name = name;
+	ValueReturningFunctionCall::args = args;
 }
 
-ValueReturningFunction::ValueReturningFunction() {
+ValueReturningFunctionCall::ValueReturningFunctionCall() {
 }
