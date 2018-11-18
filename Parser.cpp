@@ -37,7 +37,7 @@ const int Parser::get_precedence(std::string symbol) {
 
 // Tells us whether we have run out of tokens
 bool Parser::is_at_end() {
-	if (this->position >= this->num_tokens - 1) {	// the last element is list.size() - 1;  if we are at list.size(), we have gone over
+	if (this->position >= this->num_tokens - 2) {	// the last element is list.size() - 1;  if we are at list.size(), we have gone over
 		return true;
 	}
 	else {
@@ -203,7 +203,7 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 			if (std::get<0>(var_type) == "kwd") {
 				if (std::get<1>(var_type) == "int" || std::get<1>(var_type) == "float" || std::get<1>(var_type) == "bool" || std::get<1>(var_type) == "string") {
 					// store the type name in our Type object
-					new_var_type = get_type(std::get<1>(var_type));
+					new_var_type = get_type_from_string(std::get<1>(var_type));
 
 					// the following token must be an identifier
 					lexeme var_name = this->next();
@@ -255,50 +255,97 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 				return assign;
 			}
 		}
-		// Parse a function declaration
-		else if (lex_val == "def") {
-			// Get the function name and verify it is of the correct type
-			lexeme func_name = this->next();
-			if (std::get<0>(func_name) == "ident") {
-				lexeme _peek = this->peek();
-				if (std::get<1>(_peek) == "(") {
-					this->next();
-					// Create our arguments vector and our StatementBlock variable
-					StatementBlock procedure;
-					std::vector<std::shared_ptr<Statement>> args;
-					// Populate our arguments vector if there are arguments
-					if (std::get<1>(this->peek()) != ")") {
-						this->next();
-						while (std::get<1>(this->current_token()) != ")") {
-							args.push_back(this->parse_atomic());
-							this->next();
-						}
-					}
-					else {
-						this->next();	// skip the closing paren
-					}
-					// Args should be empty if we don't have any
-					// Now, check to make sure we have a curly brace
-					if (std::get<1>(this->peek()) == "{") {
-						this->next();
-						this->next();
-						procedure = this->parse_top();
-						this->next();	// skip closing curly brace
+		// Parse a return statement
+		else if (lex_val == "return") {
+			this->next();	// go to the expression
+			std::shared_ptr<Expression> return_exp = this->parse_expression();
+			return std::make_shared<ReturnStatement>(return_exp);
+		}
+		// Parse a 'while' loop
+		else if (lex_val == "while") {
+			// A while loop is very similar to a "for" loop in how we parse it; the only difference is we don't need to check for an "else" branch
+			std::shared_ptr<Expression> condition;	// create the object for our condition
+			StatementBlock branch;	// and for the loop body
 
-						// Return the pointer to our function
-						std::shared_ptr<LValue> _func = std::make_shared<LValue>(std::get<1>(func_name), "func");
-						return std::make_shared<Definition>(_func, args, std::make_shared<StatementBlock>(procedure));
+			if (std::get<1>(this->peek()) == "(") {
+				this->next();
+				condition = this->parse_expression();
+				if (std::get<1>(this->peek()) == "{") {
+					this->next();
+					this->next();	// skip opening curly
+					branch = this->parse_top();
+
+					// If we are not at the end, go to the next token
+					if (!(this->is_at_end())) {
+						this->next();
 					}
-					else {
-						this->error("Function definition requires use of curly braces after arguments", 331);
-					}
+
+					// Make a pointer to our branch
+					std::shared_ptr<StatementBlock> loop_body = std::make_shared<StatementBlock>(branch);
+
+					// return our object
+					return std::make_shared<WhileLoop>(condition, loop_body);
 				}
 				else {
-					this->error("Function definition requires '(' and ')'", 331);
+					this->error("Loop body must be enclosed in curly braces", 331);
 				}
 			}
 			else {
-				this->error("Expected identifier", 330);
+				this->error("Expected a condition", 331);
+			}
+		}
+		// Parse a function declaration
+		else if (lex_val == "def") {
+			// First, get the type of function that we have -- the return value
+			lexeme func_type = this->next();
+			Type return_type;
+			// func_type must be a keyword
+			if (std::get<0>(func_type) == "kwd") {
+				return_type = get_type_from_string(std::get<1>(func_type));
+				// Get the function name and verify it is of the correct type
+				lexeme func_name = this->next();
+				if (std::get<0>(func_name) == "ident") {
+					lexeme _peek = this->peek();
+					if (std::get<1>(_peek) == "(") {
+						this->next();
+						// Create our arguments vector and our StatementBlock variable
+						StatementBlock procedure;
+						std::vector<std::shared_ptr<Statement>> args;
+						// Populate our arguments vector if there are arguments
+						if (std::get<1>(this->peek()) != ")") {
+							this->next();
+							while (std::get<1>(this->current_token()) != ")") {
+								args.push_back(this->parse_atomic());
+								this->next();
+							}
+						}
+						else {
+							this->next();	// skip the closing paren
+						}
+						// Args should be empty if we don't have any
+						// Now, check to make sure we have a curly brace
+						if (std::get<1>(this->peek()) == "{") {
+							this->next();
+							this->next();
+							procedure = this->parse_top();
+							this->next();	// skip closing curly brace
+
+							// Return the pointer to our function
+							std::shared_ptr<LValue> _func = std::make_shared<LValue>(std::get<1>(func_name), "func");
+							return std::make_shared<Definition>(_func, return_type, args, std::make_shared<StatementBlock>(procedure));
+						}
+						else {
+							this->error("Function definition requires use of curly braces after arguments", 331);
+						}
+					}
+					else {
+						this->error("Function definition requires '(' and ')'", 331);
+					}
+				}
+				// if NOT "ident"
+				else {
+					this->error("Expected identifier", 330);
+				}
 			}
 		}
 		// if none of the keywords were valid, throw an error
@@ -321,6 +368,9 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 					args.push_back(this->parse_expression());
 					this->next();
 				}
+				while (std::get<1>(this->peek()) != ";") {
+					this->next();
+				}
 				this->next();
 				return std::make_shared<Call>(std::make_shared<LValue>(std::get<1>(func_name), "func"), args);
 			}
@@ -329,6 +379,9 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 			}
 
 		}
+	}
+	else if (lex_type == "punc" && lex_val == "}") {
+		this->next();
 	}
 
 	return stmt;
@@ -362,7 +415,7 @@ std::shared_ptr<Expression> Parser::parse_expression() {
 	}
 	// if it is not an expression within parens
 	else if (is_literal(lex_type)) {
-			left = std::make_shared<Literal>(get_type(lex_type), lex_val);
+			left = std::make_shared<Literal>(get_type_from_string(lex_type), lex_val);
 	}
 	else if (lex_type == "ident") {
 		left = std::make_shared<LValue>(lex_val);
@@ -382,7 +435,6 @@ std::shared_ptr<Expression> Parser::parse_expression() {
 				args.push_back(this->parse_expression());
 				this->next();
 			}
-			this->next();
 			return std::make_shared<ValueReturningFunctionCall>(std::make_shared<LValue>(lex_val, "func"), args);
 		}
 		else {

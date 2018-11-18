@@ -29,14 +29,14 @@ const bool is_literal(std::string candidate_type) {
 	}
 }
 
-const Type get_type(std::string candidate) {
+const Type get_type_from_string(std::string candidate) {
 	// if it can, this function gets the proper type of an input string
 	// an array of the valid types as strings
-	std::string string_types[] = { "int", "float", "string", "bool" };
-	Type _types[] = { INT, FLOAT, STRING, BOOL };
+	std::string string_types[] = { "int", "float", "string", "bool", "void" };
+	Type _types[] = { INT, FLOAT, STRING, BOOL, VOID };
 
 	// for test our candidate against each item in the array of string_types; if we have a match, return the Type at the same position
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < 5; i++) {
 		if (candidate == string_types[i]) {
 			// if we have a match, return it
 			return _types[i];
@@ -48,6 +48,24 @@ const Type get_type(std::string candidate) {
 
 	// if we arrive here, we have not found the type we were looking for
 	return NONE;
+}
+
+const std::string get_string_from_type(Type candidate) {
+	// reverse of the above function
+	std::string string_types[] = { "int", "float", "string", "bool", "void" };
+	Type _types[] = { INT, FLOAT, STRING, BOOL, VOID };
+
+	// for test our candidate against each item in the array of string_types; if we have a match, return the string at the same position
+	for (int i = 0; i < 5; i++) {
+		if (candidate == _types[i]) {
+			// if we have a match, return it
+			return string_types[i];
+		}
+		else {
+			continue;
+		}
+	}
+
 }
 
 std::string Expression::getExpType() {
@@ -113,6 +131,18 @@ LValue::LValue() {
 
 
 
+std::shared_ptr<Expression> Binary::get_left() {
+	return this->left_exp;
+}
+
+std::shared_ptr<Expression> Binary::get_right() {
+	return this->right_exp;
+}
+
+exp_operator Binary::get_operator() {
+	return this->op;
+}
+
 Binary::Binary(std::shared_ptr<Expression> left_exp, std::shared_ptr<Expression> right_exp, exp_operator op) {
 	Binary::left_exp = left_exp;
 	Binary::right_exp = right_exp;
@@ -148,10 +178,32 @@ Unary::Unary() {
 
 // Parsing function calls
 
-ValueReturningFunctionCall::ValueReturningFunctionCall(std::shared_ptr<Expression> name, std::vector<std::shared_ptr<Expression>> args) {
+std::shared_ptr<LValue> ValueReturningFunctionCall::get_name() {
+	return this->name;
+}
+
+std::string ValueReturningFunctionCall::get_func_name() {
+	return this->name->getValue();
+}
+
+std::vector<std::shared_ptr<Expression>> ValueReturningFunctionCall::get_args() {
+	return this->args;
+}
+
+std::shared_ptr<Expression> ValueReturningFunctionCall::get_arg(int i) {
+	return this->args[i];
+}
+
+int ValueReturningFunctionCall::get_args_size() {
+	return this->args.size();
+}
+
+ValueReturningFunctionCall::ValueReturningFunctionCall(std::shared_ptr<LValue> name, std::vector<std::shared_ptr<Expression>> args) {
 	ValueReturningFunctionCall::name = name;
 	ValueReturningFunctionCall::args = args;
+	ValueReturningFunctionCall::type = "value_returning";
 }
 
 ValueReturningFunctionCall::ValueReturningFunctionCall() {
+	ValueReturningFunctionCall::type = "value_returning";
 }

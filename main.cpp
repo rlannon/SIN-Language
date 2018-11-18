@@ -20,6 +20,7 @@ For a documentation of the language, see either the doc folder in this project o
 // Custom headers
 #include "Lexer.h"
 #include "Parser.h"
+#include "Interpreter.h"
 
 
 int main() {
@@ -51,6 +52,8 @@ int main() {
 
 	Parser parser(&infile);
 
+	infile.close();
+
 	std::shared_ptr<Statement> some_stmt;
 	StatementBlock prog;
 	try {
@@ -58,6 +61,20 @@ int main() {
 	}
 	catch (int e) {
 		std::cout << e << std::endl;
+	}
+
+	Interpreter interpreter;
+	
+	try {
+		int i = 0;
+		while (i < prog.StatementsList.size()) {
+			Statement* statement = dynamic_cast<Statement*>(prog.StatementsList[i].get());
+			interpreter.evaluate_statement(statement, interpreter.get_vars_table());
+			i++;
+		}
+	}
+	catch (int e) {
+		std::cout << "Exception code: " << e << std::endl;
 	}
 
 	// wait until user hits enter before closing the program

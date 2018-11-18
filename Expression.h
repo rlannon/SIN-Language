@@ -31,13 +31,15 @@ const enum Type {
 	FLOAT,
 	STRING,
 	BOOL,
+	VOID,
 	NONE
 };
 
 const bool is_literal(std::string candidate_type);
 
-const Type get_type(std::string candidate);
+const Type get_type_from_string(std::string candidate);
 
+const std::string get_string_from_type(Type candidate);
 
 // Base class for all expressions
 class Expression
@@ -85,6 +87,11 @@ class Binary : public Expression
 	std::shared_ptr<Expression> left_exp;
 	std::shared_ptr<Expression> right_exp;
 public:
+	std::shared_ptr<Expression> get_left();
+	std::shared_ptr<Expression> get_right();
+
+	exp_operator get_operator();
+
 	Binary(std::shared_ptr<Expression> left, std::shared_ptr<Expression> right, exp_operator op);
 	Binary();
 };
@@ -106,9 +113,15 @@ public:
 
 class ValueReturningFunctionCall : public Expression
 {
-	std::shared_ptr<Expression> name;
+	std::shared_ptr<LValue> name;
 	std::vector<std::shared_ptr<Expression>> args;
 public:
-	ValueReturningFunctionCall(std::shared_ptr<Expression> name, std::vector<std::shared_ptr<Expression>> args);
+	std::shared_ptr<LValue> get_name();
+	std::string get_func_name();
+	std::vector<std::shared_ptr<Expression>> get_args();
+	std::shared_ptr<Expression> get_arg(int i);
+	int get_args_size();
+
+	ValueReturningFunctionCall(std::shared_ptr<LValue> name, std::vector<std::shared_ptr<Expression>> args);
 	ValueReturningFunctionCall();
 };

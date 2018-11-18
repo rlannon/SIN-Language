@@ -30,7 +30,11 @@ StatementBlock::~StatementBlock() {
 /*******************	ALLOCATION CLASS	********************/
 
 
-std::string Allocation::getVarType() {
+Type Allocation::getVarType() {
+	return this->type;
+}
+
+std::string Allocation::getVarTypeAsString() {
 	std::string types_list[4] = { "int", "float", "string", "bool" };
 	Type _types[4] = { INT, FLOAT, STRING, BOOL };
 
@@ -75,6 +79,10 @@ std::string Assignment::getRValueType() {
 	return _rval->getExpType();
 }
 
+std::shared_ptr<Expression> Assignment::getRValue() {
+	return this->rvalue_ptr;
+}
+
 Assignment::Assignment(LValue lvalue, std::shared_ptr<Expression> rvalue) {
 	Assignment::statement_type = "assign";
 	Assignment::lvalue = lvalue;
@@ -87,7 +95,39 @@ Assignment::Assignment() {
 
 
 
+/*******************	RETURN STATEMENT CLASS		********************/
+
+
+std::shared_ptr<Expression> ReturnStatement::get_return_exp() {
+	return this->return_exp;
+}
+
+
+ReturnStatement::ReturnStatement(std::shared_ptr<Expression> exp_ptr) {
+	ReturnStatement::statement_type = "return";
+	ReturnStatement::return_exp = exp_ptr;
+}
+
+ReturnStatement::ReturnStatement() {
+	ReturnStatement::statement_type = "return";
+}
+
+
+
 /*******************	ITE CLASS		********************/
+
+std::shared_ptr<Expression> IfThenElse::get_condition() {
+	return IfThenElse::condition;
+}
+
+std::shared_ptr<StatementBlock> IfThenElse::get_if_branch() {
+	return this->if_branch;
+}
+
+std::shared_ptr<StatementBlock> IfThenElse::get_else_branch() {
+	return this->else_branch;
+}
+
 
 IfThenElse::IfThenElse(std::shared_ptr<Expression> condition_ptr, std::shared_ptr<StatementBlock> if_branch_ptr, std::shared_ptr<StatementBlock> else_branch_ptr) {
 	IfThenElse::statement_type = "ite";
@@ -109,12 +149,46 @@ IfThenElse::IfThenElse() {
 
 
 
-/*******************	FUNCTION CALL CLASS		********************/
+/*******************	WHILE LOOP CLASS		********************/
 
-Definition::Definition(std::shared_ptr<Expression> name_ptr, std::vector<std::shared_ptr<Statement>> args_ptr, std::shared_ptr<StatementBlock> procedure_ptr) {
+std::shared_ptr<Expression> WhileLoop::get_condition()
+{
+	return WhileLoop::condition;
+}
+
+std::shared_ptr<StatementBlock> WhileLoop::get_branch()
+{
+	return WhileLoop::branch;
+}
+
+WhileLoop::WhileLoop(std::shared_ptr<Expression> condition, std::shared_ptr<StatementBlock> branch) {
+	WhileLoop::condition = condition;
+	WhileLoop::branch = branch;
+	WhileLoop::statement_type = "while";
+}
+
+WhileLoop::WhileLoop() {
+}
+
+/*******************	FUNCTION DEFINITION CLASS		********************/
+
+std::shared_ptr<Expression> Definition::get_name() {
+	return this->name;
+}
+
+std::shared_ptr<StatementBlock> Definition::get_procedure() {
+	return this->procedure;
+}
+
+std::vector<std::shared_ptr<Statement>> Definition::get_args() {
+	return this->args;
+}
+
+Definition::Definition(std::shared_ptr<Expression> name_ptr, Type return_type_ptr, std::vector<std::shared_ptr<Statement>> args_ptr, std::shared_ptr<StatementBlock> procedure_ptr) {
 	Definition::name = name_ptr;
 	Definition::args = args_ptr;
 	Definition::procedure = procedure_ptr;
+	Definition::return_type = return_type_ptr;
 	Definition::statement_type = "def";
 }
 
@@ -125,7 +199,19 @@ Definition::Definition() {
 
 /*******************	FUNCTION CALL CLASS		********************/
 
-Call::Call(std::shared_ptr<Expression> func, std::vector<std::shared_ptr<Expression>> args) {
+std::string Call::get_func_name() {
+	return this->func->getValue();
+}
+
+int Call::get_args_size() {
+	return this->args.size();
+}
+
+std::shared_ptr<Expression> Call::get_arg(int num) {
+	return this->args[num];
+}
+
+Call::Call(std::shared_ptr<LValue> func, std::vector<std::shared_ptr<Expression>> args) {
 	Call::statement_type = "call";
 	Call::func = func;
 	Call::args = args;

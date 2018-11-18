@@ -2,6 +2,12 @@ ERRORS.TXT
 
 An overview of the error codes and their meanings.
 
+LEXER ERRORS:
+
+PARSER ERRORS:
+	A few different types of errors may be thrown by the parser when it is analyzing the token stream. Here is a list, along with brief explanations.
+	Note that parser errors will always come with an error position, which is the /token number/ where the error was encountered.
+
 100		-	Token type errors
 	111	-	This token type is not appropriate here
 
@@ -12,7 +18,34 @@ An overview of the error codes and their meanings.
 	312	-	Token was inappropriate for this context in both type and value; e.g., writing "3 3" as an expression is invalid, as is "3 ("
 	330	-	Expected a token of a particular type given the context in which it occurred, but such a token was not found.
 	331	-	Expected a particular token for the context, but said token was not found
+	332	-	Expected an identifier, but one was not found
 
 400		-	Unknowns
 
 500		-	Control flow errors
+
+
+
+INTERPRETER ERRORS:
+	There are many errors that can be thrown by the interpreter, as there are many things that can go wrong during interpretation.
+
+1000s	-	Type errors:	These errors are thrown when types do not match what they are supposed to be; for example, errors involving assigning a variable of one type a value of another.
+	1123	-	An operation of this type cannot be done with an expression of the type specified.
+	1141	-	Argument type in function call does not match the type in its definition
+
+2000s	-	Value errors:	Thrown
+	2130	-	Error in bool expression; could not evaluate proper type.
+
+3000s	-	Semantic errors / syntax errors:	Thrown when there are syntax errors that are not caught by the parser, but are syntax errors that arose during semantic analysis.
+	3024	-	Variable referenced without allocation
+		The variable referenced has not been allocated, and is therefore not in the variable table.
+	3034	-	Function referenced without definition
+	3101	-	Two variables were not of the same type in a binary expression
+	3140	-	Number of arguments in function call is not equal to the number in its definition
+	3411	-	Expected a statement, but instead got something else; this resulted in a NULL pointer for a statement, which threw an exception.
+	3412	-	A statement was expected, but instead got an expression (specifically, a "return" expression); a return statement does not belong outside a value-retuning function.
+	3999	-	Unknown:	This error should have been caught by the parser.
+
+4000s	-	Memory errors:	Thrown when there is some sort of read or write access violation.
+
+5000s	-	Control flow errors
