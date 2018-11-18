@@ -23,63 +23,87 @@ For a documentation of the language, see either the doc folder in this project o
 #include "Interpreter.h"
 
 
-int main() {
+int main(int argc, char** argv) {
 	/*
 	
 	The main function currently serves to test the tokenizer and parser. As the program gets more advanced, the main function will be modified, and eventually accept command-line arguments so that the program may be used in the command line to parse and interpret/compile files. Currently, however, everything is hard-coded and will remain that way for the forseeable future.
 	
 	*/
-	
-	//First, test the lexer
+
+	// Create the path for our source file
+	std::string src_file_path;
+
+	// First, check for command-line arguments beyond the name of the program
+
+	if (argc == 1) {
+		// Prompt the user for a file
+		// This allows us to use the program without the command line
+		std::cout << "No input file specified. Enter a filename:" << std::endl;
+		std::getline(std::cin, src_file_path);
+	}
+	else {
+		// The path to our file should be our first argument, should it be executed from the command line with arguments
+		src_file_path = argv[1];
+	}
+
+	// Check to make sure our file is a valid type; quit if it isn't
+	if (!std::regex_search(src_file_path, std::regex("(.txt)|(.sin)"))) {
+		std::cerr << std::endl << "File must be either a .txt or .sin file!" << std::endl << "Press enter to exit." << std::endl;
+		std::cin.get();
+		exit(1);
+	}
+
+	// Open our file
 	std::ifstream src_file;
-	src_file.open("parser_test.txt", std::ios::in);
-	Lexer lex(&src_file);
+	src_file.open(src_file_path, std::ios::in);
 
-	std::ofstream token_file;
-	token_file.open("tokens.txt", std::ios::out);
+	if (src_file.is_open()) {
+		std::cout << "> Tokenizing..." << std::endl;
+		Lexer lex(&src_file);
+		Parser parser(lex);
 
-	while (!lex.eof() && !lex.exit_flag_is_set()) {
-		std::tuple<std::string, std::string> token = lex.read_next();
-		token_file << std::get<0>(token) << "\n" << std::get<1>(token) << "\n";
-	}
+		src_file.close();
 
-	token_file.close();
-	src_file.close();
-	// Now, test the parser
-	
-	std::ifstream infile;
-	infile.open("tokens.txt");
+		// Create an object for our abstract syntax tree
+		StatementBlock prog;
 
-	Parser parser(&infile);
-
-	infile.close();
-
-	std::shared_ptr<Statement> some_stmt;
-	StatementBlock prog;
-	try {
-		prog = parser.parse_top();
-	}
-	catch (int e) {
-		std::cout << e << std::endl;
-	}
-
-	Interpreter interpreter;
-	
-	try {
-		int i = 0;
-		while (i < prog.StatementsList.size()) {
-			Statement* statement = dynamic_cast<Statement*>(prog.StatementsList[i].get());
-			interpreter.evaluate_statement(statement, interpreter.get_vars_table());
-			i++;
+		std::cout << "> Creating AST..." << std::endl;
+		// Parse the token file to create the abstract syntax tree
+		try {
+			prog = parser.parse_top();
 		}
-	}
-	catch (int e) {
-		std::cout << "Exception code: " << e << std::endl;
-	}
+		catch (int e) {
+			std::cout << e << std::endl;
+		}
 
-	// wait until user hits enter before closing the program
-	std::cin.get();
+		// Create the interpreter object
+		Interpreter interpreter;
 
-	// exit the program
-	return 0;
+		std::cout << "> Executing program..." << std::endl << std::endl;
+		// Parse our abstract syntax tree
+		try {
+			int i = 0;
+			while (i < prog.StatementsList.size()) {
+				Statement* statement = dynamic_cast<Statement*>(prog.StatementsList[i].get());
+				interpreter.evaluate_statement(statement, interpreter.get_vars_table());
+				i++;
+			}
+		}
+		catch (int e) {
+			std::cout << "Exception code: " << e << std::endl;
+		}
+
+		// print a "done" message and wait until user hits enter before closing the program
+		std::cout << std::endl << "> Done. Press enter to exit." << std::endl;
+		std::cin.get();
+
+		// exit the program
+		return 0;
+	}
+	else {
+		// if we can't open the file, then print an error and quit.
+		std::cerr << "Error: could not open file '" << src_file_path << "'!" << std::endl << "Press enter to exit." << std::endl;
+		std::cin.get();
+		exit(1);
+	}
 }

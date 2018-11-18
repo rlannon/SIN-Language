@@ -9,6 +9,7 @@
 
 #include "Statement.h"
 #include "Expression.h"
+#include "Lexer.h"
 
 class Parser
 {
@@ -37,11 +38,12 @@ public:
 	StatementBlock parse_top();
 
 	std::shared_ptr<Statement> parse_atomic();
-	std::shared_ptr<Expression> parse_expression();
+	std::shared_ptr<Expression> parse_expression(int prec=0);	// put default argument here because we call "parse_expression" in "maybe_binary"; as a reuslt, "his_prec" appears as if it is being passed to the next maybe_binary, but isn't because we parse an expression before we parse the binary, meaning my_prec gets set to 0, and not to his_prec as it should
 	std::shared_ptr<Expression> maybe_binary(std::shared_ptr<Expression> left, int my_prec);
 
 	void populate_tokens_list(std::ifstream* token_stream);
 
+	Parser(Lexer& lexer);
 	Parser(std::ifstream* token_stream);
 	Parser();
 	~Parser();

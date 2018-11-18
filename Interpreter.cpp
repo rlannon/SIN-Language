@@ -113,7 +113,6 @@ void Interpreter::evaluate_void_function(Call func_to_evaluate) {
 	// create instances of all our local function variables
 	if (func_to_evaluate.get_args_size() == func_def.get_args().size()) {
 		for (int i = 0; i < func_def.get_args().size(); i++) {
-			std::cout << "has args" << std::endl;
 			Allocation* current_arg = dynamic_cast<Allocation*>(func_def.get_args()[i].get());
 			Expression* arg = dynamic_cast<Expression*>(func_to_evaluate.get_arg(i).get());
 			std::tuple<Type, std::string> argv;
@@ -265,7 +264,7 @@ void Interpreter::evaluate_statement(Statement* statement, std::vector<std::tupl
 					else if (_arg->getExpType() == "value_returning") {
 						ValueReturningFunctionCall* val_ret = dynamic_cast<ValueReturningFunctionCall*>(_arg.get());
 						std::tuple<Type, std::string> _exp_tuple = this->evaluate_value_returning_function(*val_ret);
-						std::cout << std::get<1>(_exp_tuple);
+						std::cout << std::get<1>(_exp_tuple) << std::endl;
 					}
 				}
 			}
@@ -358,7 +357,7 @@ std::tuple<Type, std::string> Interpreter::evaluate_expression(Expression* expr,
 				}
 				else if (left_t == FLOAT) {
 					float product = std::stof(std::get<1>(left_exp_result)) * std::stof(std::get<1>(right_exp_result));
-					return std::make_tuple(INT, std::to_string(product));
+					return std::make_tuple(FLOAT, std::to_string(product));
 				}
 				// Add support for string repitition?
 				else {
@@ -372,7 +371,7 @@ std::tuple<Type, std::string> Interpreter::evaluate_expression(Expression* expr,
 				}
 				else if (left_t == FLOAT) {
 					float quotient = std::stof(std::get<1>(left_exp_result)) / std::stof(std::get<1>(right_exp_result));
-					return std::make_tuple(INT, std::to_string(quotient));
+					return std::make_tuple(FLOAT, std::to_string(quotient));
 				}
 				else {
 					this->error("Division cannot be performed on expressions of this type", 1123);
@@ -476,8 +475,39 @@ std::tuple<Type, std::string> Interpreter::evaluate_expression(Expression* expr,
 	}
 	else if (expr->getExpType() == "value_returning") {
 		ValueReturningFunctionCall* call = dynamic_cast<ValueReturningFunctionCall*>(expr);
-		std::tuple<Type, std::string> evaluated_return_expression = this->evaluate_value_returning_function(*call);
-		return evaluated_return_expression;
+		// check to make sure it's not a predefined function
+		if (call->get_func_name() == "input") {
+			// get input and return a string
+			std::string input;
+			if (call->get_args_size() != 1) {
+				this->error("'input' only takes one argument!", 3140);
+			}
+			else {
+				std::shared_ptr<Expression> _arg = call->get_arg(0);
+				if (_arg->getExpType() == "literal") {
+					Literal* literal_arg = dynamic_cast<Literal*>(_arg.get());
+					if (get_string_from_type(literal_arg->get_type()) == "string") {
+						std::cout << literal_arg->get_value() << std::endl;
+						std::getline(std::cin, input);
+						return std::make_tuple(STRING, input);
+					}
+					else {
+						this->error("Argument must be of type 'string'", 1141);
+					}
+				}
+				else if (_arg->getExpType() == "LValue") {
+					LValue* lvalue_arg = dynamic_cast<LValue*>(_arg.get());
+				}
+				else if (_arg->getExpType() == "value_returning") {
+					ValueReturningFunctionCall* val_ret = dynamic_cast<ValueReturningFunctionCall*>(_arg.get());
+				}
+			}
+		}
+		// then it is one we defined
+		else {
+			std::tuple<Type, std::string> evaluated_return_expression = this->evaluate_value_returning_function(*call);
+			return evaluated_return_expression;
+		}
 	}
 	else if (expr->getExpType() == "var") {
 

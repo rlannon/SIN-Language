@@ -81,7 +81,7 @@ lexeme Parser::back() {
 
 void Parser::error(std::string message, int code) {
 	std::cerr << std::endl << "PARSER ERROR:" << "\n\t" << message << std::endl;
-	std::cerr << "\tError occurred at position: " << this->position << std::endl << std::endl;
+	std::cerr << "\tError occurred at token position: " << this->position << std::endl << std::endl;
 throw code;
 }
 
@@ -387,7 +387,7 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 	return stmt;
 }
 
-std::shared_ptr<Expression> Parser::parse_expression() {
+std::shared_ptr<Expression> Parser::parse_expression(int prec) {
 	lexeme current_lex = this->current_token();
 	std::string lex_type = std::get<0>(current_lex);
 	std::string lex_val = std::get<1>(current_lex);
@@ -406,7 +406,7 @@ std::shared_ptr<Expression> Parser::parse_expression() {
 		}
 		// if our next character is an op_char, returning the expression would skip it, so we need to parse a binary using the expression in parens as our left expression
 		else if (std::get<1>(this->peek()) == "op_char") {
-			return maybe_binary(left, 0);
+			return this->maybe_binary(left, prec);
 		}
 	}
 	else if (lex_val == ",") {
@@ -444,7 +444,7 @@ std::shared_ptr<Expression> Parser::parse_expression() {
 
 	//this->next();
 	// Use the maybe_binary function to determine whether we need to return a binary expression or a simple expression
-	return this->maybe_binary(left, 0);	// always start it at 0
+	return this->maybe_binary(left, prec);	// always start it at 0; the first time it is called, it will be 0, as nothing will have been passed to parse_expression, but will be updated to the appropriate precedence level each time after. This results in a binary tree that shows the proper order of operations
 }
 
 std::shared_ptr<Expression> Parser::maybe_binary(std::shared_ptr<Expression> left, int my_prec) {
@@ -468,13 +468,13 @@ std::shared_ptr<Expression> Parser::maybe_binary(std::shared_ptr<Expression> lef
 			this->next();	// go to the next character in our stream (the op_char)
 			this->next();
 			// Parse out the next expression
-			std::shared_ptr<Expression> right = maybe_binary(this->parse_expression(), his_prec);
+			std::shared_ptr<Expression> right = this->maybe_binary(this->parse_expression(his_prec), his_prec);	// make sure his_prec gets passed into parse_expression so that it is actually passed into maybe_binary
 
 			// Create the binary expression
 			std::shared_ptr<Binary> binary = std::make_shared<Binary>(left, right, translate_operator(std::get<1>(next)));
 
 			// call maybe_binary again at the old prec level in case this expression is followed by one of a higher precedence
-			return maybe_binary(binary, my_prec);
+			return this->maybe_binary(binary, my_prec);
 		}
 		else {
 			return left;
@@ -523,6 +523,16 @@ void Parser::populate_tokens_list(std::ifstream* token_stream) {
 	}
 }
 
+
+Parser::Parser(Lexer& lexer) {
+	while (!lexer.eof() && !lexer.exit_flag_is_set()) {
+		std::tuple<std::string, std::string> token = lexer.read_next();
+		Parser::tokens.push_back(token);
+	}
+	Parser::quit = false;
+	Parser::position = 0;
+	Parser::num_tokens = Parser::tokens.size();
+}
 
 Parser::Parser(std::ifstream* token_stream) {
 	Parser::quit = false;

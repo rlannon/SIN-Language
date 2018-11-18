@@ -7,7 +7,7 @@
 
 // Define our custom types for expressions and statements
 
-const enum exp_operator {
+enum exp_operator {
 	PLUS,
 	MINUS,
 	MULT,
@@ -26,7 +26,7 @@ const enum exp_operator {
 
 const exp_operator translate_operator(std::string op_string);
 
-const enum Type {
+enum Type {
 	INT,
 	FLOAT,
 	STRING,

@@ -1,0 +1,21 @@
+alloc string myStr;
+
+@print("Type 'q' to exit.");
+
+let myStr = @input("enter either 'yes' or 'no': ");
+
+while (myStr != "q") {
+	if (myStr = "yes") {
+		@print("yes!");
+	} else {
+		if (myStr = "no"){
+			@print("no!");
+		}
+		else {
+			@print("not yes!");
+		}
+	}
+	let myStr = @input("enter either 'yes' or 'no': ");
+}
+
+@print("Quitting...");
