@@ -4,7 +4,7 @@
 typedef std::tuple<std::string, std::string> lexeme;
 
 // Define our symbols and their precedences as a vector of tuples
-const std::vector<std::tuple<std::string, int>> Parser::precedence{ std::make_tuple("&&", 2), std::make_tuple("||", 3), \
+const std::vector<std::tuple<std::string, int>> Parser::precedence{ std::make_tuple("&", 2), std::make_tuple("|", 3), \
 	std::make_tuple("<", 4), std::make_tuple(">", 7), std::make_tuple("<", 7), std::make_tuple(">=", 7), std::make_tuple("<=", 7), std::make_tuple("=", 7),\
 	std::make_tuple("!=", 7), std::make_tuple("+", 10), std::make_tuple("-", 10), std::make_tuple("*", 20), std::make_tuple("/", 20), std::make_tuple("%", 20) };
 

@@ -9,6 +9,7 @@ const std::vector<std::string> Lexer::keywords{ "alloc", "and", "bool", "def", "
 const std::string Lexer::punc_exp = "[\\.',;\\[\\]\\{\\}\\(\\)]";	// expression for punctuation
 const std::string Lexer::op_exp = "[\\+\\-\\*/%=\\&\\|\\^<>\\$\\?!@]";	// expression for operations
 const std::string Lexer::id_exp = "[_0-9a-zA-Z]";	// expression for interior id letters
+const std::string Lexer::bool_exp = "[(True)|(False)]";
 
 
 // Our stream access and test functions
@@ -156,6 +157,15 @@ bool Lexer::is_op_char(char ch) {
 	}
 }
 
+bool Lexer::is_boolean(std::string candidate) {
+	if (candidate == "true" || candidate == "True" || candidate == "False" || candidate == "false") {
+		return true;
+	}
+	else {
+		return false;
+	}
+}
+
 bool Lexer::is_keyword(std::string candidate) {
 	if (std::binary_search(keywords.begin(), keywords.end(), candidate)) {
 		return true;
@@ -244,6 +254,9 @@ std::tuple<std::string, std::string> Lexer::read_next() {
 			value = this->read_while(&this->is_id);
 			if (this->is_keyword(value)) {
 				type = "kwd";
+			}
+			else if (this->is_boolean(value)) {
+				type = "bool";
 			}
 			else {
 				type = "ident";

@@ -35,6 +35,7 @@ public:
 	static const std::string punc_exp;
 	static const std::string op_exp;
 	static const std::string id_exp;
+	static const std::string bool_exp;
 
 	bool eof();		// our character access functions
 	char peek();
@@ -79,6 +80,8 @@ public:
 
 	static bool is_punc(char ch);
 	static bool is_op_char(char ch);
+
+	static bool is_boolean(std::string candidate);
 
 	static bool is_keyword(std::string candidate);	// test whether the string is a keyword (such as alloc or let) or an identifier (such as a variable name)
 

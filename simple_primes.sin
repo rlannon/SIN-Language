@@ -1,0 +1,46 @@
+def bool isPrime(alloc int candidate){
+    alloc int index;
+    let index = 2;
+    
+    alloc bool result;
+    alloc bool quit;
+    let quit = false;
+    
+    while ((index < candidate) & (quit != true)) {
+        if ((candidate - (index * (candidate / index))) = 0){
+            let quit = true;
+        } else {
+            let index = index + 1;
+        }
+    }
+    
+    if (quit = true){
+        let result = false;
+    } else {
+        let result = true;
+    }
+    
+    return result;
+}
+
+alloc string usr_input;
+let usr_input = @input("Enter a number: ");
+
+alloc bool result;
+let result = true;
+
+alloc int converted;
+
+while (usr_input != "quit") {
+    let converted = @stoi(usr_input);
+    
+    let result = @isPrime(converted);
+    
+    if (result = true){
+        @print("is prime!");
+    } else {
+        @print("is not prime!");
+    }
+    
+    let usr_input = @input("Enter a number: ");
+}

@@ -35,6 +35,7 @@ INTERPRETER ERRORS:
 
 2000s	-	Value errors:	Thrown
 	2130	-	Error in bool expression; could not evaluate proper type.
+	2110	-	Cannot convert input in standard conversion functions
 
 3000s	-	Semantic errors / syntax errors:	Thrown when there are syntax errors that are not caught by the parser, but are syntax errors that arose during semantic analysis.
 	3024	-	Variable referenced without allocation

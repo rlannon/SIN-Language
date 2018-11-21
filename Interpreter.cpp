@@ -83,113 +83,6 @@ void Interpreter::execute_statements(StatementBlock prog, std::vector<std::tuple
 
 
 
-Definition Interpreter::get_definition(std::string func_to_find) {
-	std::vector<Definition>::iterator func_it = this->functions_table.begin();
-	bool found = false;
-	while (func_it != this->functions_table.end() && !found) {
-		// get our function's name as an LValue pointer -- because function names are considered LValues
-		// maybe they should be considered literals or some other class, as they aren't really LValues, but that is to change later
-		LValue* table_name = dynamic_cast<LValue*>(func_it->get_name().get());
-		// if the two values are the same
-		if (func_to_find == table_name->getValue()) {
-			found = true;
-		}
-	}
-	if (found) {
-		// We have found the function
-		return *func_it;
-	}
-	else {
-		this->error("Could not find a definition for the function referenced", 3034);
-	}
-}
-
-void Interpreter::evaluate_void_function(Call func_to_evaluate) {
-	// get the definition for the function we want to evaluate
-	Definition func_def = this->get_definition(func_to_evaluate.get_func_name());
-
-	std::vector<std::tuple<Type, std::string, std::string>> local_vars;
-
-	// create instances of all our local function variables
-	if (func_to_evaluate.get_args_size() == func_def.get_args().size()) {
-		for (int i = 0; i < func_def.get_args().size(); i++) {
-			Allocation* current_arg = dynamic_cast<Allocation*>(func_def.get_args()[i].get());
-			Expression* arg = dynamic_cast<Expression*>(func_to_evaluate.get_arg(i).get());
-			std::tuple<Type, std::string> argv;
-			if (arg->getExpType() == "LValue") {
-				argv = this->evaluate_expression(arg, &this->vars_table);	// if we pass a variable into a function, we need to be able to evaluate it
-			}
-			else {
-				argv = this->evaluate_expression(arg, &local_vars);	// if it's not a variable, we don't need the table
-			}
-			if (std::get<0>(argv) == current_arg->getVarType()) {
-				local_vars.push_back(std::make_tuple(current_arg->getVarType(), current_arg->getVarName(), std::get<1>(argv)));
-			}
-			else {
-				this->error("Argument to function is of improper type, must be '" + get_string_from_type(current_arg->getVarType()) + "', not '" \
-					+ get_string_from_type(std::get<0>(argv)) + "'!", 1141);
-			}
-		}
-	}
-	else {
-		this->error("Number of arguments in function call is not equal to number in definition!", 3140);
-	}
-
-	this->execute_statements(*dynamic_cast<StatementBlock*>(func_def.get_procedure().get()), &local_vars);
-
-	return;
-}
-
-std::tuple<Type, std::string> Interpreter::evaluate_value_returning_function(ValueReturningFunctionCall func_to_evaluate) {
-	// Get the definition for the function we want to evaluate
-	Definition func_def = this->get_definition(func_to_evaluate.get_func_name());
-
-	std::vector<std::tuple<Type, std::string, std::string>> local_vars;
-
-	// create instances of all our local function variables
-	if (func_to_evaluate.get_args_size() == func_def.get_args().size()) {
-		for (int i = 0; i < func_def.get_args().size(); i++) {
-			std::cout << "has args" << std::endl;
-			Allocation* current_arg = dynamic_cast<Allocation*>(func_def.get_args()[i].get());
-			Expression* arg = dynamic_cast<Expression*>(func_to_evaluate.get_arg(i).get());
-			std::tuple<Type, std::string> argv;
-			if (arg->getExpType() == "LValue") {
-				argv = this->evaluate_expression(arg, &this->vars_table);
-			}
-			else {
-				argv = this->evaluate_expression(arg, &local_vars);
-			}
-			if (std::get<0>(argv) == current_arg->getVarType()) {
-				local_vars.push_back(std::make_tuple(current_arg->getVarType(), current_arg->getVarName(), std::get<1>(argv)));
-			}
-			else {
-				this->error("Argument to function is of improper type, must be '" + get_string_from_type(current_arg->getVarType()) + "', not '" \
-					+ get_string_from_type(std::get<0>(argv)) + "'!", 1141);
-			}
-		}
-	}
-	else {
-		this->error("Number of arguments in function call is not equal to number in definition!", 3140);
-	}
-
-	int i = 0;
-	StatementBlock* procedure = dynamic_cast<StatementBlock*>(func_def.get_procedure().get());
-	Expression* return_exp = new Expression();
-	while (i < procedure->StatementsList.size()) {
-		Statement* statement = dynamic_cast<Statement*>(procedure->StatementsList[i].get());
-		if (statement->get_type() != "return") {
-			this->evaluate_statement(statement, &local_vars);
-		}
-		else {
-			ReturnStatement* return_stmt = dynamic_cast<ReturnStatement*>(statement);
-			return_exp = dynamic_cast<Expression*>(return_stmt->get_return_exp().get());
-		}
-		i++;
-	}
-	std::tuple<Type, std::string> evaluated_return_exp = this->evaluate_expression(return_exp, &local_vars);
-	return evaluated_return_exp;
-}
-
 void Interpreter::evaluate_statement(Statement* statement, std::vector<std::tuple<Type, std::string, std::string>>* vars_table) {
 	if (statement == NULL) {
 		this->error("Expected a statement", 3411);
@@ -263,7 +156,7 @@ void Interpreter::evaluate_statement(Statement* statement, std::vector<std::tupl
 					}
 					else if (_arg->getExpType() == "value_returning") {
 						ValueReturningFunctionCall* val_ret = dynamic_cast<ValueReturningFunctionCall*>(_arg.get());
-						std::tuple<Type, std::string> _exp_tuple = this->evaluate_value_returning_function(*val_ret);
+						std::tuple<Type, std::string> _exp_tuple = this->evaluate_value_returning_function(*val_ret, vars_table);
 						std::cout << std::get<1>(_exp_tuple) << std::endl;
 					}
 				}
@@ -271,10 +164,123 @@ void Interpreter::evaluate_statement(Statement* statement, std::vector<std::tupl
 			// otherwise, if we defined it,
 			else {
 				// call the function normally
-				this->evaluate_void_function(*call);
+				this->evaluate_void_function(*call, vars_table);
 			}
 		}
 	}
+}
+
+
+
+Definition Interpreter::get_definition(std::string func_to_find) {
+	std::vector<Definition>::iterator func_it = this->functions_table.begin();
+	bool found = false;
+	while (func_it != this->functions_table.end() && !found) {
+		// get our function's name as an LValue pointer -- because function names are considered LValues
+		// maybe they should be considered literals or some other class, as they aren't really LValues, but that is to change later
+		LValue* table_name = dynamic_cast<LValue*>(func_it->get_name().get());
+		// if the two values are the same
+		if (func_to_find == table_name->getValue()) {
+			found = true;
+		}
+		// if they are not
+		else {
+			// increment func_it
+			func_it++;
+		}
+	}
+	if (found) {
+		// We have found the function
+		return *func_it;
+	}
+	else {
+		this->error("Could not find a definition for the function referenced", 3034);
+	}
+}
+
+void Interpreter::evaluate_void_function(Call func_to_evaluate, std::vector<std::tuple<Type, std::string, std::string>>* parent_vars_table) {
+	// get the definition for the function we want to evaluate
+	Definition func_def = this->get_definition(func_to_evaluate.get_func_name());
+
+	std::vector<std::tuple<Type, std::string, std::string>> local_vars;
+
+	// create instances of all our local function variables
+	if (func_to_evaluate.get_args_size() == func_def.get_args().size()) {
+		for (int i = 0; i < func_def.get_args().size(); i++) {
+			Allocation* current_arg = dynamic_cast<Allocation*>(func_def.get_args()[i].get());
+			Expression* arg = dynamic_cast<Expression*>(func_to_evaluate.get_arg(i).get());
+			std::tuple<Type, std::string> argv;
+			if (arg->getExpType() == "LValue") {
+				argv = this->evaluate_expression(arg, parent_vars_table);	// if we pass a variable into a function, we need to be able to evaluate it
+			}
+			else {
+				argv = this->evaluate_expression(arg, &local_vars);	// if it's not a variable, we don't need the table
+			}
+			if (std::get<0>(argv) == current_arg->getVarType()) {
+				local_vars.push_back(std::make_tuple(current_arg->getVarType(), current_arg->getVarName(), std::get<1>(argv)));
+			}
+			else {
+				this->error("Argument to function is of improper type, must be '" + get_string_from_type(current_arg->getVarType()) + "', not '" \
+					+ get_string_from_type(std::get<0>(argv)) + "'!", 1141);
+			}
+		}
+	}
+	else {
+		this->error("Number of arguments in function call is not equal to number in definition!", 3140);
+	}
+
+	this->execute_statements(*dynamic_cast<StatementBlock*>(func_def.get_procedure().get()), &local_vars);
+
+	return;
+}
+
+std::tuple<Type, std::string> Interpreter::evaluate_value_returning_function(ValueReturningFunctionCall func_to_evaluate, std::vector<std::tuple<Type, std::string, std::string>>* parent_vars_table) {
+	// Get the definition for the function we want to evaluate
+	Definition func_def = this->get_definition(func_to_evaluate.get_func_name());
+
+	std::vector<std::tuple<Type, std::string, std::string>> local_vars;
+
+	// create instances of all our local function variables
+	if (func_to_evaluate.get_args_size() == func_def.get_args().size()) {
+		for (int i = 0; i < func_def.get_args().size(); i++) {
+			Allocation* current_arg = dynamic_cast<Allocation*>(func_def.get_args()[i].get());
+			Expression* arg = dynamic_cast<Expression*>(func_to_evaluate.get_arg(i).get());
+			std::tuple<Type, std::string> argv;
+			if (arg->getExpType() == "LValue") {
+				argv = this->evaluate_expression(arg, parent_vars_table);
+			}
+			else {
+				argv = this->evaluate_expression(arg, &local_vars);
+			}
+			if (std::get<0>(argv) == current_arg->getVarType()) {
+				local_vars.push_back(std::make_tuple(current_arg->getVarType(), current_arg->getVarName(), std::get<1>(argv)));
+			}
+			else {
+				this->error("Argument to function is of improper type, must be '" + get_string_from_type(current_arg->getVarType()) + "', not '" \
+					+ get_string_from_type(std::get<0>(argv)) + "'!", 1141);
+			}
+		}
+	}
+	else {
+		this->error("Number of arguments in function call is not equal to number in definition!", 3140);
+	}
+
+	int i = 0;
+	StatementBlock* procedure = dynamic_cast<StatementBlock*>(func_def.get_procedure().get());
+	Expression* return_exp = new Expression();
+	while (i < procedure->StatementsList.size()) {
+		Statement* statement = dynamic_cast<Statement*>(procedure->StatementsList[i].get());
+		if (statement->get_type() != "return") {
+			this->evaluate_statement(statement, &local_vars);
+		}
+		else {
+			ReturnStatement* return_stmt = dynamic_cast<ReturnStatement*>(statement);
+			return_exp = dynamic_cast<Expression*>(return_stmt->get_return_exp().get());
+		}
+		i++;
+	}
+	std::tuple<Type, std::string> evaluated_return_exp = this->evaluate_expression(return_exp, &local_vars);
+	return evaluated_return_exp;
 }
 
 
@@ -503,9 +509,54 @@ std::tuple<Type, std::string> Interpreter::evaluate_expression(Expression* expr,
 				}
 			}
 		}
+		else if (call->get_func_name() == "stoi") {
+			std::string to_convert;
+			int converted;
+			if (call->get_args_size() != 1) {
+				this->error("'stoi' only takes one argument!", 3140);
+			}
+			else {
+				std::shared_ptr<Expression> _arg = call->get_arg(0);
+				if (_arg->getExpType() == "literal") {
+					Literal* literal_arg = dynamic_cast<Literal*>(_arg.get());
+					if (get_string_from_type(literal_arg->get_type()) == "string") {
+						to_convert = literal_arg->get_value();
+						try {
+							converted = std::stoi(to_convert);
+							return std::make_tuple(INT, std::to_string(converted));
+						}
+						catch (const std::invalid_argument& ia) {
+							std::cerr << "\n" << ia.what() << std::endl;
+							this->error("Cannot convert '" + to_convert + "' to type 'int'!", 2110);
+						}
+					}
+				} 
+				else if (_arg->getExpType() == "LValue") {
+					LValue* var = dynamic_cast<LValue*>(_arg.get());
+					std::tuple<Type, std::string> evaluated = this->evaluate_expression(var, vars_table);
+					if (std::get<0>(evaluated)) {
+						to_convert = std::get<1>(evaluated);
+						try {
+							converted = std::stoi(to_convert);
+							return std::make_tuple(INT, std::to_string(converted));
+						}
+						catch (std::invalid_argument& ia) {
+							std::cerr << "\n" << ia.what() << std::endl;
+							this->error("Cannot convert '" + to_convert + "' to type 'int'!", 2110);
+						}
+					}
+					else {
+						this->error("Cannot convert expressions of this type with 'stoi'!", 2110);
+					}
+				}
+				else {
+					this->error("Cannot convert expressions of this type with 'stoi'!", 2110);
+				}
+			}
+		}
 		// then it is one we defined
 		else {
-			std::tuple<Type, std::string> evaluated_return_expression = this->evaluate_value_returning_function(*call);
+			std::tuple<Type, std::string> evaluated_return_expression = this->evaluate_value_returning_function(*call, vars_table);
 			return evaluated_return_expression;
 		}
 	}
