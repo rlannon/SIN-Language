@@ -27,7 +27,6 @@ alloc string usr_input;
 let usr_input = @input("Enter a number: ");
 
 alloc bool result;
-let result = true;
 
 alloc int converted;
 
