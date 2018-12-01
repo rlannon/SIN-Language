@@ -304,25 +304,40 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 					// might not need to do this -- as it will be dealing with the pointer data itself, not the variable to which it points
 				}
 				else if (std::get<1>(ptr_op) == "*") {
-					// set the LValue_Type to "var_dereferenced"
+
+					std::shared_ptr<Expression> deref_shared_p = this->createDereferenceObject();
+					LValue dereferenced_value;
+
+					if (deref_shared_p->getExpType() == "LValue") {
+						dereferenced_value = *dynamic_cast<LValue*>(deref_shared_p.get());
+					}
+					else if (deref_shared_p->getExpType() == "dereferenced") {
+						Dereferenced* deref_obj = dynamic_cast<Dereferenced*>(deref_shared_p.get());
+						dereferenced_value = this->getDereferencedLValue(*deref_obj);
+					}
+
+					lvalue = dereferenced_value;
 					lvalue.setLValueType("var_dereferenced");
+					std::cout << std::endl;	// for debug / breakpoints
 				}
 				// if it isn't $ or *, it's an invalid op_char before an LValue
 				else {
 					throw ParserException("Operator character not allowed in an LValue", 211);
 				}
 			}
-
-			// get the next token, which should be the variable name
-			lexeme _lvalue_lex = this->next();
-
-			// ensure it's an identifier
-			if (std::get<0>(_lvalue_lex) == "ident") {
-				lvalue.setValue(std::get<1>(_lvalue_lex));
-			}
-			// if it isn't a valid LValue, then we can't continue
+			// if it is a literal
 			else {
-				this->error("Expected an LValue", 111);
+				// get the next token, which should be the variable name
+				lexeme _lvalue_lex = this->next();
+
+				// ensure it's an identifier
+				if (std::get<0>(_lvalue_lex) == "ident") {
+					lvalue.setValue(std::get<1>(_lvalue_lex));
+				}
+				// if it isn't a valid LValue, then we can't continue
+				else {
+					this->error("Expected an LValue", 111);
+				}
 			}
 
 			// get the operator character, make sure it's an equals sign
@@ -563,48 +578,7 @@ std::shared_ptr<Expression> Parser::parseExpression(int prec) {
 		}
 		// check to see if we have a pointer dereference operator
 		else if (lex_val == "*") {
-			// if we have an asterisk, it could be a pointer dereference OR a part of a binary expression
-			// in order to check, we have to make sure that the previous character is neither a literal nor an identifier
-			// the current lexeme is the asterisk, so get the previous lexeme
-			lexeme previous_lex = this->previous();
-			// note that previous() does not update the current position
-
-			// get the previous lexeme's type
-			std::string previous_type = std::get<0>(previous_lex);
-			// if it is an int, float, string, or bool literal; or an identifier, then continue
-			if (previous_type == "int" || previous_type == "float" || previous_type == "string" || previous_type == "bool" || previous_type == "ident") {
-				// do nothing
-			}
-			// otherwise, check to make see if the next character is an identifier
-			else if (std::get<0>(this->peek()) == "ident") {
-				// get the identifier and advance the position counter
-				lexeme next_lexeme = this->next();
-
-				// turn the pointer into an LValue
-				LValue _ptr(std::get<1>(next_lexeme), "var_dereferenced");
-
-				// return a shared_ptr to the Dereferenced object containing _ptr
-				return std::make_shared<Dereferenced>(std::make_shared<LValue>(_ptr));
-			}
-			// the next character CAN be an asterisk; in that case, we have a double or triple ref pointer that we need to parse
-			else if (std::get<1>(this->peek()) == "*") {
-				// advance the position pointer
-				this->next();
-				// dereference the pointer to get the address so we can dereference the other pointer
-				std::shared_ptr<Expression> deref = this->parseExpression();
-				if (deref->getExpType() == "dereferenced") {
-					//// get the Dereferenced obj
-					//Dereferenced* _deref = dynamic_cast<Dereferenced*>(deref.get());
-					//// next, get the name of that variable
-					//LValue _ptr(_deref->get_ptr().getValue(), "var_dereferenced");
-					//return std::make_shared<Dereferenced>(_ptr);
-					return std::make_shared<Dereferenced>(deref);
-				}
-			}
-			// if it is not a literal or an ident and the next character is also not an ident or asterisk, we have an error
-			else {
-				throw ParserException("Expected an identifier in pointer dereference operation", 332);
-			}
+			return this->createDereferenceObject();
 		}
 	}
 
@@ -612,6 +586,60 @@ std::shared_ptr<Expression> Parser::parseExpression(int prec) {
 
 	// always start it at 0; the first time it is called, it will be 0, as nothing will have been passed to parse_expression, but will be updated to the appropriate precedence level each time after. This results in a binary tree that shows the proper order of operations
 	return this->maybeBinary(left, prec);
+}
+
+
+// Create a Dereferenced object when we dereference a pointer
+std::shared_ptr<Expression> Parser::createDereferenceObject() {
+	// if we have an asterisk, it could be a pointer dereference OR a part of a binary expression
+	// in order to check, we have to make sure that the previous character is neither a literal nor an identifier
+	// the current lexeme is the asterisk, so get the previous lexeme
+	lexeme previous_lex = this->previous();
+	// note that previous() does not update the current position
+
+	// get the previous lexeme's type
+	std::string previous_type = std::get<0>(previous_lex);
+	// if it is an int, float, string, or bool literal; or an identifier, then continue
+	if (previous_type == "int" || previous_type == "float" || previous_type == "string" || previous_type == "bool" || previous_type == "ident") {
+		// do nothing
+	}
+	// otherwise, check to make see if the next character is an identifier
+	else if (std::get<0>(this->peek()) == "ident") {
+		// get the identifier and advance the position counter
+		lexeme next_lexeme = this->next();
+
+		// turn the pointer into an LValue
+		LValue _ptr(std::get<1>(next_lexeme), "var_dereferenced");
+
+		// return a shared_ptr to the Dereferenced object containing _ptr
+		return std::make_shared<Dereferenced>(std::make_shared<LValue>(_ptr));
+	}
+	// the next character CAN be an asterisk; in that case, we have a double or triple ref pointer that we need to parse
+	else if (std::get<1>(this->peek()) == "*") {
+		// advance the position pointer
+		this->next();
+		// dereference the pointer to get the address so we can dereference the other pointer
+		std::shared_ptr<Expression> deref = this->parseExpression();
+		if (deref->getExpType() == "dereferenced") {
+			// get the Dereferenced obj
+			return std::make_shared<Dereferenced>(deref);
+		}
+	}
+	// if it is not a literal or an ident and the next character is also not an ident or asterisk, we have an error
+	else {
+		throw ParserException("Expected an identifier in pointer dereference operation", 332);
+	}
+}
+
+
+LValue Parser::getDereferencedLValue(Dereferenced to_eval) {
+	if (to_eval.get_ptr_shared()->getExpType() == "LValue") {
+		return to_eval.get_ptr();
+	}
+	else if (to_eval.get_ptr_shared()->getExpType() == "dereferenced") {
+		Dereferenced* _deref = dynamic_cast<Dereferenced*>(to_eval.get_ptr_shared().get());
+		return this->getDereferencedLValue(*_deref);
+	}
 }
 
 std::shared_ptr<Expression> Parser::maybeBinary(std::shared_ptr<Expression> left, int my_prec) {

@@ -86,6 +86,10 @@ const Type get_ptr_type(Type candidate) {
 	}
 }
 
+const bool is_ptr_type(Type candidate) {
+	return (candidate == INTPTR || candidate == FLOATPTR || candidate == STRINGPTR || candidate == BOOLPTR || candidate == VOIDPTR || candidate == PTRPTR);
+}
+
 std::string Expression::getExpType() {
 	return this->type;
 }
@@ -172,15 +176,6 @@ AddressOf::AddressOf() {
 
 
 
-//LValue Dereferenced::get_ptr() {
-//	return this->ptr;
-//}
-//
-//Dereferenced::Dereferenced(LValue ptr) {
-//	Dereferenced::type = "dereferenced";
-//	Dereferenced::ptr = ptr;
-//}
-
 LValue Dereferenced::get_ptr() {
 	if (this->ptr->getExpType() == "LValue") {
 		LValue* lvalue = dynamic_cast<LValue*>(this->ptr.get());
@@ -191,6 +186,16 @@ LValue Dereferenced::get_ptr() {
 		throw std::exception(msg.c_str());
 	}
 }
+
+//LValue Dereferenced::getReferencedLValue() {
+//	if (this->getExpType() == "LValue") {
+//		return this->get_ptr();
+//	}
+//	else if (this->getExpType() == "dereferenced") {
+//		Dereferenced* next_ptr = dynamic_cast<Dereferenced*>(this->ptr.get());
+//		return next_ptr->getReferencedLValue();
+//	}
+//}
 
 std::shared_ptr<Expression> Dereferenced::get_ptr_shared() {
 	return this->ptr;

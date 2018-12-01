@@ -52,6 +52,8 @@ const std::string get_string_from_type(Type candidate);
 
 const Type get_ptr_type(Type candidate);	// returns the appropriate pointer type for a given type (e.g., INT returns INTPTR, FLOAT -> FLOATPTR)
 
+const bool is_ptr_type(Type candidate);	// returns true if the type is a pointer type
+
 // Base class for all expressions
 class Expression
 {
@@ -110,14 +112,13 @@ public:
 // Dereferenced -- the value of a dereferenced ptr
 class Dereferenced : public Expression
 {
-	//LValue ptr;	// the pointer being dereferenced
 	std::shared_ptr<Expression> ptr;
 public:
 	LValue get_ptr();
+	//LValue getReferencedLValue();
 
 	std::shared_ptr<Expression> get_ptr_shared();
 
-	//Dereferenced(LValue ptr);
 	Dereferenced(std::shared_ptr<Expression> ptr);
 	Dereferenced();
 };

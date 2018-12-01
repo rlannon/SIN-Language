@@ -82,6 +82,14 @@ void Interpreter::setVarValue(LValue variable, std::string new_value, std::list<
 				// get the value at that address
 				std::tuple<Type, std::string, std::string>* dereferenced = (std::tuple<Type, std::string, std::string>*)address;
 
+				// continue updating the address as long as we have a pointer type
+				while (is_ptr_type(std::get<0>(*dereferenced))) {
+					// get the address stored in the current variable 'dereferenced'
+					address = (intptr_t)std::stoi(std::get<2>(*dereferenced));
+					// put the tuple at that address in "dereferenced"
+					dereferenced = (std::tuple<Type, std::string, std::string>*)address;
+				}
+
 				// update the value at that address
 				std::get<2>(*dereferenced) = new_value;
 				return;
@@ -183,15 +191,6 @@ void Interpreter::executeStatement(Statement* statement, std::list<std::tuple<Ty
 						// parse the argument correctly -- ensure we evaluate pointer values if necessary
 						if (arg_type == "dereferenced") {
 							Dereferenced* deref = dynamic_cast<Dereferenced*>(_arg.get());
-							//std::shared_ptr<Expression> ptr_exp = deref->get_ptr_shared();
-							//if (ptr_exp->getExpType() == "LValue") {
-							//	arg = deref->get_ptr();
-							//}
-							//else if (ptr_exp->getExpType() == "dereferenced") {
-							//	// TODO: parse the inner dereferenced
-							//	// get that dereferened pointer
-							//	Dereferenced* deref = dynamic_cast<Dereferenced*>(ptr_exp.get());
-							//}
 
 							std::tuple<Type, std::string> dereferenced_value = this->evaluateExpression(deref, vars_table);
 							std::cout << std::get<1>(dereferenced_value) << std::endl;

@@ -2,25 +2,17 @@ alloc int myInt;
 alloc ptr[int] myIntPtr;
 alloc ptr[ptr] myPtrPtr;
 
-let myInt = 10;
 let myIntPtr = $myInt;
-
-@print("myInt value:");
-@print(myInt);
-
 let myPtrPtr = $myIntPtr;
 
-@print("myIntPtr:");
+let *myIntPtr = 10;
 @print(*myIntPtr);
 
-@print("myPtrPtr address:");
-@print(*myPtrPtr);
-
-@print("myPtrPtr value: ");
+let **myPtrPtr = 20;
 @print(**myPtrPtr);
 
-alloc ptr[ptr] mySecondPtrPtr;
-let mySecondPtrPtr = $myPtrPtr;
+alloc ptr[ptr] someOtherPtr;
+let someOtherPtr = $myPtrPtr;
+let ***someOtherPtr = 1000;
 
-@print("mySecondPtrPtr:");
-@print(***mySecondPtrPtr);
+@print(***someOtherPtr);

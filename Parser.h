@@ -40,6 +40,8 @@ class Parser
 
 	std::shared_ptr<Statement> parseStatement();
 	std::shared_ptr<Expression> parseExpression(int prec=0);	// put default argument here because we call "parse_expression" in "maybe_binary"; as a reuslt, "his_prec" appears as if it is being passed to the next maybe_binary, but isn't because we parse an expression before we parse the binary, meaning my_prec gets set to 0, and not to his_prec as it should
+	std::shared_ptr<Expression> createDereferenceObject();
+	LValue getDereferencedLValue(Dereferenced to_eval);
 	std::shared_ptr<Expression> maybeBinary(std::shared_ptr<Expression> left, int my_prec);
 
 	void populateTokenList(std::ifstream* token_stream);
