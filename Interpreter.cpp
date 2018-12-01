@@ -1,6 +1,14 @@
 #include "Interpreter.h"
 
-const bool Interpreter::to_bool(std::string val) {
+
+/************************************************************************
+******************										*****************
+******************			STATIC FUNCTIONS			*****************
+******************										*****************
+*************************************************************************/
+
+
+const bool Interpreter::toBool(std::string val) {
 	if (val == "true" || val == "True" || val == "TRUE") {
 		return true;
 	}
@@ -8,11 +16,11 @@ const bool Interpreter::to_bool(std::string val) {
 		return false;
 	}
 	else {
-		error("Error in bool value" , 2130);
+		throw InterpreterException("Error in bool value", 2130);
 	}
 }
 
-const std::string Interpreter::bool_string(bool val) {
+const std::string Interpreter::boolString(bool val) {
 	if (val == true) {
 		return "True";
 	}
@@ -22,43 +30,74 @@ const std::string Interpreter::bool_string(bool val) {
 }
 
 
-std::string Interpreter::get_var_value(std::string var_name, std::vector<std::tuple<Type, std::string, std::string>>* vars_table) {
-	for (std::vector<std::tuple<Type, std::string, std::string>>::iterator var = vars_table->begin(); var != vars_table->end(); ++var) {
-		if (var_name == std::get<1>(*var)) {
-			return std::get<2>(*var);
+
+/************************************************************************
+******************										*****************
+******************		PRIVATE MEMBER FUNCTIONS		*****************
+******************										*****************
+*************************************************************************/
+
+
+
+std::string Interpreter::getVarValue(LValue variable, std::list<std::tuple<Type, std::string, std::string>>* vars_table) {
+	// find the variable in the symbol table
+	for (std::list<std::tuple<Type, std::string, std::string>>::iterator var_iter = vars_table->begin(); var_iter != vars_table->end(); var_iter++) {
+		if (std::get<1>(*var_iter) == variable.getValue()) {
+			// now, check the type
+			if (variable.getLValueType() == "var" || variable.getLValueType() == "var_address") {
+				return std::get<2>(*var_iter);
+			}
+			else if (variable.getLValueType() == "var_dereferenced") {
+				// our address is in position 2 in the tuple at *var_iter
+				// convert it into an actual pointer int
+				intptr_t address = (intptr_t)std::stoi(std::get<2>(*var_iter));
+
+				// now that we have the address, get the variable at that address
+				std::tuple<Type, std::string, std::string>* dereferenced = (std::tuple<Type, std::string, std::string>*)address;
+
+				// make sure the pointer type is the same as the data it's dereferencing
+				
+				// return the dereferenced value
+				return std::get<2>(*dereferenced);
+			}
 		}
 	}
-	
-	// if we reach this point, we have not found the variable
-	this->error("No allocation found for variable '" + var_name + "'!", 3024);
+	// if we arrive here, we never found the variable requested
+	throw InterpreterException("Could not find '" + variable.getValue() + "' in symbol table", 000);
 }
 
-void Interpreter::set_var_value(std::string var_name, std::string new_value, std::vector<std::tuple<Type, std::string, std::string>>* vars_table) {
-	for (std::vector<std::tuple<Type, std::string, std::string>>::iterator var = vars_table->begin(); var != vars_table->end(); ++var) {
-		if (var_name == std::get<1>(*var)) {
-			std::get<2>(*var) = new_value;
-			return;
+void Interpreter::setVarValue(LValue variable, std::string new_value, std::list<std::tuple<Type, std::string, std::string>>* vars_table) {
+	// find the variable in the symbol table
+	for (std::list<std::tuple<Type, std::string, std::string>>::iterator var_iter = vars_table->begin(); var_iter != vars_table->end(); var_iter++) {
+		if (std::get<1>(*var_iter) == variable.getValue()) {
+			// now, check the type
+			if (variable.getLValueType() == "var" || variable.getLValueType() == "var_address") {
+				// update the value
+				std::get<2>(*var_iter) = new_value;
+				return;
+			}
+			else if (variable.getLValueType() == "var_dereferenced") {
+				// get the value stored in the pointer, which is an address
+				intptr_t address = (intptr_t)std::stoi(std::get<2>(*var_iter));
+				// get the value at that address
+				std::tuple<Type, std::string, std::string>* dereferenced = (std::tuple<Type, std::string, std::string>*)address;
+
+				// update the value at that address
+				std::get<2>(*dereferenced) = new_value;
+				return;
+			}
+			else {
+				throw InterpreterException("Unrecognized LValue type!", 000);
+			}
 		}
 	}
-
-	// if we reach this point, we have not found the variable
-	this->error("No allocation found for variable '" + var_name + "'!", 3024);
+	// if we arrive here, we never found the variable requested
+	throw InterpreterException("Could not find '" + variable.getValue() + "' in symbol table", 000);
 }
 
 
-// Our error function
-const void Interpreter::error(std::string message, int code) {
-	std::cerr << std::endl << "INTERPRETER ERROR:" << "\n\t" << message << std::endl;
-	throw code;
-}
-
-// get the address of our variables table
-std::vector<std::tuple<Type, std::string, std::string>>* Interpreter::get_vars_table() {
-	return &this->vars_table;
-}
-
-// Evalute an allocation
-void Interpreter::allocate_var(Allocation allocation, std::vector<std::tuple<Type, std::string, std::string>>* vars_table) {
+// allocate a variable
+void Interpreter::allocateVar(Allocation allocation, std::list<std::tuple<Type, std::string, std::string>>* vars_table) {
 	// Initialize the variable with its type, name, and no value / NULL value
 	std::tuple<Type, std::string, std::string> var = std::make_tuple<Type, std::string, std::string>(allocation.getVarType(), allocation.getVarName(), "");
 
@@ -66,53 +105,42 @@ void Interpreter::allocate_var(Allocation allocation, std::vector<std::tuple<Typ
 	vars_table->push_back(var);
 }
 
-void Interpreter::define_function(Definition definition) {
-	Interpreter::functions_table.push_back(definition);
+// define a function
+void Interpreter::defineFunction(Definition definition) {
+	Interpreter::function_table.push_back(definition);
 }
 
-
-
-void Interpreter::execute_statements(StatementBlock prog, std::vector<std::tuple<Type, std::string, std::string>>* vars_table) {
-	int i = 0;
-	while (i < prog.StatementsList.size()) {
-		Statement* statement = dynamic_cast<Statement*>(prog.StatementsList[i].get());
-		this->evaluate_statement(statement, vars_table);
-		i++;
-	}
-}
-
-
-
-void Interpreter::evaluate_statement(Statement* statement, std::vector<std::tuple<Type, std::string, std::string>>* vars_table) {
+// execute a single statement
+void Interpreter::executeStatement(Statement* statement, std::list<std::tuple<Type, std::string, std::string>>* vars_table) {
 	if (statement == NULL) {
-		this->error("Expected a statement", 3411);
+		throw InterpreterException("Expected a statement", 3411);
 	}
 	else {
 		std::string stmt_type = statement->get_type();
 
 		if (stmt_type == "alloc") {
 			Allocation* alloc = dynamic_cast<Allocation*>(statement);
-			Interpreter::allocate_var(*alloc, vars_table);
+			this->allocateVar(*alloc, vars_table);
 		}
 		else if (stmt_type == "def") {
 			Definition* def = dynamic_cast<Definition*>(statement);
-			Interpreter::define_function(*def);
+			this->defineFunction(*def);
 		}
 		else if (stmt_type == "assign") {
 			Assignment* assign = dynamic_cast<Assignment*>(statement);
-			Interpreter::evaluate_assignment(*assign, vars_table);
+			this->evaluateAssignment(*assign, vars_table);
 		}
 		else if (stmt_type == "ite") {
 			IfThenElse* if_block = dynamic_cast<IfThenElse*>(statement);
 			Expression* condition = dynamic_cast<Expression*>(if_block->get_condition().get());
-			if (to_bool(std::get<1>(this->evaluate_expression(condition, vars_table)))) {
+			if (toBool(std::get<1>(this->evaluateExpression(condition, vars_table)))) {
 				StatementBlock* branch = dynamic_cast<StatementBlock*>(if_block->get_if_branch().get());
-				this->execute_statements(*branch, vars_table);
+				this->executeBranch(*branch, vars_table);
 			}
 			else {
 				StatementBlock* branch = dynamic_cast<StatementBlock*>(if_block->get_else_branch().get());
 				if (branch) {
-					this->execute_statements(*branch, vars_table);
+					this->executeBranch(*branch, vars_table);
 				}
 			}
 		}
@@ -121,15 +149,15 @@ void Interpreter::evaluate_statement(Statement* statement, std::vector<std::tupl
 			WhileLoop* while_loop = dynamic_cast<WhileLoop*>(statement);
 			Expression* condition = dynamic_cast<Expression*>(while_loop->get_condition().get());
 			StatementBlock* branch = dynamic_cast<StatementBlock*>(while_loop->get_branch().get());
-			bool loop = to_bool(std::get<1>(this->evaluate_expression(condition, vars_table)));
+			bool loop = toBool(std::get<1>(this->evaluateExpression(condition, vars_table)));
 			while (loop) {
-				this->execute_statements(*branch, vars_table);
-				loop = to_bool(std::get<1>(this->evaluate_expression(condition, vars_table)));
+				this->executeBranch(*branch, vars_table);
+				loop = toBool(std::get<1>(this->evaluateExpression(condition, vars_table)));
 			}
 		}
 		else if (stmt_type == "return") {
 			// return statements are inappropriate here
-			this->error("A return statement is inappopriate here", 3412);
+			throw InterpreterException("A return statement is inappopriate here", 3412);
 		}
 		else if (stmt_type == "call") {
 			Call* call = dynamic_cast<Call*>(statement);
@@ -138,25 +166,56 @@ void Interpreter::evaluate_statement(Statement* statement, std::vector<std::tupl
 				// do an of the print
 				// there is probably a better way to call our predefined functions, but this is ok for now
 				if (call->get_args_size() != 1) {
-					this->error("'print' takes only one argument!'", 3140);
+					throw InterpreterException("'print' takes only one argument!'", 3140);
 				}
 				else {
 					std::shared_ptr<Expression> _arg = call->get_arg(0);
+					std::string arg_type = _arg->getExpType();
+
 					if (_arg->getExpType() == "literal") {
 						Literal* arg = dynamic_cast<Literal*>(_arg.get());
 						std::cout << arg->get_value() << std::endl;
 					}
-					else if (_arg->getExpType() == "LValue") {
-						LValue* arg = dynamic_cast<LValue*>(_arg.get());
-						std::cout << this->get_var_value(arg->getValue(), vars_table) << std::endl;
+					else if (arg_type == "LValue" || arg_type == "dereferenced" || arg_type == "address_of") {
+						// an LValue for our argument
+						LValue arg;
+
+						// parse the argument correctly -- ensure we evaluate pointer values if necessary
+						if (arg_type == "dereferenced") {
+							Dereferenced* deref = dynamic_cast<Dereferenced*>(_arg.get());
+							//std::shared_ptr<Expression> ptr_exp = deref->get_ptr_shared();
+							//if (ptr_exp->getExpType() == "LValue") {
+							//	arg = deref->get_ptr();
+							//}
+							//else if (ptr_exp->getExpType() == "dereferenced") {
+							//	// TODO: parse the inner dereferenced
+							//	// get that dereferened pointer
+							//	Dereferenced* deref = dynamic_cast<Dereferenced*>(ptr_exp.get());
+							//}
+
+							std::tuple<Type, std::string> dereferenced_value = this->evaluateExpression(deref, vars_table);
+							std::cout << std::get<1>(dereferenced_value) << std::endl;
+							return;
+						}
+						else if (arg_type == "address_of") {
+							AddressOf* addr_of = dynamic_cast<AddressOf*>(_arg.get());
+							arg = addr_of->get_target();
+						}
+						else if (arg_type == "LValue") {
+							arg = *dynamic_cast<LValue*>(_arg.get());
+						}
+
+						// create a string containing our value and print it
+						std::string val = this->getVarValue(arg, vars_table);
+						std::cout << val << std::endl;	// for debug purposes
 					}
-					else if (_arg->getExpType() == "binary") {
+					else if (arg_type == "binary") {
 						Binary* arg = dynamic_cast<Binary*>(_arg.get());
-						std::cout << std::get<1>(this->evaluate_expression(arg, vars_table)) << std::endl;
+						std::cout << std::get<1>(this->evaluateExpression(arg, vars_table)) << std::endl;
 					}
-					else if (_arg->getExpType() == "value_returning") {
+					else if (arg_type == "value_returning") {
 						ValueReturningFunctionCall* val_ret = dynamic_cast<ValueReturningFunctionCall*>(_arg.get());
-						std::tuple<Type, std::string> _exp_tuple = this->evaluate_value_returning_function(*val_ret, vars_table);
+						std::tuple<Type, std::string> _exp_tuple = this->evaluateValueReturningFunction(*val_ret, vars_table);
 						std::cout << std::get<1>(_exp_tuple) << std::endl;
 					}
 				}
@@ -164,45 +223,43 @@ void Interpreter::evaluate_statement(Statement* statement, std::vector<std::tupl
 			// otherwise, if we defined it,
 			else {
 				// call the function normally
-				this->evaluate_void_function(*call, vars_table);
+				this->evaluateVoidFunction(*call, vars_table);
 			}
 		}
 	}
 }
 
+// evaluate an assignment statement
+void Interpreter::evaluateAssignment(Assignment assign, std::list<std::tuple<Type, std::string, std::string>>* vars_table) {
+	LValue lvalue = assign.getLValue();
+	Expression* RValue = dynamic_cast<Expression*>(assign.getRValue().get());
+
+	this->setVarValue(lvalue, std::get<1>(this->evaluateExpression(RValue, vars_table)), vars_table);
+	return;
+}
 
 
-Definition Interpreter::get_definition(std::string func_to_find) {
-	std::vector<Definition>::iterator func_it = this->functions_table.begin();
-	bool found = false;
-	while (func_it != this->functions_table.end() && !found) {
-		// get our function's name as an LValue pointer -- because function names are considered LValues
-		// maybe they should be considered literals or some other class, as they aren't really LValues, but that is to change later
-		LValue* table_name = dynamic_cast<LValue*>(func_it->get_name().get());
-		// if the two values are the same
-		if (func_to_find == table_name->getValue()) {
-			found = true;
-		}
-		// if they are not
-		else {
-			// increment func_it
-			func_it++;
-		}
-	}
-	if (found) {
-		// We have found the function
-		return *func_it;
-	}
-	else {
-		this->error("Could not find a definition for the function referenced", 3034);
+// TODO: finish copying and refactoring "Interpreter.cpp" with the new Interpreter specifications / design
+
+// Execute a block of statements
+void Interpreter::executeBranch(StatementBlock prog, std::list<std::tuple<Type, std::string, std::string>>* vars_table) {
+	// iterate through the statement list supplied
+	for (std::vector<std::shared_ptr<Statement>>::iterator statement_iter = prog.StatementsList.begin(); statement_iter != prog.StatementsList.end(); statement_iter++) {
+		// get the statement to execute by using dynamic_cast on the statement
+		Statement* to_execute = dynamic_cast<Statement*>(statement_iter->get());
+
+		// execute the statement
+		this->executeStatement(to_execute, vars_table);
 	}
 }
 
-void Interpreter::evaluate_void_function(Call func_to_evaluate, std::vector<std::tuple<Type, std::string, std::string>>* parent_vars_table) {
-	// get the definition for the function we want to evaluate
-	Definition func_def = this->get_definition(func_to_evaluate.get_func_name());
+// Functions
 
-	std::vector<std::tuple<Type, std::string, std::string>> local_vars;
+void Interpreter::evaluateVoidFunction(Call func_to_evaluate, std::list<std::tuple<Type, std::string, std::string>>* parent_vars_table) {
+	// get the definition for the function we want to evaluate
+	Definition func_def = this->getDefinition(func_to_evaluate.get_func_name());
+
+	std::list<std::tuple<Type, std::string, std::string>> local_vars;
 
 	// create instances of all our local function variables
 	if (func_to_evaluate.get_args_size() == func_def.get_args().size()) {
@@ -211,34 +268,34 @@ void Interpreter::evaluate_void_function(Call func_to_evaluate, std::vector<std:
 			Expression* arg = dynamic_cast<Expression*>(func_to_evaluate.get_arg(i).get());
 			std::tuple<Type, std::string> argv;
 			if (arg->getExpType() == "LValue") {
-				argv = this->evaluate_expression(arg, parent_vars_table);	// if we pass a variable into a function, we need to be able to evaluate it
+				argv = this->evaluateExpression(arg, parent_vars_table);	// if we pass a variable into a function, we need to be able to evaluate it
 			}
 			else {
-				argv = this->evaluate_expression(arg, &local_vars);	// if it's not a variable, we don't need the table
+				argv = this->evaluateExpression(arg, &local_vars);	// if it's not a variable, we don't need the table
 			}
 			if (std::get<0>(argv) == current_arg->getVarType()) {
 				local_vars.push_back(std::make_tuple(current_arg->getVarType(), current_arg->getVarName(), std::get<1>(argv)));
 			}
 			else {
-				this->error("Argument to function is of improper type, must be '" + get_string_from_type(current_arg->getVarType()) + "', not '" \
+				throw InterpreterException("Argument to function is of improper type, must be '" + get_string_from_type(current_arg->getVarType()) + "', not '" \
 					+ get_string_from_type(std::get<0>(argv)) + "'!", 1141);
 			}
 		}
 	}
 	else {
-		this->error("Number of arguments in function call is not equal to number in definition!", 3140);
+		throw InterpreterException("Number of arguments in function call is not equal to number in definition!", 3140);
 	}
 
-	this->execute_statements(*dynamic_cast<StatementBlock*>(func_def.get_procedure().get()), &local_vars);
+	this->executeBranch(*dynamic_cast<StatementBlock*>(func_def.get_procedure().get()), &local_vars);
 
 	return;
 }
 
-std::tuple<Type, std::string> Interpreter::evaluate_value_returning_function(ValueReturningFunctionCall func_to_evaluate, std::vector<std::tuple<Type, std::string, std::string>>* parent_vars_table) {
+std::tuple<Type, std::string> Interpreter::evaluateValueReturningFunction(ValueReturningFunctionCall func_to_evaluate, std::list<std::tuple<Type, std::string, std::string>>* parent_vars_table) {
 	// Get the definition for the function we want to evaluate
-	Definition func_def = this->get_definition(func_to_evaluate.get_func_name());
+	Definition func_def = this->getDefinition(func_to_evaluate.get_func_name());
 
-	std::vector<std::tuple<Type, std::string, std::string>> local_vars;
+	std::list<std::tuple<Type, std::string, std::string>> local_vars;
 
 	// create instances of all our local function variables
 	if (func_to_evaluate.get_args_size() == func_def.get_args().size()) {
@@ -247,22 +304,22 @@ std::tuple<Type, std::string> Interpreter::evaluate_value_returning_function(Val
 			Expression* arg = dynamic_cast<Expression*>(func_to_evaluate.get_arg(i).get());
 			std::tuple<Type, std::string> argv;
 			if (arg->getExpType() == "LValue") {
-				argv = this->evaluate_expression(arg, parent_vars_table);
+				argv = this->evaluateExpression(arg, parent_vars_table);
 			}
 			else {
-				argv = this->evaluate_expression(arg, &local_vars);
+				argv = this->evaluateExpression(arg, &local_vars);
 			}
 			if (std::get<0>(argv) == current_arg->getVarType()) {
 				local_vars.push_back(std::make_tuple(current_arg->getVarType(), current_arg->getVarName(), std::get<1>(argv)));
 			}
 			else {
-				this->error("Argument to function is of improper type, must be '" + get_string_from_type(current_arg->getVarType()) + "', not '" \
+				throw InterpreterException("Argument to function is of improper type, must be '" + get_string_from_type(current_arg->getVarType()) + "', not '" \
 					+ get_string_from_type(std::get<0>(argv)) + "'!", 1141);
 			}
 		}
 	}
 	else {
-		this->error("Number of arguments in function call is not equal to number in definition!", 3140);
+		throw InterpreterException("Number of arguments in function call is not equal to number in definition!", 3140);
 	}
 
 	int i = 0;
@@ -271,7 +328,7 @@ std::tuple<Type, std::string> Interpreter::evaluate_value_returning_function(Val
 	while (i < procedure->StatementsList.size()) {
 		Statement* statement = dynamic_cast<Statement*>(procedure->StatementsList[i].get());
 		if (statement->get_type() != "return") {
-			this->evaluate_statement(statement, &local_vars);
+			this->executeStatement(statement, &local_vars);
 		}
 		else {
 			ReturnStatement* return_stmt = dynamic_cast<ReturnStatement*>(statement);
@@ -279,21 +336,14 @@ std::tuple<Type, std::string> Interpreter::evaluate_value_returning_function(Val
 		}
 		i++;
 	}
-	std::tuple<Type, std::string> evaluated_return_exp = this->evaluate_expression(return_exp, &local_vars);
+	std::tuple<Type, std::string> evaluated_return_exp = this->evaluateExpression(return_exp, &local_vars);
 	return evaluated_return_exp;
 }
 
 
+// Expressions
 
-void Interpreter::evaluate_assignment(Assignment assign, std::vector<std::tuple<Type, std::string, std::string>>* vars_table) {
-	LValue lvalue = assign.getLvalueName();
-	Expression* RValue = dynamic_cast<Expression*>(assign.getRValue().get());
-
-	this->set_var_value(lvalue.getValue(), std::get<1>(this->evaluate_expression(RValue, vars_table)), vars_table);
-	return;
-}
-
-std::tuple<Type, std::string> Interpreter::evaluate_expression(Expression* expr, std::vector<std::tuple<Type, std::string, std::string>>* vars_table) {
+std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, std::list<std::tuple<Type, std::string, std::string>>* vars_table) {
 	if (expr->getExpType() == "literal") {
 		// evaluate a literal
 		Literal* our_val = dynamic_cast<Literal*>(expr);
@@ -301,11 +351,97 @@ std::tuple<Type, std::string> Interpreter::evaluate_expression(Expression* expr,
 	}
 	else if (expr->getExpType() == "LValue") {
 		LValue* _var = dynamic_cast<LValue*>(expr);
-		for (std::vector<std::tuple<Type, std::string, std::string>>::iterator var = vars_table->begin(); var != vars_table->end(); ++var) {
+		for (std::list<std::tuple<Type, std::string, std::string>>::iterator var = vars_table->begin(); var != vars_table->end(); ++var) {
 			if (_var->getValue() == std::get<1>(*var)) {
 				return std::make_tuple(std::get<0>(*var), std::get<2>(*var));
 			}
 		}
+	}
+	else if (expr->getExpType() == "address_of") {
+		// turn the expr object into a pointer to an AddressOf object
+		AddressOf* _addr = dynamic_cast<AddressOf*>(expr);
+
+		// look for "var" with the same name as our _addr object
+		for (std::list<std::tuple<Type, std::string, std::string>>::iterator var = vars_table->begin(); var != vars_table->end(); ++var) {
+			// if the name of the LValue in _addr is in the variable table
+			if (_addr->get_target().getValue() == std::get<1>(*var)) {
+				// store the address of var in a intptr_t
+				intptr_t address = reinterpret_cast<intptr_t>(&*var);
+				std::string addr_string = std::to_string(address);
+				Type ptr_addr_type = get_ptr_type(std::get<0>(*var));
+
+				// to test
+				//std::tuple<Type, std::string, std::string>* my_tuple = (std::tuple<Type, std::string, std::string>*)address;
+
+				return std::make_tuple(ptr_addr_type, addr_string);
+			}
+		}
+	}
+	else if (expr->getExpType() == "dereferenced") {
+		// turn the expr object into a pointer to a Dereferenced object
+		Dereferenced* _deref = dynamic_cast<Dereferenced*>(expr);
+		// the object contained within our "dereferenced" object -- we need to test whether it is an LValue or something else
+		Expression* _deref_ptr = dynamic_cast<Expression*>(_deref->get_ptr_shared().get());
+		LValue ptr;
+
+		// first, check the type that _deref contains; it could contain another reference or an LValue
+		if (_deref_ptr->getExpType() == "LValue") {
+			// now, get the LValue in _deref
+			ptr = _deref->get_ptr();
+		}
+		// if it is another reference
+		else if (_deref_ptr->getExpType() == "dereferenced") {
+			while (_deref_ptr->getExpType() == "dereferenced") {
+				_deref = dynamic_cast<Dereferenced*>(_deref_ptr);
+				_deref_ptr = dynamic_cast<Expression*>(_deref->get_ptr_shared().get());
+			}
+			if (_deref_ptr->getExpType() == "LValue") {
+				ptr = *dynamic_cast<LValue*>(_deref_ptr);
+
+				// "ptr" now holds "myPtrPtr"
+				// now we must get the variable at that address
+				Type current_type;
+
+				std::tuple<Type, std::string> _ptr_data = this->evaluateExpression(&ptr, vars_table);
+
+				intptr_t address = (intptr_t)std::stoi(std::get<1>(_ptr_data));
+				std::tuple<Type, std::string, std::string>* _next = (std::tuple<Type, std::string, std::string>*)address;
+				current_type = std::get<0>(*_next);
+
+				while (current_type == PTRPTR) {
+					address = (intptr_t)std::stoi(std::get<2>(*_next));
+					_next = (std::tuple<Type, std::string, std::string>*)address;
+					current_type = std::get<0>(*_next);
+				}
+
+				address = (intptr_t)std::stoi(std::get<2>(*_next));
+				std::tuple<Type, std::string, std::string> to_return = *(std::tuple<Type, std::string, std::string>*)address;
+				return std::make_tuple(std::get<0>(to_return), std::get<2>(to_return));
+			}
+			else {
+				throw InterpreterException("Unexpected exception in pointer dereferencing", 000);
+			}
+		}
+
+		// now that we have the LValue "ptr"
+		// get the value in that variable
+		for (std::list<std::tuple<Type, std::string, std::string>>::iterator var = vars_table->begin(); var != vars_table->end(); ++var) {
+			// if the names match
+			if (ptr.getValue() == std::get<1>(*var)) {
+				// get the address of the variable by getting the address of our the variable pointed to by the iterator
+				std::string addr_string = (std::get<2>(*var));
+				intptr_t address = (intptr_t)std::stoi(addr_string);
+
+				// now that we have the correct address, create a pointer to the tuple containing the proper information
+				std::tuple<Type, std::string, std::string>* _dereferenced = (std::tuple<Type, std::string, std::string>*)address;
+
+				// return that tuple
+				return std::make_tuple(std::get<0>(*_dereferenced), std::get<2>(*_dereferenced));
+			}
+		}
+
+		// TODO: what if we can't find the variable in the vector?
+
 	}
 	else if (expr->getExpType() == "binary") {
 		// cast the expression to a binary so we have access to our functions
@@ -316,164 +452,19 @@ std::tuple<Type, std::string> Interpreter::evaluate_expression(Expression* expr,
 		Expression* right_exp = dynamic_cast<Expression*>(binary_exp->get_right().get());
 		exp_operator op = binary_exp->get_operator();
 
-		std::tuple<Type, std::string> left_exp_result = this->evaluate_expression(left_exp, vars_table);
-		std::tuple<Type, std::string> right_exp_result = this->evaluate_expression(right_exp, vars_table);
+		std::tuple<Type, std::string> left_exp_result = this->evaluateExpression(left_exp, vars_table);
+		std::tuple<Type, std::string> right_exp_result = this->evaluateExpression(right_exp, vars_table);
 
 		Type left_t = std::get<0>(left_exp_result);
 		Type right_t = std::get<0>(right_exp_result);
 
 		// First, make sure our expressions are of the same type
 		if (left_t == right_t) {
-			// Evaluate the result of our expression by discerning what operation we are actually trying to do
-			if (op == PLUS) {
-				// Since the types are the same, we only need to test one of them
-				if (left_t == INT) {
-					int sum = std::stoi(std::get<1>(left_exp_result)) + std::stoi(std::get<1>(right_exp_result));
-					return std::make_tuple(INT, std::to_string(sum));
-				}
-				else if (left_t == FLOAT) {
-					float sum = std::stof(std::get<1>(left_exp_result)) + std::stof(std::get<1>(right_exp_result));
-					return std::make_tuple(FLOAT, std::to_string(sum));
-				}
-				else if (left_t == STRING) {
-					std::string concatenated = std::get<1>(left_exp_result) + std::get<1>(right_exp_result);
-					return std::make_tuple(STRING, concatenated);
-				}
-				else {
-					this->error("Addition cannot be performed on expressions of this type", 1123);
-				}
-			}
-			else if (op == MINUS) {
-				if (left_t == INT) {
-					int diff = std::stoi(std::get<1>(left_exp_result)) - std::stoi(std::get<1>(right_exp_result));
-					return std::make_tuple(INT, std::to_string(diff));
-				}
-				else if (left_t == FLOAT) {
-					float diff = std::stof(std::get<1>(left_exp_result)) - std::stof(std::get<1>(right_exp_result));
-					return std::make_tuple(FLOAT, std::to_string(diff));
-				}
-				else {
-					this->error("Subtraction cannot be performed on expressions of this type", 1123);
-				}
-			}
-			else if (op == MULT) {
-				if (left_t == INT) {
-					int product = std::stoi(std::get<1>(left_exp_result)) * std::stoi(std::get<1>(right_exp_result));
-					return std::make_tuple(INT, std::to_string(product));
-				}
-				else if (left_t == FLOAT) {
-					float product = std::stof(std::get<1>(left_exp_result)) * std::stof(std::get<1>(right_exp_result));
-					return std::make_tuple(FLOAT, std::to_string(product));
-				}
-				// Add support for string repitition?
-				else {
-					this->error("Multiplication cannot be performed on expressions of this type", 1123);
-				}
-			}
-			else if (op == DIV) {
-				if (left_t == INT) {
-					int quotient = std::stoi(std::get<1>(left_exp_result)) / std::stoi(std::get<1>(right_exp_result));
-					return std::make_tuple(INT, std::to_string(quotient));
-				}
-				else if (left_t == FLOAT) {
-					float quotient = std::stof(std::get<1>(left_exp_result)) / std::stof(std::get<1>(right_exp_result));
-					return std::make_tuple(FLOAT, std::to_string(quotient));
-				}
-				else {
-					this->error("Division cannot be performed on expressions of this type", 1123);
-				}
-			}
-			else if (op == GREATER) {
-				if (left_t == INT) {
-					int _left = std::stoi(std::get<1>(left_exp_result));
-					int _right = std::stoi(std::get<1>(right_exp_result));
-					bool greater = _left > _right;
-					return std::make_tuple(BOOL, bool_string(greater));
-				}
-				else if (left_t == FLOAT) {
-					float _left = std::stof(std::get<1>(left_exp_result));
-					float _right = std::stof(std::get<1>(right_exp_result));
-					bool greater = _left > _right;
-					return std::make_tuple(BOOL, bool_string(greater));
-				}
-				else {
-					this->error("Comparison cannot be performed on expressions of this type", 1123);
-				}
-			}
-			else if (op == GREATER_OR_EQUAL) {
-				if (left_t == INT) {
-					int _left = std::stoi(std::get<1>(left_exp_result));
-					int _right = std::stoi(std::get<1>(right_exp_result));
-					bool greater = _left >= _right;
-					return std::make_tuple(BOOL, bool_string(greater));
-				}
-				else if (left_t == FLOAT) {
-					float _left = std::stof(std::get<1>(left_exp_result));
-					float _right = std::stof(std::get<1>(right_exp_result));
-					bool greater = _left >= _right;
-					return std::make_tuple(BOOL, bool_string(greater));
-				}
-				else {
-					this->error("Comparison cannot be performed on expressions of this type", 1123);
-				}
-			}
-			else if (op == LESS) {
-				if (left_t == INT) {
-					int _left = std::stoi(std::get<1>(left_exp_result));
-					int _right = std::stoi(std::get<1>(right_exp_result));
-					bool greater = _left < _right;
-					return std::make_tuple(BOOL, bool_string(greater));
-				}
-				else if (left_t == FLOAT) {
-					float _left = std::stof(std::get<1>(left_exp_result));
-					float _right = std::stof(std::get<1>(right_exp_result));
-					bool greater = _left < _right;
-					return std::make_tuple(BOOL, bool_string(greater));
-				}
-				else {
-					this->error("Comparison cannot be performed on expressions of this type", 1123);
-				}
-			}
-			else if (op == LESS_OR_EQUAL) {
-				if (left_t == INT) {
-					int _left = std::stoi(std::get<1>(left_exp_result));
-					int _right = std::stoi(std::get<1>(right_exp_result));
-					bool greater = _left <= _right;
-					return std::make_tuple(BOOL, bool_string(greater));
-				}
-				else if (left_t == FLOAT) {
-					float _left = std::stof(std::get<1>(left_exp_result));
-					float _right = std::stof(std::get<1>(right_exp_result));
-					bool greater = _left <= _right;
-					return std::make_tuple(BOOL, bool_string(greater));
-				}
-				else {
-					this->error("Comparison cannot be performed on expressions of this type", 1123);
-				}
-			}
-			else if (op == EQUAL) {
-				bool equals = std::get<1>(left_exp_result) == std::get<1>(right_exp_result);
-				return std::make_tuple(BOOL, bool_string(equals));
-			}
-			else if (op == NOT_EQUAL) {
-				bool not_equals = std::get<1>(left_exp_result) != std::get<1>(right_exp_result);
-				return std::make_tuple(BOOL, bool_string(not_equals));
-			}
-			else if (op == AND) {
-				bool and = to_bool(std::get<1>(left_exp_result)) && to_bool(std::get<1>(right_exp_result));
-				return std::make_tuple(BOOL, bool_string(and));					
-			}
-			else if (op == OR) {
-				bool or = to_bool(std::get<1>(left_exp_result)) || to_bool(std::get<1>(right_exp_result));
-				return std::make_tuple(BOOL, bool_string(or));
-			}
-			else {
-				this->error("Unrecognized operator in binary expression!", 3999);
-			}
+			return this->evaluateBinary(left_exp_result, right_exp_result, op);
 		}
 		// Expressions are not of the same type
 		else {
-			this->error("Expressions in a binary expression must have the same type.", 3101);
+			throw InterpreterException("Expressions in a binary expression must have the same type.", 3101);
 		}
 	}
 	else if (expr->getExpType() == "unary") {
@@ -486,7 +477,7 @@ std::tuple<Type, std::string> Interpreter::evaluate_expression(Expression* expr,
 			// get input and return a string
 			std::string input;
 			if (call->get_args_size() != 1) {
-				this->error("'input' only takes one argument!", 3140);
+				throw InterpreterException("'input' only takes one argument!", 3140);
 			}
 			else {
 				std::shared_ptr<Expression> _arg = call->get_arg(0);
@@ -498,7 +489,7 @@ std::tuple<Type, std::string> Interpreter::evaluate_expression(Expression* expr,
 						return std::make_tuple(STRING, input);
 					}
 					else {
-						this->error("Argument must be of type 'string'", 1141);
+						throw InterpreterException("Argument must be of type 'string'", 1141);
 					}
 				}
 				else if (_arg->getExpType() == "LValue") {
@@ -513,7 +504,7 @@ std::tuple<Type, std::string> Interpreter::evaluate_expression(Expression* expr,
 			std::string to_convert;
 			int converted;
 			if (call->get_args_size() != 1) {
-				this->error("'stoi' only takes one argument!", 3140);
+				throw InterpreterException("'stoi' only takes one argument!", 3140);
 			}
 			else {
 				std::shared_ptr<Expression> _arg = call->get_arg(0);
@@ -527,13 +518,13 @@ std::tuple<Type, std::string> Interpreter::evaluate_expression(Expression* expr,
 						}
 						catch (const std::invalid_argument& ia) {
 							std::cerr << "\n" << ia.what() << std::endl;
-							this->error("Cannot convert '" + to_convert + "' to type 'int'!", 2110);
+							throw InterpreterException("Cannot convert '" + to_convert + "' to type 'int'!", 2110);
 						}
 					}
-				} 
+				}
 				else if (_arg->getExpType() == "LValue") {
 					LValue* var = dynamic_cast<LValue*>(_arg.get());
-					std::tuple<Type, std::string> evaluated = this->evaluate_expression(var, vars_table);
+					std::tuple<Type, std::string> evaluated = this->evaluateExpression(var, vars_table);
 					if (std::get<0>(evaluated)) {
 						to_convert = std::get<1>(evaluated);
 						try {
@@ -542,21 +533,21 @@ std::tuple<Type, std::string> Interpreter::evaluate_expression(Expression* expr,
 						}
 						catch (std::invalid_argument& ia) {
 							std::cerr << "\n" << ia.what() << std::endl;
-							this->error("Cannot convert '" + to_convert + "' to type 'int'!", 2110);
+							throw InterpreterException("Cannot convert '" + to_convert + "' to type 'int'!", 2110);
 						}
 					}
 					else {
-						this->error("Cannot convert expressions of this type with 'stoi'!", 2110);
+						throw InterpreterException("Cannot convert expressions of this type with 'stoi'!", 2110);
 					}
 				}
 				else {
-					this->error("Cannot convert expressions of this type with 'stoi'!", 2110);
+					throw InterpreterException("Cannot convert expressions of this type with 'stoi'!", 2110);
 				}
 			}
 		}
 		// then it is one we defined
 		else {
-			std::tuple<Type, std::string> evaluated_return_expression = this->evaluate_value_returning_function(*call, vars_table);
+			std::tuple<Type, std::string> evaluated_return_expression = this->evaluateValueReturningFunction(*call, vars_table);
 			return evaluated_return_expression;
 		}
 	}
@@ -566,11 +557,208 @@ std::tuple<Type, std::string> Interpreter::evaluate_expression(Expression* expr,
 }
 
 
-template<typename T> T Interpreter::eval_sum(T const& left, T const& right) {
-	return T + T;
+// Returns a tuple containing the result of our binary expression
+std::tuple<Type, std::string> Interpreter::evaluateBinary(std::tuple<Type, std::string> left, std::tuple<Type, std::string> right, exp_operator op) {
+	// get the types of our operands
+	Type left_t = std::get<0>(left);
+	Type right_t = std::get<0>(right);
+	// Evaluate the result of our expression by discerning what operation we are actually trying to do
+	if (op == PLUS) {
+		// Since the types are the same, we only need to test one of them
+		if (left_t == INT) {
+			int sum = std::stoi(std::get<1>(left)) + std::stoi(std::get<1>(right));
+			return std::make_tuple(INT, std::to_string(sum));
+		}
+		else if (left_t == FLOAT) {
+			float sum = std::stof(std::get<1>(left)) + std::stof(std::get<1>(right));
+			return std::make_tuple(FLOAT, std::to_string(sum));
+		}
+		else if (left_t == STRING) {
+			std::string concatenated = std::get<1>(left) + std::get<1>(right);
+			return std::make_tuple(STRING, concatenated);
+		}
+		else {
+			throw InterpreterException("Addition cannot be performed on expressions of this type", 1123);
+		}
+	}
+	else if (op == MINUS) {
+		if (left_t == INT) {
+			int diff = std::stoi(std::get<1>(left)) - std::stoi(std::get<1>(right));
+			return std::make_tuple(INT, std::to_string(diff));
+		}
+		else if (left_t == FLOAT) {
+			float diff = std::stof(std::get<1>(left)) - std::stof(std::get<1>(right));
+			return std::make_tuple(FLOAT, std::to_string(diff));
+		}
+		else {
+			throw InterpreterException("Subtraction cannot be performed on expressions of this type", 1123);
+		}
+	}
+	else if (op == MULT) {
+		if (left_t == INT) {
+			int product = std::stoi(std::get<1>(left)) * std::stoi(std::get<1>(right));
+			return std::make_tuple(INT, std::to_string(product));
+		}
+		else if (left_t == FLOAT) {
+			float product = std::stof(std::get<1>(left)) * std::stof(std::get<1>(right));
+			return std::make_tuple(FLOAT, std::to_string(product));
+		}
+		// Add support for string repitition?
+		else {
+			throw InterpreterException("Multiplication cannot be performed on expressions of this type", 1123);
+		}
+	}
+	else if (op == DIV) {
+		if (left_t == INT) {
+			int quotient = std::stoi(std::get<1>(left)) / std::stoi(std::get<1>(right));
+			return std::make_tuple(INT, std::to_string(quotient));
+		}
+		else if (left_t == FLOAT) {
+			float quotient = std::stof(std::get<1>(left)) / std::stof(std::get<1>(right));
+			return std::make_tuple(FLOAT, std::to_string(quotient));
+		}
+		else {
+			throw InterpreterException("Division cannot be performed on expressions of this type", 1123);
+		}
+	}
+	else if (op == GREATER) {
+		if (left_t == INT) {
+			int _left = std::stoi(std::get<1>(left));
+			int _right = std::stoi(std::get<1>(right));
+			bool greater = _left > _right;
+			return std::make_tuple(BOOL, boolString(greater));
+		}
+		else if (left_t == FLOAT) {
+			float _left = std::stof(std::get<1>(left));
+			float _right = std::stof(std::get<1>(right));
+			bool greater = _left > _right;
+			return std::make_tuple(BOOL, boolString(greater));
+		}
+		else {
+			throw InterpreterException("Comparison cannot be performed on expressions of this type", 1123);
+		}
+	}
+	else if (op == GREATER_OR_EQUAL) {
+		if (left_t == INT) {
+			int _left = std::stoi(std::get<1>(left));
+			int _right = std::stoi(std::get<1>(right));
+			bool greater = _left >= _right;
+			return std::make_tuple(BOOL, boolString(greater));
+		}
+		else if (left_t == FLOAT) {
+			float _left = std::stof(std::get<1>(left));
+			float _right = std::stof(std::get<1>(right));
+			bool greater = _left >= _right;
+			return std::make_tuple(BOOL, boolString(greater));
+		}
+		else {
+			throw InterpreterException("Comparison cannot be performed on expressions of this type", 1123);
+		}
+	}
+	else if (op == LESS) {
+		if (left_t == INT) {
+			int _left = std::stoi(std::get<1>(left));
+			int _right = std::stoi(std::get<1>(right));
+			bool greater = _left < _right;
+			return std::make_tuple(BOOL, boolString(greater));
+		}
+		else if (left_t == FLOAT) {
+			float _left = std::stof(std::get<1>(left));
+			float _right = std::stof(std::get<1>(right));
+			bool greater = _left < _right;
+			return std::make_tuple(BOOL, boolString(greater));
+		}
+		else {
+			throw InterpreterException("Comparison cannot be performed on expressions of this type", 1123);
+		}
+	}
+	else if (op == LESS_OR_EQUAL) {
+		if (left_t == INT) {
+			int _left = std::stoi(std::get<1>(left));
+			int _right = std::stoi(std::get<1>(right));
+			bool greater = _left <= _right;
+			return std::make_tuple(BOOL, boolString(greater));
+		}
+		else if (left_t == FLOAT) {
+			float _left = std::stof(std::get<1>(left));
+			float _right = std::stof(std::get<1>(right));
+			bool greater = _left <= _right;
+			return std::make_tuple(BOOL, boolString(greater));
+		}
+		else {
+			throw InterpreterException("Comparison cannot be performed on expressions of this type", 1123);
+		}
+	}
+	else if (op == EQUAL) {
+		bool equals = std::get<1>(left) == std::get<1>(right);
+		return std::make_tuple(BOOL, boolString(equals));
+	}
+	else if (op == NOT_EQUAL) {
+		bool not_equals = std::get<1>(left) != std::get<1>(right);
+		return std::make_tuple(BOOL, boolString(not_equals));
+	}
+	else if (op == AND) {
+		bool and = toBool(std::get<1>(left)) && toBool(std::get<1>(right));
+		return std::make_tuple(BOOL, boolString(and));
+	}
+	else if (op == OR) {
+		bool or = toBool(std::get<1>(left)) || toBool(std::get<1>(right));
+		return std::make_tuple(BOOL, boolString(or ));
+	}
+	else {
+		throw InterpreterException("Unrecognized operator in binary expression!", 3999);
+	}
 }
 
-/***************	CONSTRUCTORS & DESTRUCTOR	***************/
+
+// get a function definition
+Definition Interpreter::getDefinition(std::string func_to_find) {
+	// create a list iterator which will iterate through our function list
+	std::list<Definition>::iterator func_iter = this->function_table.begin();
+	bool found = false;
+	while (func_iter != this->function_table.end() && !found) {
+		// get our function's name as an LValue pointer -- because function names are considered LValues
+		// maybe they should be considered literals or some other class, as they aren't really LValues, but that is to change later
+		LValue* table_name = dynamic_cast<LValue*>(func_iter->get_name().get());
+		// if the two values are the same
+		if (func_to_find == table_name->getValue()) {
+			found = true;
+		}
+		// if they are not
+		else {
+			// increment func_it
+			func_iter++;
+		}
+	}
+	if (found) {
+		// We have found the function
+		return *func_iter;
+	}
+	else {
+		throw InterpreterException("Could not find a definition for the function referenced", 3034);
+	}
+}
+
+
+
+/************************************************************************
+******************										*****************
+******************		PUBLIC MEMBER FUNCTIONS			*****************
+******************										*****************
+*************************************************************************/
+
+
+// The interpreter's entry function. Requires only an AST object (StatementBlock), and it will use the Interpreter object's global variable table.
+// This function will also catch any interpreter errors thrown during execution
+void Interpreter::interpretAST(StatementBlock AST) {
+	try {
+		this->executeBranch(AST, &this->var_table);
+	}
+	catch (InterpreterException &i_e) {
+		std::cerr << "Interpreter Exception: \n\t" << i_e.what() << "\n\tCode: " << i_e.get_code() << std::endl;
+	}
+	return;
+}
 
 Interpreter::Interpreter()
 {
@@ -579,4 +767,25 @@ Interpreter::Interpreter()
 
 Interpreter::~Interpreter()
 {
+}
+
+
+
+/************************************************************************
+******************										*****************
+******************		INTERPRETER EXCEPTION			*****************
+******************										*****************
+*************************************************************************/
+
+
+const char* InterpreterException::what() const {
+	return InterpreterException::message_.c_str();
+}
+
+int InterpreterException::get_code() {
+	return this->code_;
+}
+
+InterpreterException::InterpreterException(const std::string& err_message, const int& err_code) : message_(err_message), code_(err_code) {
+
 }

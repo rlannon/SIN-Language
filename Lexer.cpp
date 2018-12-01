@@ -1,9 +1,12 @@
 ﻿#include "Lexer.h"
 
 
+// TODO: Fix double ref pointer -- Lexer currently sees "**" as one lexeme, when it should be 2
+
+
 // keywords is an alphabetized list of the keywords in SIN
 // it must be alphabetized in order to use the find algorithm from the standard library
-const std::vector<std::string> Lexer::keywords{ "alloc", "and", "bool", "def", "else", "float", "if", "int", "let", "or", "return", "string", "void", "while", "xor"};
+const std::vector<std::string> Lexer::keywords{ "alloc", "and", "bool", "def", "else", "float", "if", "int", "let", "or", "ptr", "return", "string", "void", "while", "xor"};
 
 // Our regular expressions
 const std::string Lexer::punc_exp = "[\\.',;\\[\\]\\{\\}\\(\\)]";	// expression for punctuation
@@ -201,10 +204,14 @@ std::string Lexer::read_while(bool (*predicate)(char)) {
 	return msg;
 }
 
+
+/*
+
+Reads the next character in the stream to determine what to do next.
+
+*/
+
 std::tuple<std::string, std::string> Lexer::read_next() {
-	/*
-		Reads the next character in the stream to determine what to do next.
-	*/
 	std::string type = "";
 	std::string value = "";
 	std::tuple<std::string, std::string> lexeme;
@@ -224,15 +231,19 @@ std::tuple<std::string, std::string> Lexer::read_next() {
 
 		while (is_comment) {
 			this->next();	// eat the comment character
-			this->read_while(&this->is_not_newline);
+			this->read_while(&this->is_not_newline);	// skip characters until we hit a newline character
 			this->next();	// eat the newline character
 
+			// if we have whitespace (e.g., a tab), skip it
+			this->read_while(&this->is_whitespace);
+
+			// get the next character
 			ch = this->peek();
 
-			if (this->stream->eof()) {	// check to make sure we haven't gone past the end of the file
+			if (this->stream->eof() || this->eof()) {	// check to make sure we haven't gone past the end of the file
 				lexeme = std::make_tuple(NULL, NULL);	// if we are, set the exit flag return an empty tuple
-				this->exit_flag = true;
-				return lexeme;
+				this->exit_flag = true;	// set our exit flag
+				return lexeme;	// return the empty lexeme
 			}
 			else if (ch == '#') {	// if not, check to see if we have another comment
 				is_comment = true;
@@ -279,7 +290,14 @@ std::tuple<std::string, std::string> Lexer::read_next() {
 		}
 		else if (this->is_op_char(ch)) {
 			type = "op_char";
-			value = this->read_while(&this->is_op_char);
+			char next_ch = this->peek();
+			if (next_ch != '*') {
+				value = this->read_while(&this->is_op_char);
+			}
+			else {
+				value = next_ch;
+				this->next();
+			}
 		}
 		else if (ch == '\n') {	// if we encounter a newline character
 			this->peek();
@@ -293,12 +311,13 @@ std::tuple<std::string, std::string> Lexer::read_next() {
 			}
 		}
 		else {	// if the character in the file is not recognized, print an error message and quit lexing
-			croak(ch, position);
+			//this->croak(ch, position);
+			throw LexerException("Unrecognized character!", position, ch);
 			this->exit_flag = true;
 		}
 
-	lexeme = std::make_tuple(type, value);	// create our lexeme with out (type, value) tuple
-	return lexeme;
+		lexeme = std::make_tuple(type, value);	// create our lexeme with out (type, value) tuple
+		return lexeme;
 
 	}
 	else if (ch == NULL) {	// if there is a NULL character
@@ -382,3 +401,20 @@ std::ostream& operator<<(std::ostream& os, const Lexer& lexer) {
 	return lexer.write(os);
 }
 
+
+
+LexerException::LexerException(const std::string& err_message, const int& err_position, const char& ch) : message_(err_message), position_(err_position), ch_(ch) {
+
+}
+
+const char* LexerException::what() const {
+	return LexerException::message_.c_str();
+}
+
+char LexerException::get_char() {
+	return ch_;
+}
+
+int LexerException::get_pos() {
+	return position_;
+}

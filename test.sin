@@ -1,0 +1,26 @@
+alloc int myInt;
+alloc ptr[int] myIntPtr;
+alloc ptr[ptr] myPtrPtr;
+
+let myInt = 10;
+let myIntPtr = $myInt;
+
+@print("myInt value:");
+@print(myInt);
+
+let myPtrPtr = $myIntPtr;
+
+@print("myIntPtr:");
+@print(*myIntPtr);
+
+@print("myPtrPtr address:");
+@print(*myPtrPtr);
+
+@print("myPtrPtr value: ");
+@print(**myPtrPtr);
+
+alloc ptr[ptr] mySecondPtrPtr;
+let mySecondPtrPtr = $myPtrPtr;
+
+@print("mySecondPtrPtr:");
+@print(***mySecondPtrPtr);

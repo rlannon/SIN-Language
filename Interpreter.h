@@ -1,10 +1,13 @@
 #pragma once
+
 // Our standard library includes
 #include <iostream>
 #include <vector>
 #include <tuple>
 #include <memory>
 #include <string>
+#include <cstdint>
+#include <list>
 
 // Our custom headers / classes
 #include "Parser.h"
@@ -12,48 +15,61 @@
 #include "Statement.h"
 
 
+
 class Interpreter
 {
-	std::vector<std::tuple<Type, std::string, std::string>> vars_table; // a vector of tuples containing the type, name, and value
-	std::vector<Definition> functions_table;
+	// our symbol tables will be std::list<> because they can be safely pointed to
+	std::list<std::tuple<Type, std::string, std::string>> var_table;
+	std::list<Definition> function_table;
 
-	static const bool to_bool(std::string val);
-	static const std::string bool_string(bool val);
+	// convert to and from boolean type
+	static const bool toBool(std::string val);
+	static const std::string boolString(bool val);
 
-	std::string get_var_value(std::string var_name, std::vector<std::tuple<Type, std::string, std::string>>* vars_table);
-	void set_var_value(std::string var_name, std::string new_value, std::vector<std::tuple<Type, std::string, std::string>>* vars_table);
+	// get a variable value as a string
+	std::string getVarValue(LValue variable, std::list<std::tuple<Type, std::string, std::string>>* vars_table);
+	// set a variable's value
+	void setVarValue(LValue variable, std::string new_value, std::list<std::tuple<Type, std::string, std::string>>* vars_table);
+
+	// allocate a variable
+	void allocateVar(Allocation allocation, std::list<std::tuple<Type, std::string, std::string>>* vars_table);
+	// define a function
+	void defineFunction(Definition definition);
+
+	// execute a single statement
+	void executeStatement(Statement* statement, std::list<std::tuple<Type, std::string, std::string>>* vars_table);
+	// evaluate an assignment statement
+	void evaluateAssignment(Assignment assign, std::list<std::tuple<Type, std::string, std::string>>* vars_table);
+
+	// execute a branch or block of statements
+	void executeBranch(StatementBlock prog, std::list<std::tuple<Type, std::string, std::string>>* vars_table);
+
+	// evaluate function calls
+	void evaluateVoidFunction(Call func_to_evaluate, std::list<std::tuple<Type, std::string, std::string>>* parent_vars_table);
+	std::tuple<Type, std::string> evaluateValueReturningFunction(ValueReturningFunctionCall func_to_evaluate, std::list<std::tuple<Type, std::string, std::string>>* parent_vars_table);
+
+	// evaluate an expression
+	std::tuple<Type, std::string> evaluateExpression(Expression* expr, std::list<std::tuple<Type, std::string, std::string>>* vars_table);
+	std::tuple<Type, std::string> evaluateBinary(std::tuple<Type, std::string> left, std::tuple<Type, std::string> right, exp_operator op);
+
+	// return a definition object for a function of a given name
+	Definition getDefinition(std::string func_to_find);
 public:
-	// If there is an interpretation error, use this function to print it; identical to the Parser error function
-	static const void error(std::string message, int code);
-
-	// get our statements list
-	std::vector<std::tuple<Type, std::string, std::string>>* get_vars_table();
-
-	void allocate_var(Allocation allocation, std::vector<std::tuple<Type, std::string, std::string>>* vars_table);
-	void define_function(Definition definition);
-
-	void execute_statements(StatementBlock prog, std::vector<std::tuple<Type, std::string, std::string>>* vars_table);
-	void evaluate_statement(Statement* statement, std::vector<std::tuple<Type, std::string, std::string>>* vars_table);
-
-	// Get the definition of a function by looking it up in our function table (which is global)
-	Definition get_definition(std::string func_to_find);
-
-	// Note: the function evaluations must include a pointer to the PARENT variable table, as functions may only have access to their CALLER's variable table when looking up values for parameter assignment; if we used the global table to look up arguments that are variables, we would get undefined behavior
-	void evaluate_void_function(Call func_to_evaluate, std::vector<std::tuple<Type, std::string, std::string>>* parent_vars_table);
-	std::tuple<Type, std::string> evaluate_value_returning_function(ValueReturningFunctionCall func_to_evaluate, std::vector<std::tuple<Type, std::string, std::string>>* parent_vars_table);
-
-	void evaluate_assignment(Assignment assign, std::vector<std::tuple<Type, std::string, std::string>>* vars_table);
-	std::tuple<Type, std::string> evaluate_expression(Expression* expr, std::vector<std::tuple<Type, std::string, std::string>>* vars_table);
-	
-	template<typename T> T eval_sum(T const& left, T const& right);
+	// entry point to the interpreter; runs a branch of statements passed into it, starting at the global scope
+	void interpretAST(StatementBlock AST);
 
 	Interpreter();
 	~Interpreter();
 };
 
-class LocalScope : public Interpreter
-{
-public:
-	void evaluate_statement(Statement* statement);
-};
 
+
+// Specific exceptions for the interpreter, a child class of the standard exception class
+class InterpreterException : public std::exception {
+	std::string message_;
+	int code_;
+public:
+	explicit InterpreterException(const std::string& err_message, const int& err_code);
+	virtual const char* what() const;
+	int get_code();
+};

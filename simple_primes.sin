@@ -1,46 +1,71 @@
+##########      SIMPLE_PRIMES.SIN     ##########
+
+###     A simple program to demonstrate the SIN language    ###
+
+# Riley Lannon / truffly, SIN author
+
+# a function to tell whether a numer is prime
 def bool isPrime(alloc int candidate){
+    # allocate our index, initialize to 2
     alloc int index;
     let index = 2;
     
+    # allocate our result and our sentinel boolean
     alloc bool result;
     alloc bool quit;
+    
+    # initialize quit to false
     let quit = false;
     
-    while ((index < candidate) & (quit != true)) {
+    # as long as we haven't reached candidate/2 and we haven't updated our senintel to "true", continue
+    while ((index < (candidate / 2) & (quit != true))) {
+        # if it divides evenly:
+        # (a - (n * (a / n))) is equal to a % n
         if ((candidate - (index * (candidate / index))) = 0){
+            # set our quit variable
             let quit = true;
         } else {
+            # otherwise, increment the index
             let index = index + 1;
         }
     }
     
+    # if we set our quit variable because we found a factor, then set result to false (as it is not prime)
     if (quit = true){
         let result = false;
     } else {
+        # otherwise, set it to true (as it is prime)
         let result = true;
     }
     
+    # return our result boolean
     return result;
 }
 
+# get a string for user input
 alloc string usr_input;
-let usr_input = @input("Enter a number: ");
+let usr_input = @input("Enter a number (or 'quit' to exit): ");
 
+# allocate our result bool
 alloc bool result;
-let result = true;
 
+# get a "converted" variable to hold the integer we got from a string
 alloc int converted;
 
 while (usr_input != "quit") {
+    # convert the string to an int
     let converted = @stoi(usr_input);
     
+    # get the result
     let result = @isPrime(converted);
     
+    # print our result
     if (result = true){
         @print("is prime!");
     } else {
         @print("is not prime!");
     }
     
-    let usr_input = @input("Enter a number: ");
+    # update usr_input to get the next number
+    let usr_input = @input("Enter a number (or 'quit' to exit): ");
 }

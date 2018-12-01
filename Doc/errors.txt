@@ -1,6 +1,13 @@
 ERRORS.TXT
 
-An overview of the error codes and their meanings.
+An overview of the error codes and their meanings. Errors are usually accompanied by a message.
+
+PROGRAM EXIT ERRORS:
+	There are a few instances in which a program may exit with a code. There are far fewer error codes for the main body of the program than in the Lexer, Parser, or Interpreter.
+1	-	Invalid file format (must be .sin or .txt)
+2	-	Could not open file
+
+
 
 LEXER ERRORS:
 
@@ -13,12 +20,13 @@ PARSER ERRORS:
 
 200		-	Token value errors
 	211	-	Token was of an expected type, but an unexpected, unknown, or otherwise inappropriate value
+	212	-	Token was not necessarily a correct type, but was definitely inappropriate in the context.
 
 300		-	Invalid syntax & unexpected tokens
 	312	-	Token was inappropriate for this context in both type and value; e.g., writing "3 3" as an expression is invalid, as is "3 ("
 	330	-	Expected a token of a particular type given the context in which it occurred, but such a token was not found.
 	331	-	Expected a particular token for the context, but said token was not found
-	332	-	Expected an identifier, but one was not found
+	332	-	Expected an identifier, but none was found
 
 400		-	Unknowns
 

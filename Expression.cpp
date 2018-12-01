@@ -32,11 +32,11 @@ const bool is_literal(std::string candidate_type) {
 const Type get_type_from_string(std::string candidate) {
 	// if it can, this function gets the proper type of an input string
 	// an array of the valid types as strings
-	std::string string_types[] = { "int", "float", "string", "bool", "void" };
-	Type _types[] = { INT, FLOAT, STRING, BOOL, VOID };
+	std::string string_types[] = { "int", "float", "string", "bool", "void", "intptr", "floatptr", "stringptr", "boolptr", "voidptr", "ptrptr" };
+	Type _types[] = { INT, FLOAT, STRING, BOOL, VOID, INTPTR, FLOATPTR, STRINGPTR, BOOLPTR, VOIDPTR, PTRPTR };
 
 	// for test our candidate against each item in the array of string_types; if we have a match, return the Type at the same position
-	for (int i = 0; i < 5; i++) {
+	for (int i = 0; i < num_types; i++) {
 		if (candidate == string_types[i]) {
 			// if we have a match, return it
 			return _types[i];
@@ -52,11 +52,11 @@ const Type get_type_from_string(std::string candidate) {
 
 const std::string get_string_from_type(Type candidate) {
 	// reverse of the above function
-	std::string string_types[] = { "int", "float", "string", "bool", "void" };
-	Type _types[] = { INT, FLOAT, STRING, BOOL, VOID };
+	std::string string_types[] = { "int", "float", "string", "bool", "void", "intptr", "floatptr", "stringptr", "boolptr", "voidptr" };
+	Type _types[] = { INT, FLOAT, STRING, BOOL, VOID, INTPTR, FLOATPTR, STRINGPTR, BOOLPTR, VOIDPTR };
 
 	// for test our candidate against each item in the array of string_types; if we have a match, return the string at the same position
-	for (int i = 0; i < 5; i++) {
+	for (int i = 0; i < num_types; i++) {
 		if (candidate == _types[i]) {
 			// if we have a match, return it
 			return string_types[i];
@@ -66,6 +66,24 @@ const std::string get_string_from_type(Type candidate) {
 		}
 	}
 
+}
+
+const Type get_ptr_type(Type candidate) {
+	if (candidate == INT) {
+		return INTPTR;
+	}
+	else if (candidate == FLOAT) {
+		return FLOATPTR;
+	}
+	else if (candidate == STRING) {
+		return STRINGPTR;
+	}
+	else if (candidate == BOOL) {
+		return BOOLPTR;
+	}
+	else if (candidate == VOID) {
+		return VOIDPTR;
+	}
 }
 
 std::string Expression::getExpType() {
@@ -107,8 +125,16 @@ std::string LValue::getValue() {
 	return this->value;
 }
 
+std::string LValue::getLValueType() {
+	return this->LValue_Type;
+}
+
 void LValue::setValue(std::string new_value) {
 	this->value = new_value;
+}
+
+void LValue::setLValueType(std::string new_lvalue_type) {
+	this->LValue_Type = new_lvalue_type;
 }
 
 LValue::LValue(std::string value, std::string LValue_Type) {
@@ -127,6 +153,56 @@ LValue::LValue() {
 	LValue::type = "LValue";
 	LValue::value = "";
 	LValue::LValue_Type = "var";
+}
+
+
+
+LValue AddressOf::get_target() {
+	return this->target;
+}
+
+AddressOf::AddressOf(LValue target) {
+	AddressOf::target = target;
+	AddressOf::type = "address_of";
+}
+
+AddressOf::AddressOf() {
+	AddressOf::type = "address_of";
+}
+
+
+
+//LValue Dereferenced::get_ptr() {
+//	return this->ptr;
+//}
+//
+//Dereferenced::Dereferenced(LValue ptr) {
+//	Dereferenced::type = "dereferenced";
+//	Dereferenced::ptr = ptr;
+//}
+
+LValue Dereferenced::get_ptr() {
+	if (this->ptr->getExpType() == "LValue") {
+		LValue* lvalue = dynamic_cast<LValue*>(this->ptr.get());
+		return *lvalue;
+	}
+	else {
+		std::string msg = "Cannot convert " + this->ptr->getExpType() + " to 'LValue'";
+		throw std::exception(msg.c_str());
+	}
+}
+
+std::shared_ptr<Expression> Dereferenced::get_ptr_shared() {
+	return this->ptr;
+}
+
+Dereferenced::Dereferenced(std::shared_ptr<Expression> ptr) {
+	this->ptr = ptr;
+	this->type = "dereferenced";
+}
+
+Dereferenced::Dereferenced() {
+	Dereferenced::type = "dereferenced";
 }
 
 

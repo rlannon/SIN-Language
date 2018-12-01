@@ -79,6 +79,10 @@ std::string Assignment::getRValueType() {
 	return _rval->getExpType();
 }
 
+LValue Assignment::getLValue() {
+	return this->lvalue;
+}
+
 std::shared_ptr<Expression> Assignment::getRValue() {
 	return this->rvalue_ptr;
 }

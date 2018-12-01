@@ -1,7 +1,9 @@
 #include "Parser.h"
 
 
+// define "lexeme" data type
 typedef std::tuple<std::string, std::string> lexeme;
+
 
 // Define our symbols and their precedences as a vector of tuples
 const std::vector<std::tuple<std::string, int>> Parser::precedence{ std::make_tuple("&", 2), std::make_tuple("|", 3), \
@@ -9,7 +11,7 @@ const std::vector<std::tuple<std::string, int>> Parser::precedence{ std::make_tu
 	std::make_tuple("!=", 7), std::make_tuple("+", 10), std::make_tuple("-", 10), std::make_tuple("*", 20), std::make_tuple("/", 20), std::make_tuple("%", 20) };
 
 // Iterate through the vector and find the tuple that matches our symbol; if found, return its precedence; if not, return -1
-const int Parser::get_precedence(std::string symbol) {
+const int Parser::getPrecedence(std::string symbol) {
 	std::vector<std::tuple<std::string, int>>::const_iterator it = Parser::precedence.begin();
 	bool match = false;
 	int precedence;
@@ -51,7 +53,8 @@ lexeme Parser::peek() {
 		return this->tokens[this->position + 1];
 	}
 	else {
-		this->error("No more lexemes to parse!", 1);
+		//this->error("No more lexemes to parse!", 1);
+		throw ParserException("No more lexemes to parse!", 1);
 	}
 }
 
@@ -80,13 +83,12 @@ lexeme Parser::back() {
 }
 
 void Parser::error(std::string message, int code) {
-	std::cerr << std::endl << "PARSER ERROR:" << "\n\t" << message << std::endl;
-	std::cerr << "\tError occurred at token position: " << this->position << std::endl << std::endl;
-throw code;
+	//throw ParserException(code, message);
+	throw ParserException(message, code);
 }
 
 // Skip a punctuation mark
-void Parser::skip_punc(char punc) {
+void Parser::skipPunc(char punc) {
 	if (std::get<0>(this->current_token()) == "punc") {
 		if (std::get<1>(this->current_token()) == &punc) {
 			this->position += 1;
@@ -102,34 +104,60 @@ void Parser::skip_punc(char punc) {
 }
 
 
+/*
 
-StatementBlock Parser::parse_top() {
+Create an abstract syntax tree using Parser::tokens. This is used not only as the entry function to the parser, but whenever an AST is needed as part of a statement. For example, a "Definition" statement requires an AST as one of its members; parse_top() is used to genereate the function's procedure's AST.
+
+*/
+
+StatementBlock Parser::createAST() {
+	// allocate a StatementBlock, which will be used to store our AST
 	StatementBlock prog;
-	int index = 0;
+
+	// creating an empty lexeme will allow us to test if the current token has nothing in it
+	// sometimes, the lexer will produce a null lexeme, so we want to skip over it if we find one
+	std::tuple<std::string, std::string> null_lexeme = std::make_tuple("", "");
 
 	// Parse a token file
+	// While we are within the program and we have not reached the end of a procedure block, keep parsing
 	while (!this->is_at_end() && !this->quit && !(std::get<1>(this->peek()) == "}")) {
-		this->skip_punc(';');
-		this->skip_punc('\n');
+		// skip any semicolons and newline characters, if there are any in the tokens list
+		this->skipPunc(';');
+		this->skipPunc('\n');
+		
+		// if we encounter a null lexeme, skip it
+		while (this->current_token() == null_lexeme) {
+			this->next();
+		}
 
-		prog.StatementsList.push_back(this->parse_atomic());
+		// Parse a statement and add it to our AST
+		prog.StatementsList.push_back(this->parseStatement());
 
-		index += 1;
+		// check to see if we are at the end now that we have advanced through the tokens list; if not, continue; if so, do nothing and the while loop will abort and return the AST we have produced
 		if (!this->is_at_end() && !(std::get<1>(this->peek()) == "}")) {
 			this->next();
 		}
 	}
 
+	// return the AST
 	return prog;
 }
 
 
 
-std::shared_ptr<Statement> Parser::parse_atomic() {
+/*
+
+Parse a statement. This function looks at the next token to determine what it needs to do, calling the appropriate functions if necessary.
+
+*/
+
+std::shared_ptr<Statement> Parser::parseStatement() {
+	// get our current lexeme and its information so we don't need to call these functions every time we need to reference it
 	lexeme current_lex = this->current_token();
 	std::string lex_type = std::get<0>(current_lex);
 	std::string lex_val = std::get<1>(current_lex);
 
+	// create a shared_ptr to the statement we are going to parse so that we can return it when we are done
 	std::shared_ptr<Statement> stmt;
 
 	// first, we will check to see if we need any keyword parsing
@@ -144,7 +172,7 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 			// Check to see if condition is enclosed in parens
 			if (std::get<1>(next) == "(") {
 				// get the condition
-				std::shared_ptr<Expression> condition = this->parse_expression();
+				std::shared_ptr<Expression> condition = this->parseExpression();
 				// Initialize the if_block
 				StatementBlock if_branch;
 				StatementBlock else_branch;
@@ -153,7 +181,7 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 				if (std::get<1>(next) == "{") {
 					this->next();
 					this->next();	// skip ahead to the first character of the statementblock
-					if_branch = this->parse_top();
+					if_branch = this->createAST();
 					this->next();	// skip the closing curly brace
 
 					// First, check for an else clause
@@ -169,7 +197,7 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 							if (std::get<1>(next) == "{") {
 								this->next();
 								this->next();	// skip ahead to the first character of the statementblock
-								else_branch = this->parse_top();
+								else_branch = this->createAST();
 								this->next();	// skip the closing curly brace
 
 								return std::make_shared<IfThenElse>(condition, std::make_shared<StatementBlock>(if_branch), std::make_shared<StatementBlock>(else_branch));
@@ -201,10 +229,43 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 			// check our next token; it must be a keyword
 			lexeme var_type = this->next();
 			if (std::get<0>(var_type) == "kwd") {
-				if (std::get<1>(var_type) == "int" || std::get<1>(var_type) == "float" || std::get<1>(var_type) == "bool" || std::get<1>(var_type) == "string") {
-					// store the type name in our Type object
-					new_var_type = get_type_from_string(std::get<1>(var_type));
+				if (std::get<1>(var_type) == "int" || std::get<1>(var_type) == "float" || std::get<1>(var_type) == "bool" || std::get<1>(var_type) == "string" || std::get<1>(var_type) == "ptr") {
+					// Note: pointers must be treated a little bit differently than other fundamental types
+					// if we have a pointer,
+					if (std::get<1>(var_type) == "ptr") {
+						// 'ptr' must be followed by '['
+						if (std::get<1>(this->peek()) == "[") {
+							this->next();
+							// a keyword must be in the square brackets following 'ptr'
+							if (std::get<0>(this->peek()) == "kwd") {
+								var_type = this->next();
+								// append "ptr" to the type, so we have, for example, "intptr" or "stringptr"
+								std::get<1>(var_type) += "ptr";
+								new_var_type = get_type_from_string(std::get<1>(var_type));	// note: Type get_type_from_string() is found in "Expression" (.h and .cpp)
 
+								// the next character must be "]"
+								if (std::get<1>(this->peek()) == "]") {
+									// skip the square bracket
+									this->next();
+								}
+								// if it isn't, throw an exception
+								else if (std::get<1>(this->peek()) != "]") {
+									throw ParserException("Pointer type must be enclosed in square brackets", 212);
+								}
+							}
+						}
+						// if it's not, we have a syntax error
+						else {
+							throw ParserException("Proper syntax is 'alloc ptr[type]'", 212);
+						}
+					}
+					// otherwise, if it is not a pointer,
+					else {
+						// store the type name in our Type object
+						new_var_type = get_type_from_string(std::get<1>(var_type)); // note: Type get_type_from_string() is found in "Expression" (.h and .cpp)
+					}
+
+					// next, get the variable's name
 					// the following token must be an identifier
 					lexeme var_name = this->next();
 					if (std::get<0>(var_name) == "ident") {
@@ -214,7 +275,8 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 						return std::make_shared<Allocation>(new_var_type, new_var_name);
 					}
 					else {
-						this->error("Expected an identifier", 111);
+						//this->error("Expected an identifier", 111);
+						throw ParserException("Expected an identifier", 111);
 					}
 				}
 				else {
@@ -231,7 +293,27 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 			std::shared_ptr<Assignment> assign;
 			// Create an LValue object for our left expression
 			LValue lvalue;
-			// get the next token
+
+			// if the next lexeme is an op_char, we have a pointer
+			if (std::get<0>(this->peek()) == "op_char") {
+				// get the pointer operator
+				lexeme ptr_op = this->next();
+				// check to see if it is an address-of or dereference operator
+				if (std::get<1>(ptr_op) == "$") {
+					// set the LValue_Type to "var_address"
+					// might not need to do this -- as it will be dealing with the pointer data itself, not the variable to which it points
+				}
+				else if (std::get<1>(ptr_op) == "*") {
+					// set the LValue_Type to "var_dereferenced"
+					lvalue.setLValueType("var_dereferenced");
+				}
+				// if it isn't $ or *, it's an invalid op_char before an LValue
+				else {
+					throw ParserException("Operator character not allowed in an LValue", 211);
+				}
+			}
+
+			// get the next token, which should be the variable name
 			lexeme _lvalue_lex = this->next();
 
 			// ensure it's an identifier
@@ -249,7 +331,7 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 				// create a shared_ptr for our rvalue expression
 				std::shared_ptr<Expression> rvalue;
 				this->next();
-				rvalue = this->parse_expression();
+				rvalue = this->parseExpression();
 
 				assign = std::make_shared<Assignment>(lvalue, rvalue);
 				return assign;
@@ -258,7 +340,7 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 		// Parse a return statement
 		else if (lex_val == "return") {
 			this->next();	// go to the expression
-			std::shared_ptr<Expression> return_exp = this->parse_expression();
+			std::shared_ptr<Expression> return_exp = this->parseExpression();
 			return std::make_shared<ReturnStatement>(return_exp);
 		}
 		// Parse a 'while' loop
@@ -269,11 +351,11 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 
 			if (std::get<1>(this->peek()) == "(") {
 				this->next();
-				condition = this->parse_expression();
+				condition = this->parseExpression();
 				if (std::get<1>(this->peek()) == "{") {
 					this->next();
 					this->next();	// skip opening curly
-					branch = this->parse_top();
+					branch = this->createAST();
 
 					// If we are not at the end, go to the next token
 					if (!(this->is_at_end())) {
@@ -315,7 +397,7 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 						if (std::get<1>(this->peek()) != ")") {
 							this->next();
 							while (std::get<1>(this->current_token()) != ")") {
-								args.push_back(this->parse_atomic());
+								args.push_back(this->parseStatement());
 								this->next();
 							}
 						}
@@ -327,7 +409,7 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 						if (std::get<1>(this->peek()) == "{") {
 							this->next();
 							this->next();
-							procedure = this->parse_top();
+							procedure = this->createAST();
 							this->next();	// skip closing curly brace
 
 							// Return the pointer to our function
@@ -365,7 +447,7 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 				this->next();
 				this->next();
 				while (std::get<1>(this->current_token()) != ")") {
-					args.push_back(this->parse_expression());
+					args.push_back(this->parseExpression());
 					this->next();
 				}
 				while (std::get<1>(this->peek()) != ";") {
@@ -380,14 +462,23 @@ std::shared_ptr<Statement> Parser::parse_atomic() {
 
 		}
 	}
+
+	// if it is a punctuation character, specifically a curly brace, advance the character
 	else if (lex_type == "punc" && lex_val == "}") {
 		this->next();
 	}
 
+	// otherwise, if the lexeme is not a valid beginning to a statement, abort
+	else {
+		this->error("Lexeme '" + lex_val + "' is not a valid beginning to a statement", 000);
+		std::exception my_ex;
+	}
+
+	// return the statement
 	return stmt;
 }
 
-std::shared_ptr<Expression> Parser::parse_expression(int prec) {
+std::shared_ptr<Expression> Parser::parseExpression(int prec) {
 	lexeme current_lex = this->current_token();
 	std::string lex_type = std::get<0>(current_lex);
 	std::string lex_val = std::get<1>(current_lex);
@@ -398,7 +489,7 @@ std::shared_ptr<Expression> Parser::parse_expression(int prec) {
 	// Check if our expression begins with parens; if so, only return what is inside them
 	if (lex_val == "(") {
 		this->next();
-		left = this->parse_expression();
+		left = this->parseExpression();
 		this->next();
 		// if our next character is a semicolon or closing paren, then we should just return the expression we just parsed
 		if (std::get<1>(this->peek()) == ";" || std::get<1>(this->peek()) == ")" || std::get<1>(this->peek()) == "{") {
@@ -406,48 +497,124 @@ std::shared_ptr<Expression> Parser::parse_expression(int prec) {
 		}
 		// if our next character is an op_char, returning the expression would skip it, so we need to parse a binary using the expression in parens as our left expression
 		else if (std::get<1>(this->peek()) == "op_char") {
-			return this->maybe_binary(left, prec);
+			return this->maybeBinary(left, prec);
 		}
 	}
 	else if (lex_val == ",") {
 		this->next();
-		return this->parse_expression();
+		return this->parseExpression();
 	}
 	// if it is not an expression within parens
 	else if (is_literal(lex_type)) {
-			left = std::make_shared<Literal>(get_type_from_string(lex_type), lex_val);
+		left = std::make_shared<Literal>(get_type_from_string(lex_type), lex_val);
 	}
 	else if (lex_type == "ident") {
 		left = std::make_shared<LValue>(lex_val);
 	}
-	// if we have a function call as an expression, parse it here
-	else if (lex_type == "op_char" && lex_val == "@") {
-		current_lex = this->next();
-		lex_type = std::get<0>(current_lex);
-		lex_val = std::get<1>(current_lex);
+	// if we have an op_char to begin an expression, parse it (could be a pointer or a function call)
+	else if (lex_type == "op_char") {
 
-		if (lex_type == "ident") {
-			// Same code as is in statement
-			std::vector<std::shared_ptr<Expression>> args;
-			this->next();
-			this->next();
-			while (std::get<1>(this->current_token()) != ")") {
-				args.push_back(this->parse_expression());
+		// TODO: Fix double ref pointer -- Lexer currently sees "**" as one lexeme, when it should be 2
+
+		// if we have a function call
+		if (lex_val == "@") {
+			current_lex = this->next();
+			lex_type = std::get<0>(current_lex);
+			lex_val = std::get<1>(current_lex);
+
+			if (lex_type == "ident") {
+				// Same code as is in statement
+				std::vector<std::shared_ptr<Expression>> args;
 				this->next();
+				this->next();
+				while (std::get<1>(this->current_token()) != ")") {
+					args.push_back(this->parseExpression());
+					this->next();
+				}
+				return std::make_shared<ValueReturningFunctionCall>(std::make_shared<LValue>(lex_val, "func"), args);
 			}
-			return std::make_shared<ValueReturningFunctionCall>(std::make_shared<LValue>(lex_val, "func"), args);
+			// the "@" character must be followed by an identifier
+			else {
+				this->error("Expected identifier in function call", 330);
+			}
 		}
-		else {
-			this->error("Expected identifier in function call", 330);
+		// check to see if we have the address-of operator
+		else if (lex_val == "$") {
+
+			// TODO: parse address-of operator
+
+			// if we have a $ character, it HAS TO be the address-of operator
+			// current lexeme is the $, so get the variable for which we need the address
+			lexeme next_lexeme = this->next();
+			// the next lexeme MUST be an identifier
+			if (std::get<0>(next_lexeme) == "ident") {
+
+				// turn the identifier into an LValue
+				LValue target_var(std::get<1>(next_lexeme), "var_address");
+				
+				// get the address of the vector position of the variable
+				return std::make_shared<AddressOf>(target_var);
+			}
+			// if it's not, throw an exception
+			else {
+				throw ParserException("An address-of operator must be followed by an identifier; illegal to follow with '" + std::get<1>(next_lexeme) + "' (not an identifier)", 111);
+			}
+
+		}
+		// check to see if we have a pointer dereference operator
+		else if (lex_val == "*") {
+			// if we have an asterisk, it could be a pointer dereference OR a part of a binary expression
+			// in order to check, we have to make sure that the previous character is neither a literal nor an identifier
+			// the current lexeme is the asterisk, so get the previous lexeme
+			lexeme previous_lex = this->previous();
+			// note that previous() does not update the current position
+
+			// get the previous lexeme's type
+			std::string previous_type = std::get<0>(previous_lex);
+			// if it is an int, float, string, or bool literal; or an identifier, then continue
+			if (previous_type == "int" || previous_type == "float" || previous_type == "string" || previous_type == "bool" || previous_type == "ident") {
+				// do nothing
+			}
+			// otherwise, check to make see if the next character is an identifier
+			else if (std::get<0>(this->peek()) == "ident") {
+				// get the identifier and advance the position counter
+				lexeme next_lexeme = this->next();
+
+				// turn the pointer into an LValue
+				LValue _ptr(std::get<1>(next_lexeme), "var_dereferenced");
+
+				// return a shared_ptr to the Dereferenced object containing _ptr
+				return std::make_shared<Dereferenced>(std::make_shared<LValue>(_ptr));
+			}
+			// the next character CAN be an asterisk; in that case, we have a double or triple ref pointer that we need to parse
+			else if (std::get<1>(this->peek()) == "*") {
+				// advance the position pointer
+				this->next();
+				// dereference the pointer to get the address so we can dereference the other pointer
+				std::shared_ptr<Expression> deref = this->parseExpression();
+				if (deref->getExpType() == "dereferenced") {
+					//// get the Dereferenced obj
+					//Dereferenced* _deref = dynamic_cast<Dereferenced*>(deref.get());
+					//// next, get the name of that variable
+					//LValue _ptr(_deref->get_ptr().getValue(), "var_dereferenced");
+					//return std::make_shared<Dereferenced>(_ptr);
+					return std::make_shared<Dereferenced>(deref);
+				}
+			}
+			// if it is not a literal or an ident and the next character is also not an ident or asterisk, we have an error
+			else {
+				throw ParserException("Expected an identifier in pointer dereference operation", 332);
+			}
 		}
 	}
 
-	//this->next();
 	// Use the maybe_binary function to determine whether we need to return a binary expression or a simple expression
-	return this->maybe_binary(left, prec);	// always start it at 0; the first time it is called, it will be 0, as nothing will have been passed to parse_expression, but will be updated to the appropriate precedence level each time after. This results in a binary tree that shows the proper order of operations
+
+	// always start it at 0; the first time it is called, it will be 0, as nothing will have been passed to parse_expression, but will be updated to the appropriate precedence level each time after. This results in a binary tree that shows the proper order of operations
+	return this->maybeBinary(left, prec);
 }
 
-std::shared_ptr<Expression> Parser::maybe_binary(std::shared_ptr<Expression> left, int my_prec) {
+std::shared_ptr<Expression> Parser::maybeBinary(std::shared_ptr<Expression> left, int my_prec) {
 
 	// Determines whether to wrap the expression in a binary or return as is
 
@@ -461,20 +628,20 @@ std::shared_ptr<Expression> Parser::maybe_binary(std::shared_ptr<Expression> lef
 	else if (std::get<0>(next) == "op_char") {
 
 		// get the next op_char's data
-		int his_prec = get_precedence(std::get<1>(next));
+		int his_prec = getPrecedence(std::get<1>(next));
 
 		// If the next operator is of a higher precedence than ours, we may need to parse a second binary expression first
 		if (his_prec > my_prec) {
 			this->next();	// go to the next character in our stream (the op_char)
 			this->next();
 			// Parse out the next expression
-			std::shared_ptr<Expression> right = this->maybe_binary(this->parse_expression(his_prec), his_prec);	// make sure his_prec gets passed into parse_expression so that it is actually passed into maybe_binary
+			std::shared_ptr<Expression> right = this->maybeBinary(this->parseExpression(his_prec), his_prec);	// make sure his_prec gets passed into parse_expression so that it is actually passed into maybe_binary
 
 			// Create the binary expression
 			std::shared_ptr<Binary> binary = std::make_shared<Binary>(left, right, translate_operator(std::get<1>(next)));
 
 			// call maybe_binary again at the old prec level in case this expression is followed by one of a higher precedence
-			return this->maybe_binary(binary, my_prec);
+			return this->maybeBinary(binary, my_prec);
 		}
 		else {
 			return left;
@@ -483,17 +650,15 @@ std::shared_ptr<Expression> Parser::maybe_binary(std::shared_ptr<Expression> lef
 	}
 	// There shouldn't be anything besides a semicolon, closing paren, or an op_char immediately following "left"
 	else {
-		this->error("Invalid character in expression", 312);
+		//this->error("Invalid character in expression", 312);
+		throw ParserException("Invalid character in expression", 312);
 	}
-
-	// TODO: write the thing
-
 }
 
 
 
 // Populate our tokens list
-void Parser::populate_tokens_list(std::ifstream* token_stream) {
+void Parser::populateTokenList(std::ifstream* token_stream) {
 	token_stream->peek();	// to make sure we haven't gone beyond the end of the file
 
 	while (!token_stream->eof()) {
@@ -537,7 +702,7 @@ Parser::Parser(Lexer& lexer) {
 Parser::Parser(std::ifstream* token_stream) {
 	Parser::quit = false;
 	Parser::position = 0;
-	Parser::populate_tokens_list(token_stream);
+	Parser::populateTokenList(token_stream);
 	Parser::num_tokens = Parser::tokens.size();
 }
 
@@ -548,4 +713,20 @@ Parser::Parser()
 
 Parser::~Parser()
 {
+}
+
+
+
+// Define our exceptions
+
+const char* ParserException::what() const {
+	return ParserException::message_.c_str();
+}
+
+int ParserException::get_code() {
+	return ParserException::code_;
+}
+
+ParserException::ParserException(const std::string& err_message, const int& err_code) : message_(err_message), code_(err_code) {
+
 }

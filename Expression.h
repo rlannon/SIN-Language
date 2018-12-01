@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <tuple>
+#include <exception>
 
 
 // Define our custom types for expressions and statements
@@ -32,14 +33,24 @@ enum Type {
 	STRING,
 	BOOL,
 	VOID,
+	INTPTR,
+	FLOATPTR,
+	STRINGPTR,
+	BOOLPTR,
+	VOIDPTR,
+	PTRPTR,
 	NONE
 };
+
+const int num_types = 11;
 
 const bool is_literal(std::string candidate_type);
 
 const Type get_type_from_string(std::string candidate);
 
 const std::string get_string_from_type(Type candidate);
+
+const Type get_ptr_type(Type candidate);	// returns the appropriate pointer type for a given type (e.g., INT returns INTPTR, FLOAT -> FLOATPTR)
 
 // Base class for all expressions
 class Expression
@@ -74,11 +85,41 @@ class LValue : public Expression
 	std::string LValue_Type;
 public:
 	std::string getValue();
+	std::string getLValueType();
+
 	void setValue(std::string new_value);
+	void setLValueType(std::string new_lvalue_type);
 
 	LValue(std::string value, std::string LValue_Type);
 	LValue(std::string value);
 	LValue();
+};
+
+// Address Of -- the address of a variable
+class AddressOf : public Expression
+{
+	//LValue target;	// the variable whose information we want
+	LValue target;
+public:
+	LValue get_target();	// return the target variable
+
+	AddressOf(LValue target);
+	AddressOf();
+};
+
+// Dereferenced -- the value of a dereferenced ptr
+class Dereferenced : public Expression
+{
+	//LValue ptr;	// the pointer being dereferenced
+	std::shared_ptr<Expression> ptr;
+public:
+	LValue get_ptr();
+
+	std::shared_ptr<Expression> get_ptr_shared();
+
+	//Dereferenced(LValue ptr);
+	Dereferenced(std::shared_ptr<Expression> ptr);
+	Dereferenced();
 };
 
 class Binary : public Expression
