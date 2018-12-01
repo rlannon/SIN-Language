@@ -54,6 +54,8 @@ const Type get_ptr_type(Type candidate);	// returns the appropriate pointer type
 
 const bool is_ptr_type(Type candidate);	// returns true if the type is a pointer type
 
+const bool match_ptr_types(Type ptr_type, Type pointed_type);
+
 // Base class for all expressions
 class Expression
 {

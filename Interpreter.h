@@ -25,11 +25,12 @@ class Interpreter
 	// convert to and from boolean type
 	static const bool toBool(std::string val);
 	static const std::string boolString(bool val);
+	static const bool areCompatibleTypes(Type a, Type b);	// tells us if the types are compatible with one another
 
 	// get a variable value as a string
 	std::string getVarValue(LValue variable, std::list<std::tuple<Type, std::string, std::string>>* vars_table);
 	// set a variable's value
-	void setVarValue(LValue variable, std::string new_value, std::list<std::tuple<Type, std::string, std::string>>* vars_table);
+	void setVarValue(LValue variable, std::tuple<Type, std::string> new_value, std::list<std::tuple<Type, std::string, std::string>>* vars_table);
 
 	// allocate a variable
 	void allocateVar(Allocation allocation, std::list<std::tuple<Type, std::string, std::string>>* vars_table);
@@ -54,6 +55,8 @@ class Interpreter
 
 	// return a definition object for a function of a given name
 	Definition getDefinition(std::string func_to_find);
+	// return all information for a variable of a given name
+	std::tuple<Type, std::string, std::string> getVar(std::string var_to_find, std::list<std::tuple<Type, std::string, std::string>>* vars_table);
 public:
 	// entry point to the interpreter; runs a branch of statements passed into it, starting at the global scope
 	void interpretAST(StatementBlock AST);

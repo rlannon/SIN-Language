@@ -1,0 +1,24 @@
+# demonstrate that ptr[ptr] can act as a generic type in SIN
+
+alloc int myInt;
+alloc ptr[int] myIntPtr;
+
+alloc float myFloat;
+alloc ptr[float] myFloatPtr;
+
+let myInt = 0;
+let myFloat = 10.5;
+
+let myIntPtr = $myInt;
+let myFloatPtr = $myFloat;
+
+@print(*myIntPtr);
+@print(*myFloatPtr);
+
+alloc ptr[ptr] myPtrPtr;
+
+let myPtrPtr = $myIntPtr;
+@print(**myPtrPtr);
+
+let myPtrPtr = $myFloatPtr;
+@print(**myPtrPtr);
