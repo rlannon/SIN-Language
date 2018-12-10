@@ -32,8 +32,8 @@ const bool is_literal(std::string candidate_type) {
 const Type get_type_from_string(std::string candidate) {
 	// if it can, this function gets the proper type of an input string
 	// an array of the valid types as strings
-	std::string string_types[] = { "int", "float", "string", "bool", "void", "intptr", "floatptr", "stringptr", "boolptr", "voidptr", "ptrptr" };
-	Type _types[] = { INT, FLOAT, STRING, BOOL, VOID, INTPTR, FLOATPTR, STRINGPTR, BOOLPTR, VOIDPTR, PTRPTR };
+	std::string string_types[] = { "int", "float", "string", "bool", "void", "intptr", "floatptr", "stringptr", "boolptr", "voidptr", "ptrptr", "raw8", "raw16", "raw32" };
+	Type _types[] = { INT, FLOAT, STRING, BOOL, VOID, INTPTR, FLOATPTR, STRINGPTR, BOOLPTR, VOIDPTR, PTRPTR, RAW8, RAW16, RAW32 };
 
 	// for test our candidate against each item in the array of string_types; if we have a match, return the Type at the same position
 	for (int i = 0; i < num_types; i++) {
@@ -52,8 +52,8 @@ const Type get_type_from_string(std::string candidate) {
 
 const std::string get_string_from_type(Type candidate) {
 	// reverse of the above function
-	std::string string_types[] = { "int", "float", "string", "bool", "void", "intptr", "floatptr", "stringptr", "boolptr", "voidptr", "ptrptr" };
-	Type _types[] = { INT, FLOAT, STRING, BOOL, VOID, INTPTR, FLOATPTR, STRINGPTR, BOOLPTR, VOIDPTR, PTRPTR };
+	std::string string_types[] = { "int", "float", "string", "bool", "void", "intptr", "floatptr", "stringptr", "boolptr", "voidptr", "ptrptr", "raw8", "raw16", "raw32" };
+	Type _types[] = { INT, FLOAT, STRING, BOOL, VOID, INTPTR, FLOATPTR, STRINGPTR, BOOLPTR, VOIDPTR, PTRPTR, RAW8, RAW16, RAW32 };
 
 	// for test our candidate against each item in the array of string_types; if we have a match, return the string at the same position
 	for (int i = 0; i < num_types; i++) {
@@ -108,6 +108,25 @@ const bool match_ptr_types(Type ptr_type, Type pointed_type) {
 			return false;
 		}
 	}
+}
+
+const Type get_raw_type(int _size) {
+	if (_size == 8) {
+		return RAW8;
+	}
+	else if (_size == 16) {
+		return RAW16;
+	}
+	else if (_size == 32) {
+		return RAW32;
+	}
+	else {
+		return NONE;
+	}
+}
+
+const bool is_raw(Type _t) {
+	return (_t == RAW8 || _t == RAW16 || _t == RAW32);
 }
 
 std::string Expression::getExpType() {

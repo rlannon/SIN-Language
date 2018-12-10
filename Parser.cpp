@@ -4,7 +4,6 @@
 // define "lexeme" data type
 typedef std::tuple<std::string, std::string> lexeme;
 
-
 // Define our symbols and their precedences as a vector of tuples
 const std::vector<std::tuple<std::string, int>> Parser::precedence{ std::make_tuple("&", 2), std::make_tuple("|", 3), \
 	std::make_tuple("<", 4), std::make_tuple(">", 7), std::make_tuple("<", 7), std::make_tuple(">=", 7), std::make_tuple("<=", 7), std::make_tuple("=", 7),\
@@ -59,11 +58,13 @@ lexeme Parser::peek() {
 }
 
 lexeme Parser::next() {
-	//	std::cout << std::endl << this->current_token << std::endl << std::get<0>(this->tokens[this->current_token]) << std::endl;
+	//	increment the position
 	this->position += 1;
+	// return the next token
 	if (position <= this->tokens.size()) {
 		return this->tokens[this->position];
 	}
+	// if we have hit the end
 	else {
 		this->error("No more lexemes to parse!", 1);
 	}
@@ -229,34 +230,86 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 			// check our next token; it must be a keyword
 			lexeme var_type = this->next();
 			if (std::get<0>(var_type) == "kwd") {
-				if (std::get<1>(var_type) == "int" || std::get<1>(var_type) == "float" || std::get<1>(var_type) == "bool" || std::get<1>(var_type) == "string" || std::get<1>(var_type) == "ptr") {
-					// Note: pointers must be treated a little bit differently than other fundamental types
-					// if we have a pointer,
-					if (std::get<1>(var_type) == "ptr") {
-						// 'ptr' must be followed by '['
-						if (std::get<1>(this->peek()) == "[") {
+				if (std::get<1>(var_type) == "int" || std::get<1>(var_type) == "float" || std::get<1>(var_type) == "bool" || std::get<1>(var_type) == "string" || std::get<1>(var_type) == "raw" || std::get<1>(var_type) == "ptr") {
+					// Note: pointers and RAWs must be treated a little bit differently than other fundamental types
+					// if we have a RAW,
+					if (std::get<1>(var_type) == "raw") {
+						// 'raw' must be followed by '<'
+						if (std::get<1>(this->peek()) == "<") {
+							// skip the angle bracket
 							this->next();
-							// a keyword must be in the square brackets following 'ptr'
+
+							// angle bracketsmust be followed by an integer
+							if (std::get<0>(this->peek()) == "int") {
+								// get the next token
+								int _size = std::stoi(std::get<1>(this->next()));
+
+								Type _raw_t = get_raw_type(_size);
+
+								if (_raw_t == NONE) {
+									throw ParserException("RAW size was invalid", 240);
+								}
+								
+								// TODO: finishing parsing RAW statement
+
+								// next character must be a closing angle bracket
+								if (std::get<1>(this->peek()) == ">") {
+									// skip closing angle bracket
+									this->next();
+
+									//// get the identifier
+									//lexeme var_name = this->next();
+									//if (std::get<0>(var_name) == "ident") {
+
+									//	// get the identifier
+									//	new_var_type = _raw_t;
+									//	new_var_name = std::get<1>(var_name);
+
+									//}
+									//else {
+									//	throw ParserException("Expected an idenfifier", 111);
+									//}
+									new_var_type = _raw_t;
+								}
+								else {
+									throw ParserException("'raw' size must be enclosed in angle brackets", 212);
+								}
+
+							}
+							else {
+								throw ParserException("'raw' must be followed by an integer size expression", 111);
+							}
+						}
+						else {
+							throw ParserException("'raw' size must be enclosed in angle brackets", 212);
+						}
+					}
+					// if we have a pointer,
+					else if (std::get<1>(var_type) == "ptr") {
+						// 'ptr' must be followed by '<'
+						if (std::get<1>(this->peek()) == "<") {
+							this->next();
+							// a keyword must be in the angle brackets following 'ptr'
 							if (std::get<0>(this->peek()) == "kwd") {
 								var_type = this->next();
 								// append "ptr" to the type, so we have, for example, "intptr" or "stringptr"
 								std::get<1>(var_type) += "ptr";
 								new_var_type = get_type_from_string(std::get<1>(var_type));	// note: Type get_type_from_string() is found in "Expression" (.h and .cpp)
 
-								// the next character must be "]"
-								if (std::get<1>(this->peek()) == "]") {
-									// skip the square bracket
+								// the next character must be ">"
+								if (std::get<1>(this->peek()) == ">") {
+									// skip the angle bracket
 									this->next();
 								}
 								// if it isn't, throw an exception
-								else if (std::get<1>(this->peek()) != "]") {
-									throw ParserException("Pointer type must be enclosed in square brackets", 212);
+								else if (std::get<1>(this->peek()) != ">") {
+									throw ParserException("Pointer type must be enclosed in angle brackets", 212);
 								}
 							}
 						}
 						// if it's not, we have a syntax error
 						else {
-							throw ParserException("Proper syntax is 'alloc ptr[type]'", 212);
+							throw ParserException("Proper syntax is 'alloc ptr<type>'", 212);
 						}
 					}
 					// otherwise, if it is not a pointer,
@@ -275,7 +328,6 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 						return std::make_shared<Allocation>(new_var_type, new_var_name);
 					}
 					else {
-						//this->error("Expected an identifier", 111);
 						throw ParserException("Expected an identifier", 111);
 					}
 				}
@@ -308,23 +360,22 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 					std::shared_ptr<Expression> deref_shared_p = this->createDereferenceObject();
 					LValue dereferenced_value;
 
-					if (deref_shared_p->getExpType() == "LValue") {
-						dereferenced_value = *dynamic_cast<LValue*>(deref_shared_p.get());
-					}
-					else if (deref_shared_p->getExpType() == "dereferenced") {
-						Dereferenced* deref_obj = dynamic_cast<Dereferenced*>(deref_shared_p.get());
-						dereferenced_value = this->getDereferencedLValue(*deref_obj);
-					}
+					// the expression "deref_shared_p" will contain a "Dereferenced" object, but createDereferenceObject returns a shared_ptr<Expression>
+					Dereferenced* deref_obj = dynamic_cast<Dereferenced*>(deref_shared_p.get());
+					// Use getDereferencedLValue to get the end variable being referenced
+					dereferenced_value = this->getDereferencedLValue(*deref_obj);
 
+					// set LValue to the dereferenced value
 					lvalue = dereferenced_value;
+					// set its type to "var_dereferenced"
 					lvalue.setLValueType("var_dereferenced");
-					std::cout << std::endl;	// for debug / breakpoints
 				}
 				// if it isn't $ or *, it's an invalid op_char before an LValue
 				else {
 					throw ParserException("Operator character not allowed in an LValue", 211);
 				}
 			}
+
 			// if it is a literal
 			else {
 				// get the next token, which should be the variable name
@@ -340,6 +391,7 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 				}
 			}
 
+			// now, "lvalue" should hold the proper variable reference for the assignment
 			// get the operator character, make sure it's an equals sign
 			lexeme _operator = this->next();
 			if (std::get<1>(_operator) == "=") {
@@ -632,10 +684,14 @@ std::shared_ptr<Expression> Parser::createDereferenceObject() {
 }
 
 
+// get the end LValue pointed to by a pointer recursively
 LValue Parser::getDereferencedLValue(Dereferenced to_eval) {
+	// if the type of the Expression within "to_eval" is an LValue, we are done
 	if (to_eval.get_ptr_shared()->getExpType() == "LValue") {
 		return to_eval.get_ptr();
 	}
+	// otherwise, if it is another Dereferenced object, get the object stored within that
+	// the recutsion here will return the LValue pointed to by the last pointer
 	else if (to_eval.get_ptr_shared()->getExpType() == "dereferenced") {
 		Dereferenced* _deref = dynamic_cast<Dereferenced*>(to_eval.get_ptr_shared().get());
 		return this->getDereferencedLValue(*_deref);

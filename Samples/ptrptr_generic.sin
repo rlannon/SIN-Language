@@ -1,11 +1,11 @@
-# demonstrate that ptr[ptr] can act as a generic type in SIN
+# demonstrate that ptr<ptr> can act as a generic type in SIN
 
 # declare our variables / pointers
 alloc int myInt;
-alloc ptr[int] myIntPtr;
+alloc ptr<int> myIntPtr;
 
 alloc float myFloat;
-alloc ptr[float] myFloatPtr;
+alloc ptr<float> myFloatPtr;
 
 let myInt = 0;
 let myFloat = 10.5; # initialize some variables
@@ -16,7 +16,7 @@ let myFloatPtr = $myFloat;  # initialize our ptrs
 @print(*myIntPtr);
 @print(*myFloatPtr);  # print the values referenced by our pointers
 
-alloc ptr[ptr] myPtrPtr;  # a pointer to a pointer; this can be used as a "generic" type
+alloc ptr<ptr> myPtrPtr;  # a pointer to a pointer; this can be used as a "generic" type
 
 let myPtrPtr = $myIntPtr;
 @print(**myPtrPtr);   # this will give an int value, as it ultimately points to an int

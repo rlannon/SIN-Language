@@ -36,6 +36,9 @@ const bool Interpreter::areCompatibleTypes(Type a, Type b) {
 	else if (match_ptr_types(a, b)) {
 		return true;
 	}
+	else if (is_raw(a) || is_raw(b)) {
+		return true;
+	}
 	else {
 		return false;
 	}
@@ -105,12 +108,16 @@ void Interpreter::setVarValue(LValue variable, std::tuple<Type, std::string> new
 				// check for compatible types
 				if (this->areCompatibleTypes(std::get<0>(*var_iter), std::get<0>(new_value))) {
 					// update the value
+					
+					// currently, RAW is not supported in Interpreted SIN
+					if (is_raw(std::get<0>(*var_iter)) || is_raw(std::get<0>(new_value))) {
+						throw InterpreterException("Interpreted SIN does not support the use of the RAW type", 1234);
+					}
 					std::get<2>(*var_iter) = std::get<1>(new_value);
 					return;
 				}
 				else {
-					std::string err_msg = "Types not compatible in assignment! (cannot match '" + get_string_from_type(std::get<0>(*var_iter)) + "' with '" + get_string_from_type(std::get<0>(new_value)) + "')";
-					throw InterpreterException(err_msg.c_str(), 000);
+					throw TypeMatchError(std::get<0>(*var_iter), std::get<0>(new_value));
 				}
 			}
 			else if (variable.getLValueType() == "var_dereferenced") {
@@ -134,8 +141,9 @@ void Interpreter::setVarValue(LValue variable, std::tuple<Type, std::string> new
 					return;
 				}
 				else {
-					std::string err_msg = "Types not compatible in assignment! (cannot match '" + get_string_from_type(std::get<0>(new_value)) + "' with '" + get_string_from_type(std::get<0>(*dereferenced)) + "')";
-					throw InterpreterException(err_msg.c_str(), 000);
+					//std::string err_msg = "Types not compatible in assignment! (cannot match '" + get_string_from_type(std::get<0>(new_value)) + "' with '" + get_string_from_type(std::get<0>(*dereferenced)) + "')";
+					//throw InterpreterException(err_msg.c_str(), 000);
+					throw TypeMatchError(std::get<0>(new_value), std::get<0>(*dereferenced));
 				}
 			}
 			else {
@@ -241,8 +249,14 @@ void Interpreter::executeStatement(Statement* statement, std::list<std::tuple<Ty
 							return;
 						}
 						else if (arg_type == "address_of") {
+							// if we have an address_of object
 							AddressOf* addr_of = dynamic_cast<AddressOf*>(_arg.get());
 							arg = addr_of->get_target();
+							// get the variable at the address we want
+							std::tuple<Type, std::string, std::string> ptd_val = this->getVar(arg.getValue(), vars_table);
+							// print its address and return
+							std::cout << &ptd_val << std::endl;
+							return;
 						}
 						else if (arg_type == "LValue") {
 							arg = *dynamic_cast<LValue*>(_arg.get());
@@ -250,7 +264,8 @@ void Interpreter::executeStatement(Statement* statement, std::list<std::tuple<Ty
 
 						// create a string containing our value and print it
 						std::string val = this->getVarValue(arg, vars_table);
-						std::cout << val << std::endl;	// for debug purposes
+						std::cout << val << std::endl;
+						return;
 					}
 					else if (arg_type == "binary") {
 						Binary* arg = dynamic_cast<Binary*>(_arg.get());
@@ -837,4 +852,17 @@ int InterpreterException::get_code() {
 
 InterpreterException::InterpreterException(const std::string& err_message, const int& err_code) : message_(err_message), code_(err_code) {
 
+}
+
+InterpreterException::InterpreterException() {
+
+}
+
+const char* TypeMatchError::what() const {
+	return TypeMatchError::message_.c_str();
+}
+
+TypeMatchError::TypeMatchError(const Type& a, const Type& b) : a_(a), b_(b) {
+	TypeMatchError::message_ = "Cannot match '" + get_string_from_type(a_) + "' and '" + get_string_from_type(b_) + "'!";
+	TypeMatchError::code_ = 450;
 }

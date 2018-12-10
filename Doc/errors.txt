@@ -40,6 +40,7 @@ INTERPRETER ERRORS:
 1000s	-	Type errors:	These errors are thrown when types do not match what they are supposed to be; for example, errors involving assigning a variable of one type a value of another.
 	1123	-	An operation of this type cannot be done with an expression of the type specified.
 	1141	-	Argument type in function call does not match the type in its definition
+	1234	-	Variable type not supported in this context
 
 2000s	-	Value errors:	Thrown
 	2130	-	Error in bool expression; could not evaluate proper type.

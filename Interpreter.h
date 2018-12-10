@@ -69,10 +69,20 @@ public:
 
 // Specific exceptions for the interpreter, a child class of the standard exception class
 class InterpreterException : public std::exception {
+protected:
 	std::string message_;
 	int code_;
 public:
+	explicit InterpreterException();
 	explicit InterpreterException(const std::string& err_message, const int& err_code);
 	virtual const char* what() const;
 	int get_code();
+};
+
+class TypeMatchError : public InterpreterException {
+	Type a_;
+	Type b_;
+public:
+	virtual const char* what() const;
+	explicit TypeMatchError(const Type& a, const Type& b);
 };

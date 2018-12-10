@@ -21,6 +21,8 @@ For a documentation of the language, see either the doc folder in this project o
 #include "Lexer.h"
 #include "Parser.h"
 #include "Interpreter.h"
+#include "SINVM.h"
+#include "Assembler.h"
 
 
 int main(int argc, char** argv) {
@@ -73,8 +75,8 @@ int main(int argc, char** argv) {
 	}
 
 	// Check to make sure our file is a valid type; quit if it isn't
-	if (!std::regex_search(src_file_path, std::regex("(.txt)|(.sin)"))) {
-		std::cerr << std::endl << "File must be either a .txt or .sin file!" << std::endl << "Press enter to exit." << std::endl;
+	if (!std::regex_search(src_file_path, std::regex("(.sin)|(.sinc)|(.sinasm)"))) {
+		std::cerr << std::endl << "File must be either a .sin, .sina, or .snc file!" << std::endl << "Press enter to exit." << std::endl;
 		std::cin.get();
 		exit(1);
 	}
@@ -88,63 +90,108 @@ int main(int argc, char** argv) {
 	// Create an object for our abstract syntax tree
 	StatementBlock prog;
 
-	if (src_file.is_open()){
-		// Parse the token file to create the abstract syntax tree
-		try {
-			std::cout << "> Tokenizing..." << std::endl;
-			Lexer lex(&src_file);
-			Parser parser(lex);
-
-			src_file.close();
-
-			std::cout << "> Creating AST..." << std::endl;
-
-			prog = parser.createAST();
-		}
-		catch (ParserException& pe) {
-			std::cerr << std::endl << "Parser Error:" << std::endl;
-			std::cerr << "\t" << pe.what() << std::endl;
-			std::cerr << "\tCode: " << pe.get_code() << std::endl << std::endl;
-		}
-		catch (LexerException& le) {
-			std::cerr << std::endl << "Lexer Error:" << std::endl;
-			std::cerr << "\t" << le.what() << "\n\tViolating Character: " << le.get_char() << "\n\tPosition: " << le.get_pos() << std::endl << std::endl;
-		}
-		catch (std::exception& e) {
-			std::cerr << std::endl << e.what() << std::endl << std::endl;
-		}
-
-		// if we want to interpret
-		if (!compile) {
-			// Create the interpreter object
-			Interpreter interpreter;
-
-			std::cout << "> Executing program..." << std::endl << std::endl;
-			// Parse our abstract syntax tree
+	if (src_file.is_open()) {
+		// if it is precompiled
+		if (std::regex_search(src_file_path, std::regex(".sinc"))) {
 			try {
-				interpreter.interpretAST(prog);
+				//SINVM sinVM(src_file, true);	// we don't need to disassemble; is a .sinc file
+				//sinVM.run_program();
+
+				std::cout << std::endl;
 			}
-			catch (int e) {
-				std::cout << "Exception code: " << e << std::endl;
+			catch (std::exception& e) {
+				std::cerr << e.what() << std::endl;
+				std::cerr << "Press enter to exit" << std::endl;
+				std::cin.get();
+			}
+		}
+		else if (std::regex_search(src_file_path, std::regex(".sina"))) {
+			try {
+				//SINVM sinVM(src_file, false);	// we need to disassemble; is a .sina file
+				//sinVM.run_program();
+
+				//sinVM._debug_values();
+
+				try {
+					Assembler assemble(&src_file);
+					SINVM myVM(assemble);
+					myVM.run_program();
+					myVM._debug_values();
+				}
+				catch (std::exception& e) {
+					std::cerr << e.what() << std::endl;
+					std::cerr << "Press enter to exit." << std::endl;
+					std::cin.get();
+					exit(1);
+				}
+
+				std::cout << "Press enter to exit" << std::endl;
+				std::cin.get();
+			}
+			catch (std::exception& e) {
+				std::cerr << e.what() << std::endl;
+				std::cerr << "Press enter to exit" << std::endl;
+				std::cin.get();
+			}
+		}
+		// if it isn't precompiled
+		else {
+			// Parse the token file to create the abstract syntax tree
+			try {
+				std::cout << "> Tokenizing..." << std::endl;
+				Lexer lex(&src_file);
+				Parser parser(lex);
+
+				src_file.close();
+
+				std::cout << "> Creating AST..." << std::endl;
+
+				prog = parser.createAST();
+			}
+			catch (ParserException& pe) {
+				std::cerr << std::endl << "Parser Error:" << std::endl;
+				std::cerr << "\t" << pe.what() << std::endl;
+				std::cerr << "\tCode: " << pe.get_code() << std::endl << std::endl;
+			}
+			catch (LexerException& le) {
+				std::cerr << std::endl << "Lexer Error:" << std::endl;
+				std::cerr << "\t" << le.what() << "\n\tViolating Character: " << le.get_char() << "\n\tPosition: " << le.get_pos() << std::endl << std::endl;
+			}
+			catch (std::exception& e) {
+				std::cerr << std::endl << e.what() << std::endl << std::endl;
 			}
 
-			// print a "done" message and wait until user hits enter before closing the program
-			std::cout << std::endl << "> Done. Press enter to exit." << std::endl;
-			std::cin.get();
-		}
-		// if we want to compile
-		else if (compile) {
-			// currently, we don't support it, so abort
-			std::cout << "Program compilation currently not supported. Exiting..." << std::endl;
-			// wait for the user to hit enter
-			std::cin.get();
-		}
+			// if we want to interpret
+			if (!compile) {
+				// Create the interpreter object
+				Interpreter interpreter;
 
-		// exit the program
-		return 0;
+				std::cout << "> Executing program..." << std::endl << std::endl;
+				// Parse our abstract syntax tree
+				try {
+					interpreter.interpretAST(prog);
+				}
+				catch (int e) {
+					std::cout << "Exception code: " << e << std::endl;
+				}
+
+				// print a "done" message and wait until user hits enter before closing the program
+				std::cout << std::endl << "> Done. Press enter to exit." << std::endl;
+				std::cin.get();
+			}
+			// if we want to compile
+			else if (compile) {
+				// currently, we don't support it, so abort
+				std::cout << "Program compilation currently not supported. Exiting..." << std::endl;
+				// wait for the user to hit enter
+				std::cin.get();
+			}
+
+			// exit the program
+			return 0;
+		}
 	}
-
-	// if we can't open the file, print an error and quit
+		// if we can't open the file, print an error and quit
 	else {
 		std::cerr << "Could not open the file specified." << std::endl << "Press enter to exit." << std::endl;
 		std::cin.get();

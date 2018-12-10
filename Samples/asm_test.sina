@@ -1,0 +1,7 @@
+.label:
+LOADA #$FF
+STOREA $100
+
+JMP .label
+
+HALT
