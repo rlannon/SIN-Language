@@ -1,0 +1,26 @@
+; outputs the result of multiplication of two numbers
+
+.multiply_numbers:
+
+    INPUTB  ; left operand
+    TBA
+    STOREA $00
+
+    INPUTB  ; right operand
+    TBA
+    STOREA $02
+
+    LOADA #$00
+    LOADY #$00  ; index
+
+.loop:
+    ADDCA $02
+    INCY
+    CMPY $00
+    BRNE .loop
+
+    TAB
+
+    OUTPUTB
+
+    HALT    ; stop the program

@@ -6,6 +6,9 @@
 #include <string>
 #include <list>
 #include <tuple>
+#include <algorithm>	// std::remove_if
+
+#include "FundamentalDataTypes.h"
 
 /*
 
@@ -16,7 +19,7 @@ The point of the class is to create a file that the SINVM can use; the SIN Compi
 This file also includes all the opcodes and their mnemonics; this is so we can refer to the opcode by its mnemonic in the code for readability
 
 
-General guide to the assembly:
+Quick guide to the assembly (see Doc/sinasm for more information):
 	
 	All instructions follow one of the following formats:
 		MNEMONIC,
@@ -35,7 +38,8 @@ General guide to the assembly:
 
 */
 
-const int num_instructions = 32;
+// to maintain the .sinc file standard
+const uint8_t sinc_version = 1;
 
 const int HALT = 0xFF;	// halt
 const int NOOP = 0x00;	// no operation
@@ -70,6 +74,13 @@ const int LSR = 0x15;	// logical shift right on some memory (or A)
 const int LSL = 0x16;	// logical shift left on some memory (or A)
 const int ROR = 0x17;	// rotate right on some memory (or A)
 const int ROL = 0x18;	// rotate left on some memory (or A)
+// increment/decrement registers
+const int INCA = 0x19;	// increment A
+const int DECA = 0x1A;	// decrement A
+const int INCX = 0x1B;	// can only do this to A, X, Y (not B)
+const int DECX = 0x1C;
+const int INCY = 0x1D;
+const int DECY = 0x1E;
 
 // Comparatives
 const int CMPA = 0x20;	// compare registers by value
@@ -85,7 +96,40 @@ const int BRGT = 0x27;	// branch on greater
 const int BRLT = 0x28;	// branch on less
 const int BRZ = 0x29;	// branch on zero
 
+// register transfers
+// we can transfer register values to A and the value in A to any register, but not other combinations
+const int TBA = 0x2A;	// transfer B to A
+const int TXA = 0x2B;
+const int TYA = 0x2C;
+const int TSPA = 0x2D;	// transfer stack pointer to A
+const int TAB = 0x2E;	// transfer A to B
+const int TAX = 0x2F;
+const int TAY = 0x30;
+const int TASP = 0x31;	// transfer A to stack pointer
+
+// the stack
+const int PHA = 0x32;	// push A onto the stack
+const int PLA = 0x33;	// pop a value off the stack and store in A
+
+// user input/output
+const int INPUTB = 0x34;	// get an integer from the user via the standard input
+const int OUTPUTB = 0x35;	// show the contents of the B register via the standard output
+
+
+// some constants for opcode comparisons (used for maintainability)
+const size_t num_instructions = 50;
+const std::string instructions_list[num_instructions] = { "HALT", "NOOP", "LOADA", "STOREA", "LOADB", "STOREB", "LOADX", "STOREX", "LOADY", "STOREY", "CLC", "SEC", "ADDCA", "SUBCA", "ANDA", "ORA", "XORA", "LSR", "LSL", "ROR", "ROL", "INCA", "DECA", "INCX", "DECX", "INCY", "DECY", "CMPA", "CMPB", "CMPX", "CMPY", "JMP", "BRNE", "BREQ", "BRGT", "BRLT", "BRZ", "TBA", "TXA", "TYA", "TSPA", "TAB", "TAX", "TAY", "TASP", "PHA", "PLA", "INPUTB", "OUTPUTB" };
+const int opcodes[num_instructions] = { HALT, NOOP, LOADA, STOREA, LOADB, STOREB, LOADX, STOREX, LOADY, STOREY, CLC, SEC, ADDCA, SUBCA, ANDA, ORA, XORA, LSR, LSL, ROR, ROL, INCA, DECA, INCX, DECX, INCY, DECY, CMPA, CMPB, CMPX, CMPY, JMP, BRNE, BREQ, BRGT, BRLT, BRZ, TBA, TXA, TYA, TSPA, TAB, TAX, TAY, TASP, PHA, PLA, INPUTB, OUTPUTB };
+
+// opcodes which do not need values to follow them (and, actually, for which proceeding values are forbidden)
+const size_t num_standalone_opcodes = 22;
+const int standalone_opcodes[num_standalone_opcodes] = { HALT, NOOP, CLC, SEC, INCA, DECA, INCX, DECX, INCY, DECY, TBA, TXA, TYA, TSPA, TAB, TAX, TAY, TASP, PHA, PLA, INPUTB, OUTPUTB };
+
+const bool is_standalone(int opcode);	// tells us whether an opcode needs a value to follow
+
+
 // note: we are not defining memory locations for the various registers as they won't be considered to be part of the processor's address space in this VM's architecture
+
 
 class Assembler
 {
@@ -100,9 +144,14 @@ class Assembler
 	std::ifstream* asm_file;
 
 	// utility variables and functions
+	int line_counter;	// to track the line number we are on
+	// Note: the line counter /sort of/ works; it can tell you about where you are, but it's not always exactly right
+	// Also, not all errors are currently detected by the assembler before runtime
 	static bool is_whitespace(char ch);	// tests whether we are in whitespace
 	static bool is_not_newline(char ch);	// tests to see whether we have hit a line break yet
 	static bool is_comment(char ch);	// tests whether we are at a comment
+	static bool is_empty_string(std::string str);	// tests to see if a string is ""
+	void getline(std::istream& file, std::string* target);	// gets a line from the file and saves it into 'target'
 	bool end_of_file();	// test for EOF by peeking and checking for EOF so we don't have to do this every time
 	void skip();	// skip ahead in the istream by one character
 	void read_while(bool(*predicate)(char));	// read as long as "predicate" is true; this mirrors "read_while()" in "Lexer"
@@ -114,6 +163,8 @@ class Assembler
 	static bool is_label(std::string candidate);	// tests whether the string is a label
 	static bool is_mnemonic(std::string candidate);	// tests whether the string is an opcode mnemonic
 	static int get_integer_value(std::string value);	// converts the read value into an integer (converts numbers with prefixes)
+
+	static bool can_use_immediate_addressing(int opcode);	// determines whether the opcode is a store instruction (STOREA, STOREB, etc.)
 
 	// we need a symbol table to keep track of addresses when macros are used; we will use a list of tuples
 	std::list<std::tuple<std::string, int>> symbol_table;
@@ -134,7 +185,6 @@ class Assembler
 	std::vector<uint8_t> assemble();
 public:
 	void create_sinc_file(std::string output_file_name);	// takes a SINASM file as input and creates a .sinc file to be used by the SINVM
-	void create_txt_file(std::string output_file_name);	// disassembles the code, but outputs to a .txt file instead of a .sinc file
 
 	Assembler(std::ifstream* asm_file, uint8_t _WORDSIZE=16);
 	~Assembler();

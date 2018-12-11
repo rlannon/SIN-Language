@@ -1,6 +1,9 @@
 #include "SINVM.h"
 
 
+// TODO: move error catching in syntax to the Assembler class; it doesn't really belong here
+
+
 const bool SINVM::address_is_valid(size_t address) {
 	// checks to see if the address we want to use is within 0 and memory_size
 
@@ -94,16 +97,188 @@ void SINVM::execute_instruction(int opcode) {
 			break;
 
 		// ALU instructions
+		// For these, we will use our load function to get the data we want in addition to the A register; we won't put it in the a register, but we will use the function because it will give it to us no problem
 		case ADDCA:
+			int addend;
+			this->execute_load(&addend);
 
-			// TODO: ALU instructions, ADDCA
+			// add the fetched data to A
+			REG_A += addend;
+			break;
+		case SUBCA:
+			// in subtraction, REG_A is the minuend and the value supplied is the subtrahend
+			int subtrahend;
+			this->execute_load(&subtrahend);
 
+			if (subtrahend > REG_A) {
+				this->set_status_flag('N');	// set the N flag if the result is negative, which will be the case if subtrahend > REG_A
+			}
+			else if (subtrahend == REG_A) {
+				this->set_status_flag('Z');	// set the Z flag if the two are equal, as the result will be 0
+			}
+
+			REG_A -= subtrahend;
+			break;
+		case ANDA:
+			int and_value;
+			this->execute_load(&and_value);
+
+			REG_A = REG_A & and_value;
+			break;
+		case ORA:
+			int or_value;
+			this->execute_load(&or_value);
+
+			REG_A = REG_A | or_value;
+			break;
+		case XORA:
+			int xor_value;
+			this->execute_load(&xor_value);
+
+			REG_A = REG_A ^ xor_value;
 			break;
 
-		// TODO: execute more instructions here
+		// TODO: bit shifting
 
+		// Incrementing / decrementing registers
+		case INCA:
+			this->REG_A = this->REG_A + 1;
+			break;
+		case DECA:
+			this->REG_A -= 1;
+			break;
+		case INCX:
+			this->REG_X += 1;
+			break;
+		case DECX:
+			this->REG_X -= 1;
+			break;
+		case INCY:
+			this->REG_Y += 1;
+			break;
+		case DECY:
+			this->REG_Y -= 1;
+			break;
+
+		// Comparatives
+
+			// TODO: write comparatives
+
+		case CMPA:
+			this->execute_comparison(REG_A);
+			break;
+		case CMPB:
+			this->execute_comparison(REG_B);
+			break;
+		case CMPX:
+			this->execute_comparison(REG_X);
+			break;
+		case CMPY:
+			this->execute_comparison(REG_Y);
+			break;
+
+		// Branch and control flow logic
 		case JMP:
 			this->execute_jmp();
+			break;
+		case BRNE:
+			// if the comparison was unequal, the Z flag will be clear
+			if (!this->is_flag_set('Z')) {
+				// if it's set, execute a jump
+				this->execute_jmp();
+			}
+			else {
+				// skip past the addressnig mode and address if it isn't set
+				// we need to skip past 3 bytes
+				this->PC += 3;
+			}
+			break;
+		case BREQ:
+			// if the comparison was equal, the Z flag will be set
+			if (this->is_flag_set('Z')) {
+				this->execute_jmp();
+			}
+			else {
+				// skip past the addressing mode and address if it isn't set
+				this->PC += 3;
+			}
+			break;
+		case BRGT:
+			// the carry flag will be set if the value is greater than what we compared it to
+			if (this->is_flag_set('C')) {
+				this->execute_jmp();
+			}
+			else {
+				// skip past data we don't need
+				this->PC += 3;
+			}
+			break;
+		case BRLT:
+			// the carry flag will be clear if the value is less than what we compared it to
+			if (!this->is_flag_set('C')) {
+				this->execute_jmp();
+			}
+			else {
+				this->PC += 3;
+			}
+			break;
+		case BRZ:
+			// branch on zero; if the Z flag is set, branch; else, continue
+
+			// TODO: delete this? do we really need it? it's equal to branch if equal...
+
+			if (this->is_flag_set('Z')) {
+				this->execute_jmp();
+			}
+			else {
+				this->PC += 3;
+			}
+			break;
+
+		// Register transfers
+		case TBA:
+			REG_A = REG_B;
+			break;
+		case TXA:
+			REG_A = REG_X;
+			break;
+		case TYA:
+			REG_A = REG_Y;
+			break;
+		case TSPA:
+			REG_A = (int)SP;	// SP holds the address to which the next element in the stack will go, and is incremented every time something is pushed, and decremented every time something is popped
+			break;
+		case TAB:
+			REG_B = REG_A;
+			break;
+		case TAX:
+			REG_X = REG_A;
+			break;
+		case TAY:
+			REG_Y = REG_A;
+			break;
+		case TASP:
+			SP = (size_t)REG_A;
+			break;
+
+		// The stack
+		case PHA:
+			this->push_stack();
+			break;
+		case PLA:
+			this->pop_stack();
+			break;
+
+		// Standard input/output
+		case INPUTB:
+			// get the contents of the standard input and store in REG_B
+			std::cin >> REG_B;
+			// clear cin's bits so the next input will be ok
+			std::cin.clear();
+			std::cin.ignore();
+			break;
+		case OUTPUTB:
+			std::cout << REG_B << std::endl;
 			break;
 
 		// if we encounter an unknown opcode
@@ -138,7 +313,7 @@ void SINVM::execute_load(int* reg_target) {
 	unsigned int data_to_load = this->get_data_of_wordsize();
 
 	// check our addressing mode and decide how to interpret our data
-	if ((0 <= addressing_mode) && (addressing_mode < 3)) {
+	if (((0 <= addressing_mode) && (addressing_mode < 3)) || (addressing_mode == 5) || (addressing_mode == 6)) {	// if the addressing mode is gt/eq 0 and lt 3, or =5, or =6
 		// if we have absolute or x/y indexed-addressing, we will be reading from memory
 		int data_in_memory = 0;
 
@@ -180,15 +355,15 @@ void SINVM::execute_load(int* reg_target) {
 		*reg_target = data_to_load;
 		return;
 	}
+
 	/*
-	Our indirect indexed modes are a little more complicated; they get the value at the address and use that as a memory location to access, finally indexing with the Y register.
+	Our indirect indexed modes are a little more complicated; they get the value at the address and use that as a memory location to access, finally indexing with the Y register. Essentially, this acts as a pointer.
 	*/
 
 	// TODO: implement indirect indexed addressing
 
 	else if (addressing_mode == 5) {
 		// indirect indexed addressing with the X register
-
 	}
 	else if (addressing_mode == 6) {
 		// indirect indexed addressing with the Y register
@@ -204,19 +379,32 @@ void SINVM::execute_store(int reg_to_store) {
 	this->PC++;
 
 	// next, get the memory location
-	int memory_address = this->get_data_of_wordsize();
+	unsigned int memory_address = this->get_data_of_wordsize();
+
+	// validate the memory location
+	// TODO: decide whether writing to an invalid location will wrap around or simply throw an exception
+	if (!address_is_valid(memory_address)) {
+		// as long as it is out of range, continue subtracting the max memory size until it is valid
+		while (memory_address > this->memory_size) {
+			memory_address -= memory_size;
+		}
+	}
 
 	// act according to the addressing mode
-	if (addressing_mode == 0) {
+	if (((0 <= addressing_mode) && (addressing_mode < 3)) || (addressing_mode == 5) || (addressing_mode == 6)) {	// if addressing mode is gt/eq 0 and lt 3, or =5, or =6
+		// add the appropriate register if it is an indexed addressing mode
+		if (addressing_mode == 1) {
+			memory_address += this->REG_X;
+		}
+		else if (addressing_mode == 2) {
+			memory_address += this->REG_Y;
+		}
+
 		// make the assignment and return
-		int to_assign = reg_to_store;
 		for (int i = this->_WORDSIZE / 8; i > 0; i--) {
-			this->memory[memory_address + i] = to_assign >> ((i - 1) * 8);
+			this->memory[memory_address + i] = reg_to_store >> ((i - 1) * 8);
 		}
 		return;
-	}
-	else if (addressing_mode == 1) {
-		// the memory address to overwrite
 	}
 	else if (addressing_mode == 3) {
 		// we cannot use immediate addressing with a store instruction, so throw an exception
@@ -225,19 +413,44 @@ void SINVM::execute_store(int reg_to_store) {
 }
 
 
+void SINVM::execute_comparison(int reg_to_compare) {
+	int to_compare;
+	this->execute_load(&to_compare);
+
+	// if the values are equal, set the Z flag; if they are not, clear it
+	if (reg_to_compare == to_compare) {
+		this->set_status_flag('Z');
+	}
+	else {
+		this->clear_status_flag('Z');
+		// we may need to set other flags too
+		if (reg_to_compare < to_compare) {
+			// set the carry flag if greater than, clear if less than
+			this->clear_status_flag('C');
+		}
+		else {	// if it's not equal, and it's not less, it's greater
+			this->set_status_flag('C');
+		}
+	}
+	return;
+}
+
+
 void SINVM::execute_jmp() {
 	/*
-	
+
 	Execute a JMP instruction. The VM first increments the PC to get the addressing mode, then increments it again to get the memory address
-	
+
 	*/
-	
+
 	this->PC++;
 	uint8_t addressing_mode = *this->PC;
 
 	// get the memory address to which we want to jump
 	this->PC++;
 	int memory_address = this->get_data_of_wordsize();
+	// make sure it's a jump within the program, so add the offset of the program start
+	memory_address += (int)program_start_address;
 
 	// check our addressing mode to see how we need to handle the data we just received
 	if (addressing_mode == 0) {
@@ -259,6 +472,50 @@ void SINVM::execute_jmp() {
 	else {
 		throw std::exception("Invalid addressing mode for JMP instruction.");
 	}
+
+	return;
+}
+
+
+// Stack functions -- these always use register A, so no point in having parameters
+void SINVM::push_stack() {
+	// push the current value in A onto the stack, decrementing the SP (because the stack grows downwards)
+
+	// first, make sure the stack hasn't hit its bottom
+	if (this->SP < 0x10) {
+		throw std::exception("**** ERROR: Stack overflow.");
+	}
+
+	// TODO: we must do this as many times as is necessary to fill a word on the VM (2 times for 16 bit, 4 for 32)
+	for (int i = (this->_WORDSIZE / 8); i > 0; i--) {
+		this->memory[SP] = REG_A >> ((i - 1) * 8);
+		this->SP--;
+	}
+	std::cout << std::endl;
+	return;
+}
+
+void SINVM::pop_stack() {
+	// pop the most recently pushed value off the stack; this means we must increment the SP (as the current value pointed to by SP is the one to which we will write next; also, the stack grows downwards so we want to increase the address if we pop something off), and then dereference; this means this area of memory is the next to be written to if we push something onto the stack
+
+	// first, make sure we aren't going beyond the bounds of the stack
+	if (this->SP > 0x1f) {
+		throw std::exception("**** ERROR: Stack underflow.");
+	}
+
+	// for each byte in a word, dereference the stack pointer and add it to our stack_data variable, shifting over 8 bits afterward
+	int stack_data = 0;
+	for (int i = 1; i < (this->_WORDSIZE / 8); i++) {
+		stack_data += this->memory[SP];
+		stack_data = stack_data << 8;
+		this->SP++;
+	}
+	// because we have added 1 too few bytes, we must add the dereferenced pointer to stack_data and increment the stack pointer again
+	stack_data += this->memory[SP];
+	this->SP++;
+
+	// finally, set A equal to stack_data
+	this->REG_A = stack_data;
 
 	return;
 }
@@ -383,7 +640,7 @@ void SINVM::run_program() {
 
 void SINVM::_debug_values() {
 	std::cout << "SINVM Values:" << std::endl;
-	std::cout << "\t" << "Regsters:" << "\n\t\tA: $" << std::hex << this->REG_A << std::endl;
+	std::cout << "\t" << "Registers:" << "\n\t\tA: $" << std::hex << this->REG_A << std::endl;
 	std::cout << "\t\tX: $" << std::hex << this->REG_X << std::endl;
 	std::cout << "\t\tY: $" << std::hex << this->REG_Y << std::endl;
 	std::cout << "\t\tSTATUS: $" << std::hex << (int)this->STATUS << std::endl << std::endl;
@@ -398,41 +655,77 @@ void SINVM::_debug_values() {
 
 
 std::tuple<uint8_t, std::vector<uint8_t>> SINVM::load_sinc_file(std::istream& file) {
+	// a vector to hold our program data
+	std::vector<uint8_t> program_data;
 
-	// TODO: establish .sinc file format
-	// TODO: write .sinc loading algorithm
+	// first, read the magic number
+	char header[4];
+	char * buffer = &header[0];
 
-	// this is just so the code compiles
-	std::vector<uint8_t> machine_code{ 0, 0 };
-	return std::make_tuple(16, machine_code);
+	file.read(buffer, 4);
+
+	// if our magic number is valid
+	if (header[0, 1, 2, 3] == * "s", "i", "n", "C") {
+		// must have the correct version
+		uint8_t version = readU8(file);
+
+		if (version == 1) {
+			// get the word size
+			uint8_t word_size = readU8(file);
+			// get the program size
+			uint16_t program_size = readU16(file);
+
+			// use program_size to read the proper number of bytes
+			int i = 0;
+			while (!file.eof() && i < program_size) {
+				program_data.push_back(readU8(file));
+				i++;
+			}
+
+			// return word size and the program data vector
+			return std::make_tuple(word_size, program_data);
+		}
+		// cannot handle any other versions right now because they don't exist yet
+		else {
+			throw std::exception("Other .sinc file versions not supported at this time.");
+		}
+	}
+	else {
+		throw std::exception("Invalid magic number in file header.");
+	}
 }
 
 
-SINVM::SINVM(std::istream& file, bool is_disassembled)
+SINVM::SINVM(std::istream& file)
 {
 	// first, load the data from our .sinc file and copy it in appropriately
 	std::tuple<uint8_t, std::vector<uint8_t>> sinc_data = this->load_sinc_file(file);
+
+	// set the data as is appropriate for the
 	this->_WORDSIZE = std::get<0>(sinc_data);
 	std::vector<uint8_t> instructions = std::get<1>(sinc_data);
 
 	// copy our instructions into memory so that the program is at the end of memory
 	size_t program_size = instructions.size();
-	size_t start_address = memory_size - program_size;	// the start addres for the program should be the total size - the program size
+	this->program_start_address = memory_size - program_size;	// the start addres for the program should be the total size - the program size
 
 	std::vector<uint8_t>::iterator instruction_iter = instructions.begin();
-	size_t memory_index = start_address;
+	size_t memory_index = this->program_start_address;
 	while ((instruction_iter != instructions.end()) && memory_index < memory_size) {
 		this->memory[memory_index] = *instruction_iter;
 		memory_index++;
 		instruction_iter++;
 	}
 
+	// initialize the stack to location $1f; it grows downwards
+	this->SP = 0x1f;
+
 	// always initialize our status register so that all flags are not set
 	this->STATUS = 0;
 
 	// initialize the program counter to start at the top of the program
 	if (instructions.size() != 0) {
-		this->PC = &this->memory[start_address];	// make sure that we don't read memory that doesn't exist if our program is empty
+		this->PC = &this->memory[this->program_start_address];	// make sure that we don't read memory that doesn't exist if our program is empty
 	}
 	else {
 		// throw an exception; the VM cannot execute an empty program
@@ -447,22 +740,25 @@ SINVM::SINVM(Assembler& assembler) {
 
 	// copy our instructions into memory so that the program is at the end of memory
 	size_t program_size = instructions.size();
-	size_t start_address = memory_size - program_size;	// the start addres for the program should be the total size - the program size
+	this->program_start_address = memory_size - program_size;	// the start addres for the program should be the total size - the program size
 
 	std::vector<uint8_t>::iterator instruction_iter = instructions.begin();
-	size_t memory_index = start_address;
+	size_t memory_index = this->program_start_address;
 	while ((instruction_iter != instructions.end()) && memory_index < memory_size) {
 		this->memory[memory_index] = *instruction_iter;
 		memory_index++;
 		instruction_iter++;
 	}
 
+	// initialize the stack to location $1f; it grows downwards
+	this->SP = 0x1f;
+
 	// always initialize our status register so that all flags are not set
 	this->STATUS = 0;
 
 	// initialize the program counter to start at the top of the program
 	if (instructions.size() != 0) {
-		this->PC = &this->memory[start_address];	// make sure that we don't read memory that doesn't exist if our program is empty
+		this->PC = &this->memory[this->program_start_address];	// make sure that we don't read memory that doesn't exist if our program is empty
 	}
 	else {
 		// throw an exception; the VM cannot execute an empty program

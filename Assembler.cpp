@@ -1,6 +1,21 @@
 #include "Assembler.h"
 
 
+const bool is_standalone(int opcode) {
+	int i = 0;
+	bool found = false;
+	while (!found && (i < num_standalone_opcodes)) {
+		if (opcode == standalone_opcodes[i]) {
+			found = true;
+		}
+		else {
+			i++;
+		}
+	}
+
+	return found;
+}
+
 // Our various utility functions
 
 bool Assembler::is_whitespace(char ch) {
@@ -18,6 +33,18 @@ bool Assembler::is_comment(char ch) {
 	return ch == ';';
 }
 
+bool Assembler::is_empty_string(std::string str)
+{
+	// returns true if a string is empty; this is used as a predicate function when removing empty strings from 'string_delimited' later
+	return (str == "");
+}
+
+void Assembler::getline(std::istream& file, std::string* target) {
+	// uses std::getline, but increments line_counter
+	std::getline(file, *target);
+	line_counter++;
+}
+
 bool Assembler::end_of_file() {
 	// peek at the next character; if it triggers EOF, then return true; else, return false
 	char peek = this->asm_file->peek();
@@ -31,7 +58,10 @@ bool Assembler::end_of_file() {
 
 void Assembler::skip() {
 	// skip one character
-	this->asm_file->get();
+	char ch = this->asm_file->get();
+	if (ch == '\n') {
+		line_counter += 1;
+	}
 	return;
 }
 
@@ -61,8 +91,6 @@ bool Assembler::is_label(std::string candidate) {
 
 bool Assembler::is_mnemonic(std::string candidate) {
 	// if the candidate is an opcode mnemonic, return true
-
-	std::string instructions_list[num_instructions] = { "HALT", "NOOP", "LOADA", "STOREA", "LOADB", "STOREB", "LOADX", "STOREX", "LOADY", "STOREY", "CLC", "SEC", "ADDCA", "SUBCA", "ANDA", "ORA", "XORA", "LSR", "LSL", "ROR", "ROL", "CMPA", "CMPB", "CMPX", "CMPY", "JMP", "BRNE", "BREQ", "BRGT", "BRLT", "BRZ" };
 
 	int index = 0;
 	bool found = false;
@@ -119,6 +147,26 @@ int Assembler::get_integer_value(std::string value) {
 }
 
 
+bool Assembler::can_use_immediate_addressing(int opcode) {
+	// determine what CAN'T use immediate addressing
+	if (opcode == STOREA || opcode == STOREB || opcode == STOREX || opcode == STOREY) {
+		return false;
+	}
+	else if (is_standalone(opcode)) {
+		return false;
+	}
+	else if (opcode == JMP || opcode == BRNE || opcode == BREQ || opcode == BRGT || opcode == BRLT) {
+		return false;
+	}
+	else {
+		// if it's not one of the above, it can be used with the immediate addressing mode
+		return true;
+	}
+}
+
+
+// TODO: write more error-catching functions
+
 
 /************************************************************************************************************************
 ****************************************			ASSEMBLER FUNCTIONS			*****************************************
@@ -146,7 +194,14 @@ std::list<std::tuple<std::string, int>> Assembler::construct_symbol_table() {
 
 		// check its type
 		if (is_mnemonic(line_data)) {
-			this->current_byte += 2;	// increment the current byte by 2; one for the mnemonic itself and one for the addressing mode
+			if (is_standalone(this->get_opcode(line_data))) {
+				this->current_byte += 1;
+				// it's a standalone instruction, so we don't need the rest of the line
+				continue;
+			}
+			else {
+				this->current_byte += 2;	// increment the current byte by 2; one for the mnemonic itself and one for the addressing mode
+			}
 
 			// if the next character is a new line or EOF, then go back to the top of the loop; we don't have a value
 			if (this->asm_file->peek() == '\n' || this->asm_file->peek() == EOF) {
@@ -157,29 +212,19 @@ std::list<std::tuple<std::string, int>> Assembler::construct_symbol_table() {
 				// skip any spaces
 				this->read_while(&this->is_whitespace);
 
-				// if we have a literal, skip ahead by the wordsize in bytes
-				if (this->asm_file->peek() == '#') {
-					int offset = this->_WORDSIZE / 8;	// _WORDSIZE / 8 is the number of bytes to offset
-					this->current_byte += offset;
-				}
-				// otherwise, it must be an address
-				else {
-					int offset = this->_MEM_WORDSIZE / 8;	// use _MEM_WORDSIZE in case we ever increase the wordsize for the memory past 16 bits
-					this->current_byte += offset;
-				}
+				// if we have a value, skip ahead by the wordsize in bytes
+				int offset = this->_WORDSIZE / 8;	// _WORDSIZE / 8 is the number of bytes to offset
+				this->current_byte += offset;
 
 				// go to the next line
 				this->read_while(&this->is_not_newline);	// read until peek() returns a newline character
-				this->asm_file->get();	// eat the newline character
+				this->skip();	// eat the newline character
 				continue;
 			}
 		}
 		else if (is_label(line_data)) {
-
-			// TODO: get label information
-
 			// note: labels don't actually occupy any space in memory; they are a way for us to reference memory addresses for the assembler
-			// as such, we don't need to increment current_byte when we hit one; we push it to our symbol table and continue
+			// as such, we don't need to increment current_byte when we hit one; we push it to our symbol table and continue, as "current_byte" points to the first instruction /after/ the label
 
 			// verify there is a semicolon at the end of the label and remove it before we push it back
 			if (line_data[line_data.size() - 1] == ':') {
@@ -187,7 +232,7 @@ std::list<std::tuple<std::string, int>> Assembler::construct_symbol_table() {
 			}
 			// throw an exception; if a label has a colon, the second pass will ignore it; if it doesn't, the second pass will try and replace it with a memory address
 			else {
-				throw std::exception("Missing colon in label creation.");
+				throw std::exception(("Missing colon in label creation (line " + std::to_string(this->line_counter) + ")").c_str());
 			}
 
 			// push back the line_data as the symbol's name and "current_byte" as the current byte in memory; this will serve as the memory address
@@ -232,19 +277,13 @@ int Assembler::get_value_of(std::string symbol) {
 		return std::get<1>(*symbol_table_iter);
 	}
 	else {
-		throw std::exception(("Cannot find '" + symbol + "' in symbol table").c_str());
+		throw std::exception(("Cannot find '" + symbol + "' in symbol table (line " + std::to_string(this->line_counter) + ")").c_str());
 	}
 }
 
 // Get the opcode of some mnemonic without addressing more information
 // note this is a static function
 int Assembler::get_opcode(std::string mnemonic) {
-
-	// create arrays for the instructions as strings and their 'const int' counterparts; provided they are in the same order, this will allow us to iterate through the lists when searching for opcodes and their mnemonics; since the lists are so small, iterating through the entire list is fine
-
-	std::string instructions_list[num_instructions] = { "HALT", "NOOP", "LOADA", "STOREA", "LOADB", "STOREB", "LOADX", "STOREX", "LOADY", "STOREY", "CLC", "SEC", "ADDCA", "SUBCA", "ANDA", "ORA", "XORA", "LSR", "LSL", "ROR", "ROL", "CMPA", "CMPB", "CMPX", "CMPY", "JMP", "BRNE", "BREQ", "BRGT", "BRLT", "BRZ" };
-	int opcodes[num_instructions] = { HALT, NOOP, LOADA, STOREA, LOADB, STOREB, LOADX, STOREX, LOADY, STOREY, CLC, SEC, ADDCA, SUBCA, ANDA, ORA, XORA, LSR, LSL, ROR, ROL, CMPA, CMPB, CMPX, CMPY, JMP, BRNE, BREQ, BRGT, BRLT, BRZ };
-
 	// some utility variables -- an index and a variable to tell us whether we have found the right instruction
 	bool found = false;
 	int index = 0;
@@ -344,7 +383,7 @@ std::vector<uint8_t> Assembler::assemble()
 	this->asm_file->clear();
 	this->asm_file->seekg(0, std::ios::beg);
 	this->current_byte = 0;
-
+	this->line_counter = 0;
 
 	// Pass 2
 
@@ -361,7 +400,7 @@ std::vector<uint8_t> Assembler::assemble()
 		// read through any whitespace
 		this->read_while(&this->is_whitespace);	// read through any whitespace
 
-		std::getline(*this->asm_file, line);	// get the whole line
+		this->getline(*this->asm_file, &line);	// get the whole line
 
 		// split the line into parts, if we can
 		std::vector<std::string> string_delimited;	// to hold the parts of our string
@@ -371,6 +410,16 @@ std::vector<uint8_t> Assembler::assemble()
 			line.erase(0, position + delimiter.length());	// erase the string from the beginning up to the next token
 		}
 		string_delimited.push_back(line);
+
+		// First, remove empty strings using std::remove_if (from <algorithm>)
+		string_delimited.erase(std::remove_if(string_delimited.begin(), string_delimited.end(), is_empty_string), string_delimited.end());
+
+		// Next, remove all comments by finding semicolons in the vector and deleting everything after them
+		// find ';' in the vector
+		std::vector<std::string>::iterator it;
+		it = std::find(string_delimited.begin(), string_delimited.end(), ";");
+		// remove all elements from there on
+		string_delimited.erase(it, string_delimited.end());
 
 		if (string_delimited.size() > 0) {
 
@@ -406,7 +455,7 @@ std::vector<uint8_t> Assembler::assemble()
 						}
 						else {
 							// there MUST be another string in string_delimited if we have indirect addressing
-							throw std::exception("Indirect addressing requires a second string; however, one was not found.");
+							throw std::exception(("Indirect addressing requires a second string; however, one was not found (line " + std::to_string(this->line_counter) + ")").c_str());
 						}
 
 						// if the addressing mode is 1 or 2, add 4 to it to get to the indirect/indexed
@@ -415,7 +464,7 @@ std::vector<uint8_t> Assembler::assemble()
 						}
 						// if neither, it's improper syntax -- cannot use parens with any other mode
 						else {
-							throw std::exception("Unrecognized addressing mode.");
+							throw std::exception(("Unrecognized addressing mode (line " + std::to_string(this->line_counter) + ")").c_str());
 						}
 
 						// now that we have the addressing mode, push it to program data
@@ -449,31 +498,46 @@ std::vector<uint8_t> Assembler::assemble()
 					}
 					// otherwise, carry on normally
 					else {
-						if (string_delimited.size() >= 3) {
+						// if a comment is not separated from the semicolon by a space, it won't get caught by the deletion function and it will screw with the code; as such, we must do a few extra checks
+						// check to see if the last character in the second operand is a comma; if so, and there is no third operand or the third operand begins with a semicolon, throw an exception
+						if (string_delimited[1][string_delimited[1].size() - 1] == ',') {
+							if ((string_delimited.size() < 3) || (string_delimited[2][0] == ';')) {
+								throw std::exception(("Expected register for index but found nothing (line " + std::to_string(this->line_counter) + ")").c_str());
+							}
+						}
+
+						// further, if we made it this far without an exception, make sure that if we find a third string that the first character is NOT a semicolon; if so, the program should behave as if there were only two strings
+						if (string_delimited.size() >= 3 && (string_delimited[2][0] != ';')) {
 							addressing_mode = get_address_mode(value, string_delimited[2]);
 						}
 						else {
 							addressing_mode = get_address_mode(value);
 						}
 
+						if (addressing_mode == 3 && !can_use_immediate_addressing(opcode)) {
+							throw std::exception(("Cannot use this addressing mode on an instruction of this type (line " + std::to_string(this->line_counter) + ")").c_str());
+						}
+
 						// push_back the addressing mode and turn 'value' into a series of big_endian bytes
 						program_data.push_back(addressing_mode);
 
+						// get the integer value of the string that contains our value (might have flags like $ or %)
 						int converted_value = get_integer_value(value);
 
+						// Get the bytes in big-endian format -- we first get the highest byte, then the second-highest...
 						for (int i = this->_WORDSIZE / 8; i > 0; i--) {
-							uint8_t byte = converted_value << ((i - 1) * 8);
+							uint8_t byte = converted_value >> ((i - 1) * 8);
 							program_data.push_back(byte);
 						}
 					}
 				}
 				// we can push back the opcode without data bytes for a few instructions
-				else if (opcode == HALT || opcode == NOOP || opcode == CLC || opcode == SEC) {
+				else if (is_standalone(opcode)) {
 					program_data.push_back(opcode);
 				}
 				// otherwise, we must throw an exception
 				else {
-					throw std::exception("Expected a value following instruction mnemonic.");
+					throw std::exception(("Expected a value following instruction mnemonic (line " + std::to_string(this->line_counter) + ")").c_str());
 				}
 			}
 			// if we have a label to start the line
@@ -483,22 +547,37 @@ std::vector<uint8_t> Assembler::assemble()
 					continue;
 				}
 				else {
-					throw std::exception("A label marker must end with a colon (:)");
+					throw std::exception(("A label marker must end with a colon (line " + std::to_string(this->line_counter) + ")").c_str());
 				}
 			}
 			else if (isalpha(opcode_or_symbol[0])) {
 				// if we have a macro
+				if (string_delimited.size() >= 3) {
+					if (string_delimited[2] == "=") {
+						// we have a macro
+
+						// TODO: enable macros
+
+					}
+					else {
+						throw std::exception(("Leading macros must be followed by an equals sign. (line " + std::to_string(this->line_counter) + ")").c_str());
+					}
+				}
+				else {
+					throw std::exception(("Non-opcode identifiers must be labels or macros (line " + std::to_string(this->line_counter) + ")").c_str());
+				}
 			}
 			else if (is_comment(opcode_or_symbol[0])) {
 				// don't do anything
 				continue;
 			}
+			else {
+				throw std::exception(("Unknown symbol in file (line " + std::to_string(this->line_counter) + ")").c_str());
+			}
 		}
 		// we have an empty string
 		else {
-			// print a message and break from the loop
-			std::cerr << "Breaking on empty string." << std::endl;
-			break;
+			// do nothing
 		}
 
 		// any last code for the loop should go here
@@ -521,8 +600,7 @@ void Assembler::create_sinc_file(std::string output_file_name)
 			uint8_t magic_number[4]	=	sinC
 			uint8_t version	=	(current version = 1)
 			uint8_t word_size (contains the number corresponding to the number of bits in the integers represented)
-			uint32_t file_size (serves as a checksum)
-
+			uint16_t program_size	(serves as a checksum for loading)
 	BODY:
 		The body of the program is simply a list of integers, corresponding to the integers produced by the assemble() function.
 
@@ -534,13 +612,46 @@ void Assembler::create_sinc_file(std::string output_file_name)
 	// create a vector<int> to hold the binary program data; it will be initialized to our assembled file
 	std::vector<uint8_t> program_data = this->assemble();
 
-	// TODO: create the binary file
+
+	/************************************************************
+	********************	FILE HEADER		*********************
+	************************************************************/
+
+
+	// Write the magic number to the file header
+	char * header = ("sinC");
+	sinc_file.write(header, 4);
+
+	// write the version information
+	writeU8(sinc_file, sinc_version);
+
+	// write the word size
+	writeU8(sinc_file, this->_WORDSIZE);
+
+	// write the size of the program
+	writeU16(sinc_file, program_data.size());
+
+
+	/************************************************************
+	********************	FILE CONTENTS	*********************
+	************************************************************/
+
+	// write each byte of data in sequentually by using a vector iterator
+	for (std::vector<uint8_t>::iterator data_iter = program_data.begin(); data_iter != program_data.end(); data_iter++) {
+		// write the value to the file
+		writeU8(sinc_file, *data_iter);
+	}
 
 	sinc_file.close();
 }
 
+
+
 Assembler::Assembler(std::ifstream* asm_file, uint8_t _WORDSIZE)
 {
+	// set our line counter to 0
+	this->line_counter = 0;
+
 	// set our ASM file to be equal to the file we pass into the constructor
 	this->asm_file = asm_file;
 

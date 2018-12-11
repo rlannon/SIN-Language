@@ -18,11 +18,11 @@ For a documentation of the language, see either the doc folder in this project o
 #include <exception>
 
 // Custom headers
-#include "Lexer.h"
-#include "Parser.h"
+//#include "Lexer.h"
+//#include "Parser.h"		// Lexer.h and Parser.h are also included in Interpreter.h, but commenting here to denote they are being used
 #include "Interpreter.h"
 #include "SINVM.h"
-#include "Assembler.h"
+//#include "Assembler.h"	// included by SINVM.h, but included here as a comment to denote that those functions are being used in this file
 
 
 int main(int argc, char** argv) {
@@ -45,6 +45,11 @@ int main(int argc, char** argv) {
 		// This allows us to use the program without the command line
 		std::cout << "No input file specified. Enter a filename:" << std::endl;
 		std::getline(std::cin, src_file_path);
+
+		if (src_file_path.substr(src_file_path.size() - 2) == "-c") {
+			compile = true;
+			src_file_path.erase((src_file_path.size() - 3), (src_file_path.size() - 1));
+		}
 	}
 	else {
 		// if we have 2 command-line arguments, then the second one should be a filename
@@ -94,29 +99,31 @@ int main(int argc, char** argv) {
 		// if it is precompiled
 		if (std::regex_search(src_file_path, std::regex(".sinc"))) {
 			try {
-				//SINVM sinVM(src_file, true);	// we don't need to disassemble; is a .sinc file
-				//sinVM.run_program();
+				SINVM sinVM(src_file);	// we don't need to disassemble; is a .sinc file
+				sinVM.run_program();
+				sinVM._debug_values();
 
-				std::cout << std::endl;
+				std::cout << "Compiled." << std::endl;
 			}
 			catch (std::exception& e) {
 				std::cerr << e.what() << std::endl;
 				std::cerr << "Press enter to exit" << std::endl;
 				std::cin.get();
+				exit(1);
 			}
+			std::cerr << "Press enter to exit" << std::endl;
+			std::cin.get();
 		}
 		else if (std::regex_search(src_file_path, std::regex(".sina"))) {
-			try {
-				//SINVM sinVM(src_file, false);	// we need to disassemble; is a .sina file
-				//sinVM.run_program();
-
-				//sinVM._debug_values();
-
+			if (!compile) {
 				try {
 					Assembler assemble(&src_file);
 					SINVM myVM(assemble);
 					myVM.run_program();
 					myVM._debug_values();
+
+					std::cout << "Press enter to exit" << std::endl;
+					std::cin.get();
 				}
 				catch (std::exception& e) {
 					std::cerr << e.what() << std::endl;
@@ -124,14 +131,21 @@ int main(int argc, char** argv) {
 					std::cin.get();
 					exit(1);
 				}
-
-				std::cout << "Press enter to exit" << std::endl;
-				std::cin.get();
 			}
-			catch (std::exception& e) {
-				std::cerr << e.what() << std::endl;
-				std::cerr << "Press enter to exit" << std::endl;
-				std::cin.get();
+			else {
+				try {
+					Assembler assemble(&src_file);
+					assemble.create_sinc_file("multiply_compiled");
+					std::cout << "Compiled." << std::endl;
+
+					std::cout << "Press enter to exit" << std::endl;
+					std::cin.get();
+				}
+				catch (std::exception& e) {
+					std::cerr << e.what() << std::endl << "Press enter to quit" << std::endl;
+					std::cin.get();
+					exit(1);
+				}
 			}
 		}
 		// if it isn't precompiled
