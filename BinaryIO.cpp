@@ -1,4 +1,6 @@
-#include "FundamentalDataTypes.h"
+#include "BinaryIO.h"
+
+// Implementation of the functions declared in 'BinaryIO.h'
 
 // READ/WRITE UINT8_T
 
@@ -71,7 +73,7 @@ float convertUnsigned(uint32_t n) {
 // READ/WRITE STRING AND STRING LENGTH
 
 std::string readString(std::istream& file) {
-	uint16_t len = readU16(file);
+	uint16_t len = readU16(file);	// current max string length (for a single string) is 2^16 characters
 
 	char* buffer = new char[len];
 	file.read(buffer, len);
@@ -82,7 +84,7 @@ std::string readString(std::istream& file) {
 	return str;
 }
 void writeString(std::ostream& file, std::string str) {
-	uint16_t len = str.length(); // note this means our max string length is 65,536 characters; this should be okay
+	uint16_t len = str.length(); // note this means our max string length (for /one/ string) is 65,536 characters; this should be okay
 
 	writeU16(file, len);
 	file.write(str.c_str(), len);

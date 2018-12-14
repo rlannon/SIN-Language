@@ -9,7 +9,7 @@
 #include <algorithm>	// std::remove_if
 #include <regex>
 
-#include "FundamentalDataTypes.h"
+#include "BinaryIO.h"	// all the functions used to write data to binary files (for SIN bytecode/compiled-SIN (.sinc) files)
 
 /*
 
