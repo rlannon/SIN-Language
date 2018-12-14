@@ -7,6 +7,7 @@
 #include <list>
 #include <tuple>
 #include <algorithm>	// std::remove_if
+#include <regex>
 
 #include "FundamentalDataTypes.h"
 
@@ -32,9 +33,12 @@ Quick guide to the assembly (see Doc/sinasm for more information):
 	The following addressing modes are available
 		Absolute	-	e.g., LOADA $1234		-	Gets the value at the address specified
 		Indexed		-	e.g., LOADA $1234, X	-	Gets the value at the address specified, indexed with x (so here, if x were $02, it would get the value at the address of $1236)
-		Immediate	-	e.g., LOADA #$1234		-	The literal value written; no memory access
-		Relative	-	
+		Immediate	-	e.g., LOADA #$1234		-	The literal value written; no memory access; 16-bit value
+		8-bit		-	e.g., LOADA $12			-	Like absolute, but only addresses a single byte
 		Indirect	-	e.g., LOADA ($1234, Y)	-	
+		Register	-	e.g., LSR A				-	Can only be used with the A register and the bitshift instructions; operates on the given register
+
+		// TODO: add support for 8-bit addressing (so only write to the single byte specified; not 2 bytes)
 
 */
 
@@ -95,6 +99,8 @@ const int BREQ = 0x26;	// branch on equal
 const int BRGT = 0x27;	// branch on greater
 const int BRLT = 0x28;	// branch on less
 const int BRZ = 0x29;	// branch on zero
+const int JSR = 0x3A;	// jump to subroutine
+const int RTS = 0x3B;	// return from subroutine
 
 // register transfers
 // we can transfer register values to A and the value in A to any register, but not other combinations
@@ -111,21 +117,26 @@ const int TASP = 0x31;	// transfer A to stack pointer
 const int PHA = 0x32;	// push A onto the stack
 const int PLA = 0x33;	// pop a value off the stack and store in A
 
-// user input/output
-const int INPUTB = 0x34;	// get an integer from the user via the standard input
-const int OUTPUTB = 0x35;	// show the contents of the B register via the standard output
+// SYSCALL -- handles all interaction with the host machine
+const int SYSCALL = 0x36;
+
+// TODO: implement db instruction
+
+// DB instruction -- so that we can set a memory array programatically (particularly useful for strings)
+const int DB = 0x40;
 
 
 // some constants for opcode comparisons (used for maintainability)
 const size_t num_instructions = 50;
-const std::string instructions_list[num_instructions] = { "HALT", "NOOP", "LOADA", "STOREA", "LOADB", "STOREB", "LOADX", "STOREX", "LOADY", "STOREY", "CLC", "SEC", "ADDCA", "SUBCA", "ANDA", "ORA", "XORA", "LSR", "LSL", "ROR", "ROL", "INCA", "DECA", "INCX", "DECX", "INCY", "DECY", "CMPA", "CMPB", "CMPX", "CMPY", "JMP", "BRNE", "BREQ", "BRGT", "BRLT", "BRZ", "TBA", "TXA", "TYA", "TSPA", "TAB", "TAX", "TAY", "TASP", "PHA", "PLA", "INPUTB", "OUTPUTB" };
-const int opcodes[num_instructions] = { HALT, NOOP, LOADA, STOREA, LOADB, STOREB, LOADX, STOREX, LOADY, STOREY, CLC, SEC, ADDCA, SUBCA, ANDA, ORA, XORA, LSR, LSL, ROR, ROL, INCA, DECA, INCX, DECX, INCY, DECY, CMPA, CMPB, CMPX, CMPY, JMP, BRNE, BREQ, BRGT, BRLT, BRZ, TBA, TXA, TYA, TSPA, TAB, TAX, TAY, TASP, PHA, PLA, INPUTB, OUTPUTB };
+const std::string instructions_list[num_instructions] = { "HALT", "NOOP", "LOADA", "STOREA", "LOADB", "STOREB", "LOADX", "STOREX", "LOADY", "STOREY", "CLC", "SEC", "ADDCA", "SUBCA", "ANDA", "ORA", "XORA", "LSR", "LSL", "ROR", "ROL", "INCA", "DECA", "INCX", "DECX", "INCY", "DECY", "CMPA", "CMPB", "CMPX", "CMPY", "JMP", "BRNE", "BREQ", "BRGT", "BRLT", "BRZ", "TBA", "TXA", "TYA", "TSPA", "TAB", "TAX", "TAY", "TASP", "PHA", "PLA", "SYSCALL", "DB" };
+const int opcodes[num_instructions] = { HALT, NOOP, LOADA, STOREA, LOADB, STOREB, LOADX, STOREX, LOADY, STOREY, CLC, SEC, ADDCA, SUBCA, ANDA, ORA, XORA, LSR, LSL, ROR, ROL, INCA, DECA, INCX, DECX, INCY, DECY, CMPA, CMPB, CMPX, CMPY, JMP, BRNE, BREQ, BRGT, BRLT, BRZ, TBA, TXA, TYA, TSPA, TAB, TAX, TAY, TASP, PHA, PLA, SYSCALL, DB };
 
 // opcodes which do not need values to follow them (and, actually, for which proceeding values are forbidden)
-const size_t num_standalone_opcodes = 22;
-const int standalone_opcodes[num_standalone_opcodes] = { HALT, NOOP, CLC, SEC, INCA, DECA, INCX, DECX, INCY, DECY, TBA, TXA, TYA, TSPA, TAB, TAX, TAY, TASP, PHA, PLA, INPUTB, OUTPUTB };
+const size_t num_standalone_opcodes = 20;
+const int standalone_opcodes[num_standalone_opcodes] = { HALT, NOOP, CLC, SEC, INCA, DECA, INCX, DECX, INCY, DECY, TBA, TXA, TYA, TSPA, TAB, TAX, TAY, TASP, PHA, PLA };
 
 const bool is_standalone(int opcode);	// tells us whether an opcode needs a value to follow
+const bool is_bitshift(int opcode);	// tests whether the opcode is a bitshift instruction
 
 
 // note: we are not defining memory locations for the various registers as they won't be considered to be part of the processor's address space in this VM's architecture

@@ -2,13 +2,12 @@
 
 .multiply_numbers:
 
-    INPUTB  ; left operand
-    TBA
-    STOREA $00
+    ; get user input for left operand
+    LOADB #$00  ; set input address to $00
+    SYSCALL #$13    ; get user input
 
-    INPUTB  ; right operand
-    TBA
-    STOREA $02
+    LOADB #$02  ; set input address to $02
+    SYSCALL #$13    ; get user input
 
     LOADA #$00
     LOADY #$00  ; index
@@ -18,9 +17,12 @@
     INCY
     CMPY $00
     BRNE .loop
-
-    TAB
-
-    OUTPUTB
+    
+    STOREA $00 ; store result at $00
+    LOADB #$00  ; look to $00 for output
+    
+    LOADA #$02  ; read 2 bytes
+    
+    SYSCALL #$15    ; output 2 bytes to the screen
 
     HALT    ; stop the program

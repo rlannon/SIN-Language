@@ -1,0 +1,26 @@
+SYSCALL.TXT
+
+A guide to interaction with the host OS in the SIN VM.
+
+The SIN VM can interact with the host OS through the use of the SYSCALL instruction. It always requires a value, as different syscall numbers will result in different actions on the part of the OS. For example, one syscall may attempt to open a file, while another may print a value out to the standard output.
+
+How they are used:
+	The B register is always the first register to be used with syscalls, but some will require more than one. The precedence order is B, A, Y, X.
+
+A list of all the syscall numbers, which will be updated as the language grows and more features are added:
+	$00	-	SYS_EXIT	-	Quit the program.
+		Note: SYSCALL #$00 is unecessary, as the program will automatically exit on a HALT command
+	$1x	-	I/O:
+		$10	-	Open a file in read mode
+		$11	-	Open a file in write mode
+		$12	-	Close a file
+		$13	-	Read from standard input
+			This will automatically covnert to ASCII if it's text; will keep it as a value if it's just a number
+		$14	-	Output to standard output; interpret as ASCII
+			Specify if we want to get the ASCII character of the value we are reading
+			If this is the case, reads byte by byte
+			Strings are printed using quotes, like:
+				"__string__"
+		$15	-	Output to standard output; print hex values of bytes
+			If we want to read the hex values in memory, use $15. The number of bytes to read is the value in A.
+			The output is formatted using a $ before each number, and a line break after

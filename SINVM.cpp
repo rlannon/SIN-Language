@@ -40,6 +40,14 @@ int SINVM::get_data_of_wordsize() {
 	return data_to_load;
 }
 
+std::vector<uint8_t> SINVM::get_properly_ordered_bytes(int value) {
+	std::vector<uint8_t> ordered_bytes;
+	for (int i = (this->_WORDSIZE / 8); i > 0; i++) {
+		ordered_bytes.push_back(value >> ((i - 1) * 8));
+	}
+	return ordered_bytes;
+}
+
 
 void SINVM::execute_instruction(int opcode) {
 	/* 
@@ -138,7 +146,11 @@ void SINVM::execute_instruction(int opcode) {
 			REG_A = REG_A ^ xor_value;
 			break;
 
-		// TODO: bit shifting
+		case LSR: case LSL: case ROR: case ROL:
+		{
+			this->execute_bitshift(opcode);
+			break;
+		}
 
 		// Incrementing / decrementing registers
 		case INCA:
@@ -269,22 +281,108 @@ void SINVM::execute_instruction(int opcode) {
 			this->pop_stack();
 			break;
 
-		// Standard input/output
-		case INPUTB:
-			// get the contents of the standard input and store in REG_B
-			std::cin >> REG_B;
-			// clear cin's bits so the next input will be ok
-			std::cin.clear();
-			std::cin.ignore();
+		// SYSCALL INSTRUCTION
+		// Note the syscall instruction serves many purposes; see "Doc/syscall.txt" for more information
+		case SYSCALL:
+		{
+			// get the addressing mode
+			this->PC++;
+			uint8_t addressing_mode = *this->PC;
+
+			// increment the PC to point at the data and get the syscall number
+			this->PC++;
+			int syscall_number = this->get_data_of_wordsize();
+
+			// TODO: execute system call accordingly
+
+			// If our syscall is for stdin or stdout
+			if (syscall_number == 0x13) {
+				// get user input
+				// first, the program will look in the B register for the address where it should put the data
+				unsigned int start_address = REG_B;
+
+				// all input comes in as a string, but we want to save it as a series of bytes
+				std::string input;
+				std::getline(std::cin, input);
+				input.push_back('\0');	// add a null terminator
+
+				// if we can, convert the input into an integer
+				// otherwise, store them all as ascii characters
+				try {
+					// convert the data
+					int data = std::stoi(input);
+					// first, validate the memory address -- and make sure that both bytes of the word are valid
+					if (!address_is_valid(start_address) || !address_is_valid(start_address + 1)) {
+						// subtract memory_size at least one time
+						do {
+							start_address -= memory_size;
+						} while (!address_is_valid(start_address));
+					}
+					// store at the desired memory address
+					this->store_in_memory(start_address, data);
+				}
+				catch (std::exception &e) {
+					// make a vector of uint16_t to hold our input data
+					// TODO: generalize more for variable word sizes in VM ?
+					std::vector<uint16_t> input_bytes;
+					// iterate over the string and store the characters in 'input_bytes'
+					for (std::string::iterator string_character = input.begin(); string_character != input.end(); string_character++) {
+						input_bytes.push_back(*string_character);
+					}
+					// store those bytes in memory
+					// use size() here because we want to index
+					for (int i = 0; i < input_bytes.size(); i++) {
+						this->memory[start_address + i] = input_bytes[i];
+					}
+				}
+			}
+			else if (syscall_number == 0x14) {
+				// If we want to print something to the screen, we must specify the address where it starts
+				// It will print the bytes in memory until it hits a null terminator
+				// The system will use the ASCII value corresponding to the hex value stored in memory and print that
+
+				// the current address from which we are reading data
+				unsigned int current_address = REG_B;
+				// the current character we are on; start at 'start_address'
+				uint8_t current_char = this->memory[current_address];
+
+				std::string output_string;
+
+				// continue reading as long as we haven't hit a null character
+				while (current_char != '\0') {
+					output_string.push_back(current_char);	// add the character to our output string
+					current_address++;	// increment the address by one byte
+					current_char = this->memory[current_address];	// get the next character
+				}
+
+				// output the string we have created, enclosed in quotes
+				std::cout << "\"" <<  output_string << "\"" << std::endl;
+			}
+			else if (syscall_number == 0x15) {
+				// Read out the number of bytes stored in A, starting at the address stored in B, and print them (as raw hex values) to the standard output
+				int num_bytes = REG_A;	// number of bytes is in A
+				int start_address = REG_B;	// start address is in B
+
+				for (int i = 0; i < num_bytes; i++) {
+					// note -- must cast to int before output -- otherwise, it will print the character, not the hex value
+					std::cout << "$" << std::hex << (int)this->memory[start_address + i] << std::endl;
+				}
+			}
+			// TODO: check for more syscall numbers...
+			// if it is not a valid syscall number,
+			else {
+				throw std::exception("Unknown syscall number; halting execution.");
+			}
+
 			break;
-		case OUTPUTB:
-			std::cout << REG_B << std::endl;
-			break;
+		}
 
 		// if we encounter an unknown opcode
 		default:
+		{
 			throw std::exception("Unknown opcode; halting execution.");
 			break;
+		}
 	}
 
 	return;
@@ -400,15 +498,232 @@ void SINVM::execute_store(int reg_to_store) {
 			memory_address += this->REG_Y;
 		}
 
-		// make the assignment and return
-		for (int i = this->_WORDSIZE / 8; i > 0; i--) {
-			this->memory[memory_address + i] = reg_to_store >> ((i - 1) * 8);
-		}
+		this->store_in_memory(memory_address, reg_to_store);
 		return;
 	}
 	else if (addressing_mode == 3) {
 		// we cannot use immediate addressing with a store instruction, so throw an exception
 		throw std::exception("Invalid addressing mode for store instruction.");
+	}
+}
+
+int SINVM::get_data_from_memory(int address) {
+	// read value of _WORDSIZE in memory and return it in the form of an int
+	// different from "execute_load()" in that it doesn't affect the program counter and does not take addressing mode into consideration
+
+	int data = 0;
+	int wordsize_bytes = this->_WORDSIZE / 8;
+
+	for (int i = 0; i < (wordsize_bytes - 1); i++) {
+		data += this->memory[address + i];
+		data = data << (i * 8);
+	}
+	data += this->memory[address + (wordsize_bytes - 1)];
+
+	return data;
+}
+
+void SINVM::store_in_memory(int address, int new_value) {
+	// stores value "new_value" in memory address starting at "high_byte_address"
+	
+	/*
+	Make the assignment and return
+	We can't do this quite the same way here as we did in the assembler; because our memory address needs to start low, and our bit shift needs to start high, we have to do a little trickery to get it right -- let's use 32-bit wordsize assigning to location $00 as an example:
+	- First, we iterate from i=_WORDSIZE/8, so i=4
+	- Now, we assign the value at address [memory_address + (wordsize_bytes - i)], so we assign to value memory_address, or $00
+	- The value to assign is our value bitshifted by (i - 1) * 8; here, 24 bits; so, the high byte
+	- On the next iteration, i = 3; so we assign to location [$00 + (4 - 3)], or $01, and we assign the value bitshifted by 16 bits
+	- On the next iteration, i = 2; so we assign to location [$00 + (4 - 2)], or $02, and we assign the value bitshifted by 8 bits
+	- On the final iteration, i = 1; so we assign to location [$00 + (4 - 1)], $03, and we assign the value bitshifted by (1 - 1); the value to assign is then reg_to_store >> 0, which is the low byte
+	- That means we have the bytes ordered correctly in big-endian format
+	*/
+
+	int wordsize_bytes = this->_WORDSIZE / 8;
+	for (int i = wordsize_bytes; i > 0; i--) {
+		this->memory[address + (wordsize_bytes - i)] = new_value >> ((i - 1) * 8);
+	}
+
+	return;
+}
+
+void SINVM::execute_bitshift(int opcode)
+{
+
+	// TODO: correct for wordsize -- currently, highest bit is always 7; should be highest bit in the wordsize
+
+	// LOGICAL SHIFTS: 0 always shifted in; bit shifted out goes into carry
+	// ROTATIONS: carry bit shifted in; bit shifted out goes into carry
+
+	// check our addressing mode
+	this->PC++;
+	int addressing_mode = *this->PC;
+
+	if (addressing_mode != 7) {
+		int value_at_address;
+		uint8_t high_byte_address;
+		bool carry_set_before_bitshift = false;
+
+		// increment PC so we can use get_data_of_wordsize()
+		this->PC++;
+		int address = this->get_data_of_wordsize();
+
+		// if we have absolute addressing
+		if (addressing_mode == 0) {
+			high_byte_address = address >> 8;
+			value_at_address = this->get_data_from_memory(high_byte_address);
+
+			// get the original status of carry so we can set bits in ROR/ROL instructions later
+			carry_set_before_bitshift = this->is_flag_set('C');
+
+			// shift the bit
+			if (opcode == LSR || opcode == ROR) {
+				value_at_address = value_at_address >> 1;
+				
+				if (opcode == ROR && carry_set_before_bitshift) {
+					// ORing value_at_address with 128 will always set bit 7
+					value_at_address = value_at_address | 128;
+				}
+				else if (opcode == ROR && !carry_set_before_bitshift) {
+					// ANDing with 127 will leave every bit unchanged EXCEPT for bit 7, which will be cleared
+					value_at_address = value_at_address & 127;
+				}
+			}
+			else if (opcode == LSL || opcode == ROL) {
+				value_at_address = value_at_address << 1;
+
+				if (opcode == ROL && carry_set_before_bitshift) {
+					// ORing value_at_address with 1 will always set bit 0
+					value_at_address = value_at_address | 1;
+				}
+				else if (opcode == ROL && !carry_set_before_bitshift) {
+					// ANDing with 254 will leave every bit unchanged EXCEPT for bit 0, which will be cleared
+					value_at_address = value_at_address & 254;
+				}
+			}
+
+			this->store_in_memory(high_byte_address, value_at_address);
+		}
+		// if we have x-indexed addressing
+		else if (addressing_mode == 1) {
+			address += REG_X;
+			high_byte_address = address >> 8;
+			value_at_address = this->get_data_from_memory(high_byte_address);
+
+			// get the original status of carry so we can set bits in ROR/ROL instructions later
+			carry_set_before_bitshift = this->is_flag_set('C');
+
+			// shift the bit
+			if (opcode == LSR || opcode == ROR) {
+				value_at_address = value_at_address >> 1;
+			}
+			else if (opcode == LSL || opcode == ROL) {
+				value_at_address = value_at_address << 1;
+			}
+			this->store_in_memory(high_byte_address, value_at_address);
+		}
+		// if we have y-indexed addressing
+		else if (addressing_mode == 2) {
+			address += REG_Y;
+			high_byte_address = address >> 8;
+			value_at_address = this->get_data_from_memory(high_byte_address);
+
+			// get the original status of carry so we can set bits in ROR/ROL instructions later
+			carry_set_before_bitshift = this->is_flag_set('C');
+
+			// shift the bit
+			if (opcode == LSR || opcode == ROR) {
+				value_at_address = value_at_address >> 1;
+			}
+			else if (opcode == LSL || opcode == ROL) {
+				value_at_address = value_at_address << 1;
+			}
+
+			this->store_in_memory(high_byte_address, value_at_address);
+		}
+		// if we have indirect addressing (x)
+		else if (addressing_mode == 5) {
+
+			// TODO: enable indirect addressing
+
+		}
+		// if we have indirect addressing (y)
+		else if (addressing_mode == 6) {
+
+			// TODO: enable indirect addressing
+
+		}
+		// if we have an invalid addressing mode
+		// TODO: validate addressing mode in assembler for bitshifting instructions
+		else {
+			throw std::exception("Cannot use that addressing mode with bitshifting instructions.");
+		}
+
+		if (opcode == LSR || opcode == ROR) {
+			// if bit 0 was set
+			if ((value_at_address & 1) == 1) {
+				// set the carry flag
+				this->set_status_flag('C');
+			}
+			// otherwise
+			else {
+				// clear the carry flag
+				this->clear_status_flag('C');
+			}
+		}
+		else if (opcode == LSL || opcode == ROL) {
+			if ((value_at_address & 128) == 128) {
+				this->set_status_flag('C');
+			}
+			else {
+				this->clear_status_flag('C');
+			}
+		}
+	}
+	// if we have register addressing
+	else {
+		// so we know whether we need to set bit 7 or 0 after shifting
+		bool carry_set_before_bitshift = this->is_flag_set('C');
+
+		if (opcode == LSR || opcode == ROR) {
+			// now, set carry according to the current bit 7 or 0
+			if ((REG_A & 1) == 1) {
+				this->set_status_flag('C');
+			}
+			else {
+				this->clear_status_flag('C');
+			}
+			// shift the bit right
+			REG_A = REG_A >> 1;
+
+			if (opcode == ROR && carry_set_before_bitshift) {
+				// ORing with 128 will always set bit 7
+				REG_A = REG_A | 128;
+			}
+			else if (opcode == ROR && !carry_set_before_bitshift) {
+				// ANDing with 127 will always clear bit 7
+				REG_A = REG_A & 127;
+			}
+		}
+		else if (opcode == LSL || opcode == ROL) {
+			// now, set carry according to the current bit 7 or 0
+			if ((REG_A & 1) == 1) {
+				this->set_status_flag('C');
+			}
+			else {
+				this->clear_status_flag('C');
+			}
+			// shift the bit left
+			REG_A = REG_A << 1;
+
+			if (opcode == ROL) {
+				// ORing with 1 will always set bit 1
+				REG_A = REG_A | 1;
+			}
+			else if (opcode == ROL && !carry_set_before_bitshift) {
+				// ANDing with 254 will always clear bit 1
+				REG_A = REG_A & 254;
+			}
+		}
 	}
 }
 

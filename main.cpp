@@ -129,7 +129,7 @@ int main(int argc, char** argv) {
 					std::cerr << e.what() << std::endl;
 					std::cerr << "Press enter to exit." << std::endl;
 					std::cin.get();
-					exit(1);
+					exit(3);
 				}
 			}
 			else {
@@ -144,7 +144,7 @@ int main(int argc, char** argv) {
 				catch (std::exception& e) {
 					std::cerr << e.what() << std::endl << "Press enter to quit" << std::endl;
 					std::cin.get();
-					exit(1);
+					exit(3);
 				}
 			}
 		}

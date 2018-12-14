@@ -2,6 +2,7 @@
 
 
 const bool is_standalone(int opcode) {
+	// returns true if the instruction is to be used without a value following
 	int i = 0;
 	bool found = false;
 	while (!found && (i < num_standalone_opcodes)) {
@@ -14,6 +15,11 @@ const bool is_standalone(int opcode) {
 	}
 
 	return found;
+}
+
+const bool is_bitshift(int opcode) {
+	// returns true if the instruction is a bitshift instruction
+	return (opcode == LSL || opcode == LSR || opcode == ROL || opcode == ROR);
 }
 
 // Our various utility functions
@@ -96,7 +102,8 @@ bool Assembler::is_mnemonic(std::string candidate) {
 	bool found = false;
 
 	while (!found && (index < num_instructions)) {
-		if (candidate == instructions_list[index]) {
+		// if our candidate string is in the instructions list (use regex so we can ignore case)
+		if (std::regex_match(instructions_list[index], std::regex(candidate, std::regex_constants::icase))) {
 			found = true;
 		}
 		else {
@@ -292,7 +299,8 @@ int Assembler::get_opcode(std::string mnemonic) {
 	while ((!found) && (index < num_instructions)) {
 		// if our instruction is in the list
 		// it's a small enough list that we can iterate over it without concern
-		if (mnemonic == instructions_list[index]) {
+		// use regex so we can ignore the case
+		if (std::regex_match(instructions_list[index], std::regex(mnemonic, std::regex_constants::icase))) {
 			// set found
 			found = true;
 		}
@@ -325,9 +333,10 @@ uint8_t Assembler::get_address_mode(std::string value, std::string offset) {
 	$01	-	X-indexed	(e.g., 'LOADA $1234, X')
 	$02	-	Y-indexed	(e.g., 'LOADA $1234, Y')
 	$03	-	Immediate	(e.g., 'LOADA #$1234')
-	$04	-	Relative	(used for branching?)
+	??	$04	-	8-bit		(e.g., 'STOREA $12')
 	$05	-	Indirect indexed with X	(e.g., 'LOADA ($1234, X)')
 	$06	-	Indirect indexed with Y	(e.g., 'LOADA ($1234, Y)')
+	$07	-	Register	(e.g., 'LSR A')	-	Can only be used with bitshift operations
 
 	*/
 
@@ -494,6 +503,19 @@ std::vector<uint8_t> Assembler::assemble()
 						for (int i = this->_WORDSIZE / 8; i > 0; i--) {
 							uint8_t byte = label_value << ((i - 1) * 8);
 							program_data.push_back(byte);
+						}
+					}
+					// if the value is 'A'
+					else if (value == "A" || value == "a") {
+						// check to make sure the opcode is a bitshift instruction
+						if (is_bitshift(opcode)) {
+							// addressing mode for register operations is 0x07
+							addressing_mode = 0x07;
+							program_data.push_back(addressing_mode);
+						}
+						// if it's not a bitshift instruction, throw an exception
+						else {
+							throw std::exception(("Cannot use 'A' as an operand unless with a bitshift instruction (line " + std::to_string(this->line_counter) + ")").c_str());
 						}
 					}
 					// otherwise, carry on normally

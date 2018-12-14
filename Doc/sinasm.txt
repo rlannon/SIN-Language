@@ -1,0 +1,77 @@
+SINASM.TXT
+
+An overview of the assembly language for the SIN Virtual Machine.
+
+SINASM is an assembly language inspired by (and syntactically similar to) the assembly language for the 6502 and NES. It currently contains around 50 instructions which operate on 7 registers (A, B, X, Y, PC, SP, and STATUS).
+
+The general syntax of an assembly instruction is one of any of the following forms
+	MNEMONIC
+	MNEMONIC VALUE
+	MACRO = VALUE
+	.LABEL:
+where 'value' can be a label, macro, or addressing value, and 'mnemonic' is any of the mnemonics for the SINASM opcodes.
+
+All SINVM machine language files (extension: .sml or .sinc) will be created using a specific machine wordsize; this is specified in the file (and upon the creation of a SINVM object), but defaults to 16 bits. This determines how many bytes registers will use when storing or loading values.
+
+All opcodes in SINASM are 1 byte long. Many instructions are followed by one byte describing the addressing mode to be used by that instruction, and some instructions will be followed by a 'value', always interpreted by the VM as a value the size of the machine's word size; values that are larger must be dealt with manually by the programmer.
+
+A few notes before we get into the instructions/opcodes:
+	-	Comments in SINASM always use a semicolon (;), as is typical of many assembly languages
+	-	Immediate values are prefixed by #
+	-	Hex values are prefixed by $
+	-	Binary values are prefixed by %
+	-	Values with no base prefix are decimal
+	-	Immediate value prefix always comes before the base prefix
+	-	Style standard suggests instructions should use capital letters, but the searches are case insensitive and so it is not pertinent
+
+REGISTERS:
+	There are 7 registers in the SIN VM; 3 system-use registers, 4 programmable:
+		- A register (accumulator)		-	used with the ALU
+		- X register (general purpose)	-	one of two general purpose registers
+		- Y register (general purpose)	-	"
+		- B register (system register)	-	used for the syscall instruction
+		- STATUS	 (system status)	-	contains various flags that contain information about the processor's current state
+		- SP		 (stack pointer)	-	contains the next address to which information will be written in the stack
+		- PC		 (program counter)	-	contains the address of the next instruction to be executed
+	The programmable registers (A, B, X, Y) can use the following instructions (_ to be replaced with register name):
+		- LOAD_		Load the specified register with a value
+		- STORE_	Store the value in the register at a memory location
+		- INC_		Increment the value in a register
+		- DEC_		Decrement the value in a register
+			-	NOTE: INC_ and DEC_ can only be used with A, X, and Y (i.e., not with B)
+		- CMP_		Compare the value in the register with some other value
+		- TA_		Transfer the value in A to another register
+		- T_A		Transfer the value of another register to A
+			Note: _ can also be the stack pointer
+	There are a few instructions relating to system registers as well:
+		- CLC		Clear the carry bit in the STATUS register
+		- SEC		Set the carry bit in the STATUS register
+
+ALU INSTRUCTIONS:
+	All ALU-related instructions operate on register A /only/.
+		- ADDCA		Add register A (with carry) to some value, storing the result in A
+		- SUBCA		Subtract some value (with carry) from register A ...
+		- ANDA		Logical AND some value with A ...
+		- ORA		Logical OR some value with A ...
+		- XORA		Logical XOR with A ...
+		- LSR		Logical shift right on some memory (or A)
+		- LSL		Logical shift left on some memory (or A)
+		- ROR		Rotate right on some memory (or A)
+		- ROL		Rotate left on some memory (or A)
+	Note: LSR, LSL, ROR, and ROL are the /only/ instructions that can take 'A' as a value (e.g., 'LSR A')
+
+CONTROL FLOW INSTRUCTIONS:
+	There are both conditional and unconditional jumps in SINASM. Conditional jumps use the STATUS register to determine when to branch.
+		- JMP		Unconditional jump; sets the address of the PC to the next instruction to be executed -1; when the PC is incremented at the end of the instruction, it is on the correct address.
+		- BR__		Executes a jump based on whether certain bits in the STATUS register are set.
+			- BREQ		Branch if equal (if the Z flag is set)
+			- BRNE		Branch is not equal (if Z flag is not set)
+			- BRGT		Branch if greater than (if carry flag is set)
+			- BRLT		Branch if less than (if carry flag is clear)
+			- BRZ		Branch if zero	(if the result of the last operation was zero)
+		- Subroutines
+			- JSR		Jump to subroutine; pushes the return address to the stack and performs a jump instruction
+			- RTS		Return from subroutine; pulls the return address off the stack and jumps to that address
+			- Note this functionality can be done without use of these instructions, but they make it easier
+
+

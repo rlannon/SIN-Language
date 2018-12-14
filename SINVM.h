@@ -24,7 +24,7 @@ class SINVM
 
 	// create objects for our program counter and stack pointer
 	uint8_t* PC;
-	size_t SP;
+	size_t SP;	// why of different types? should be consistent...
 
 	// TODO: reconcile types...PC must be more than 1 byte, but if we are dealing with bytes...
 	// Combine opcode and addressing mode into one byte, and change from uint8_t as base memory unit to int ?
@@ -61,12 +61,20 @@ class SINVM
 
 	// read a value in memory
 	int get_data_of_wordsize();
+	std::vector<uint8_t> get_properly_ordered_bytes(int value);
 
 	// execute a single instruction
 	void execute_instruction(int opcode);
 
+	// instruction-specific load/store functions
 	void execute_load(int* reg_target);
 	void execute_store(int reg_to_store);
+
+	// generic load/store functions
+	int get_data_from_memory(int address);
+	void store_in_memory(int address, int new_value);
+
+	void execute_bitshift(int opcode);
 
 	void execute_comparison(int reg_to_compare);
 	void execute_jmp();
