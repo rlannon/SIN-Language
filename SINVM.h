@@ -8,7 +8,9 @@
 #include <iostream>
 
 #include "Assembler.h"
-// #include "FundamentalDataTypes.h"	// included in Assembler.h, but commenting here to denote that functions from it are being used in this class
+#include "LoadSINC.h"	// to load a .SINC file
+// #include "BinaryIO.h"	// included in Assembler.h, but commenting here to denote that functions from it are being used in this class
+// #include "OpcodeConstants.h"	// included in Assembler.h, but commenting here to serve as a reminder that the constants are used in this class so we don't need to use the hex values whenever referencing an instruction
 
 /*
 	The virtual machine that will be responsible for interpreting SIN bytecode
@@ -67,7 +69,7 @@ class SINVM
 	void execute_instruction(int opcode);
 
 	// instruction-specific load/store functions
-	void execute_load(int* reg_target);
+	int execute_load();
 	void execute_store(int reg_to_store);
 
 	// generic load/store functions
@@ -88,9 +90,6 @@ class SINVM
 	void clear_status_flag(char flag);	// clear the status flag whose abbreviation is equal to the character 'flag'
 	uint8_t get_processor_status();	// return the status register
 	bool is_flag_set(char flag);	// tells us if a specific flag is set
-
-	// file I/O
-	std::tuple<uint8_t, std::vector<uint8_t>> load_sinc_file(std::istream& file);	// load our file (if there is one) and populate our instructions list
 public:
 	// entry function for the VM -- execute a program
 	void run_program();

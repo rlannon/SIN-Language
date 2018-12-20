@@ -69,28 +69,28 @@ void SINVM::execute_instruction(int opcode) {
 		// load/store registers
 		// all cases use the execute_load() and execute_store() functions, just on different registers
 		case LOADA:
-			this->execute_load(&REG_A);
+			REG_A = this->execute_load();
 			break;
 		case STOREA:
 			this->execute_store(REG_A);
 			break;
 
 		case LOADB:
-			this->execute_load(&REG_B);
+			REG_B = this->execute_load();
 			break;
 		case STOREB:
 			this->execute_store(REG_B);
 			break;
 
 		case LOADX:
-			this->execute_load(&REG_X);
+			REG_X = this->execute_load();
 			break;
 		case STOREX:
 			this->execute_store(REG_X);
 			break;
 	
 		case LOADY:
-			this->execute_load(&REG_Y);
+			REG_Y = this->execute_load();
 			break;
 		case STOREY:
 			this->execute_store(REG_Y);
@@ -107,45 +107,49 @@ void SINVM::execute_instruction(int opcode) {
 		// ALU instructions
 		// For these, we will use our load function to get the data we want in addition to the A register; we won't put it in the a register, but we will use the function because it will give it to us no problem
 		case ADDCA:
-			int addend;
-			this->execute_load(&addend);
+		{
+			int addend = this->execute_load();
 
 			// add the fetched data to A
 			REG_A += addend;
 			break;
+		}
 		case SUBCA:
-			// in subtraction, REG_A is the minuend and the value supplied is the subtrahend
-			int subtrahend;
-			this->execute_load(&subtrahend);
+		{
+				// in subtraction, REG_A is the minuend and the value supplied is the subtrahend
+				int subtrahend = this->execute_load();
 
-			if (subtrahend > REG_A) {
-				this->set_status_flag('N');	// set the N flag if the result is negative, which will be the case if subtrahend > REG_A
-			}
-			else if (subtrahend == REG_A) {
-				this->set_status_flag('Z');	// set the Z flag if the two are equal, as the result will be 0
-			}
+				if (subtrahend > REG_A) {
+					this->set_status_flag('N');	// set the N flag if the result is negative, which will be the case if subtrahend > REG_A
+				}
+				else if (subtrahend == REG_A) {
+					this->set_status_flag('Z');	// set the Z flag if the two are equal, as the result will be 0
+				}
 
-			REG_A -= subtrahend;
-			break;
+				REG_A -= subtrahend;
+				break;
+		}
 		case ANDA:
-			int and_value;
-			this->execute_load(&and_value);
+		{
+			int and_value = this->execute_load();
 
 			REG_A = REG_A & and_value;
 			break;
+		}
 		case ORA:
-			int or_value;
-			this->execute_load(&or_value);
+		{
+			int or_value = this->execute_load();
 
 			REG_A = REG_A | or_value;
 			break;
+		}
 		case XORA:
-			int xor_value;
-			this->execute_load(&xor_value);
+		{
+			int xor_value = this->execute_load();
 
 			REG_A = REG_A ^ xor_value;
 			break;
-
+		}
 		case LSR: case LSL: case ROR: case ROL:
 		{
 			this->execute_bitshift(opcode);
@@ -389,7 +393,7 @@ void SINVM::execute_instruction(int opcode) {
 }
 
 
-void SINVM::execute_load(int* reg_target) {
+int SINVM::execute_load() {
 	/*
 	
 	Execute a LOAD_ instruction. This function takes a pointer to the register we want to load and executes the load instruction accordingly, storing the ultimate fetched result in the register we passed into the function.
@@ -434,24 +438,15 @@ void SINVM::execute_load(int* reg_target) {
 		}
 
 		// now, data_to_load definitely contains the correct start address
-		// our starting address is data_to_load
-		for (int i = 0; i < (this->_WORDSIZE / 8); i++) {
-			data_in_memory = data_in_memory + this->memory[data_to_load + i];	// get the value at the address of data_to_load indexed with i
-			data_in_memory = data_in_memory << 8;
-		}
-		data_in_memory = data_in_memory >> 8;	// we went one too far in the loop, so move the data back to its proper place
+		data_in_memory = this->get_data_from_memory(data_to_load);
 
 		// load our target register with the data we fetched
-		*reg_target = data_in_memory;
-
-		// we are done
-		return;
+		return data_in_memory;
 	}
 	else if (addressing_mode == 3) {
 		// if we are using immediate addressing, data_to_load is the data we want to load
 		// simply assign it to our target register and return
-		*reg_target = data_to_load;
-		return;
+		return data_to_load;
 	}
 
 	/*
@@ -498,7 +493,9 @@ void SINVM::execute_store(int reg_to_store) {
 			memory_address += this->REG_Y;
 		}
 
+		// use our store_in_memory function
 		this->store_in_memory(memory_address, reg_to_store);
+
 		return;
 	}
 	else if (addressing_mode == 3) {
@@ -729,8 +726,7 @@ void SINVM::execute_bitshift(int opcode)
 
 
 void SINVM::execute_comparison(int reg_to_compare) {
-	int to_compare;
-	this->execute_load(&to_compare);
+	int to_compare = this->execute_load();
 
 	// if the values are equal, set the Z flag; if they are not, clear it
 	if (reg_to_compare == to_compare) {
@@ -956,6 +952,7 @@ void SINVM::run_program() {
 void SINVM::_debug_values() {
 	std::cout << "SINVM Values:" << std::endl;
 	std::cout << "\t" << "Registers:" << "\n\t\tA: $" << std::hex << this->REG_A << std::endl;
+	std::cout << "\t\tB: $" << std::hex << this->REG_B << std::endl;
 	std::cout << "\t\tX: $" << std::hex << this->REG_X << std::endl;
 	std::cout << "\t\tY: $" << std::hex << this->REG_Y << std::endl;
 	std::cout << "\t\tSTATUS: $" << std::hex << (int)this->STATUS << std::endl << std::endl;
@@ -969,52 +966,11 @@ void SINVM::_debug_values() {
 }
 
 
-std::tuple<uint8_t, std::vector<uint8_t>> SINVM::load_sinc_file(std::istream& file) {
-	// a vector to hold our program data
-	std::vector<uint8_t> program_data;
-
-	// first, read the magic number
-	char header[4];
-	char * buffer = &header[0];
-
-	file.read(buffer, 4);
-
-	// if our magic number is valid
-	if (header[0, 1, 2, 3] == * "s", "i", "n", "C") {
-		// must have the correct version
-		uint8_t version = readU8(file);
-
-		if (version == 1) {
-			// get the word size
-			uint8_t word_size = readU8(file);
-			// get the program size
-			uint16_t program_size = readU16(file);
-
-			// use program_size to read the proper number of bytes
-			int i = 0;
-			while (!file.eof() && i < program_size) {
-				program_data.push_back(readU8(file));
-				i++;
-			}
-
-			// return word size and the program data vector
-			return std::make_tuple(word_size, program_data);
-		}
-		// cannot handle any other versions right now because they don't exist yet
-		else {
-			throw std::exception("Other .sinc file versions not supported at this time.");
-		}
-	}
-	else {
-		throw std::exception("Invalid magic number in file header.");
-	}
-}
-
 
 SINVM::SINVM(std::istream& file)
 {
 	// first, load the data from our .sinc file and copy it in appropriately
-	std::tuple<uint8_t, std::vector<uint8_t>> sinc_data = this->load_sinc_file(file);
+	std::tuple<uint8_t, std::vector<uint8_t>> sinc_data = load_sinc_file(file);
 
 	// set the data as is appropriate for the
 	this->_WORDSIZE = std::get<0>(sinc_data);

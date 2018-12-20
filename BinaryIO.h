@@ -6,11 +6,7 @@
 /*
 
 This header lays out all of the necessary functions for writing and reading binary files. It establishes our fundamental data types and functions for reading/writing those types to binary files.
-This header only needs to be included in the .cpp files for a file format specification; the header files shouldn't need any of these functions.
-
 Note that these functions are used for reading and writing *unsigned* 8/16/32 bit values; for signed values, simply cast the signed integer to an unsigned value before writing and cast back to a signed value after reading.
-
-Included here also also functions for returning the proper data path; this is by default set to data/ but having one place to change it makes it easier for future changes in library hierarchy.
 
 */
 

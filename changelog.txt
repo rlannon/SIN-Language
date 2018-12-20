@@ -1,0 +1,21 @@
+CHANGELOG.TXT
+
+A list of changes made since last git commit. This file will go into more detail about the changes than the commit text will.
+
+- Added changelog file; this file's purpose is to log changes as they are made and to go into greater depth about the changes that were made and /why/ they were made.
+
+- Moved all of the opcode constant definitions into "OpcodeConstants.h", which is included in "Assembler.h". The point of this is to:
+	- Declutter the Assembler header file
+	- Keep the code more organized and maintainable
+
+- Changed "void SINVM::execute_load(int* reg_target)" to "int SINVM::execute_load()"; there is no good reason to have it modify an integer via pointers when it can just return one. While modifying the integer may be emblematic of some other programming style, there is no point to doing it this way so it was changed to return an int.
+
+- Added more comments to code in order to make it more readable
+
+- Simplified some expressions throughout in an attempt to clean up the code
+
+- Added macro support in the assembler. The assembler will parse all macros in the second pass. Unlike labels, macros cannot be referenced before assignment/declaration (much like variables in SIN). This is because labels get their own pass in the assembler to be added; macros are parsed on the second pass. This allows them to be changed after their use.
+
+- Added a disassemble function. Given a SIN bytecode / compiled SIN file, it will produce a SINASM file of a given name based on the compiled file supplied. Note that labels and macros are NOT preserved.
+
+- Moved the function to load a sinc file into its own file; because it is referenced by both the Assembler and the SINVM, it should be accessible to both in one file, rather than having duplicate definitions in separate files. And, because no instance of the Assembler is opened within the SINVM, it made the most sense to move it into its own file.

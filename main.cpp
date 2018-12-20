@@ -34,6 +34,7 @@ int main(int argc, char** argv) {
 
 	// Program mode -- interpret by default; compile only if we set the flag
 	bool compile = false;
+	bool disassemble = false;
 
 	// Create the path for our source file
 	std::string src_file_path;
@@ -48,6 +49,10 @@ int main(int argc, char** argv) {
 
 		if (src_file_path.substr(src_file_path.size() - 2) == "-c") {
 			compile = true;
+			src_file_path.erase((src_file_path.size() - 3), (src_file_path.size() - 1));
+		}
+		else if (src_file_path.substr(src_file_path.size() - 2) == "-d") {
+			disassemble = true;
 			src_file_path.erase((src_file_path.size() - 3), (src_file_path.size() - 1));
 		}
 	}
@@ -66,6 +71,9 @@ int main(int argc, char** argv) {
 			}
 			else if (std::regex_search(argv[1], std::regex("(compile)|(-c)", std::regex::icase))) {
 				compile = true;
+			}
+			else if (std::regex_search(argv[1], std::regex("(disassemble)|(-d)", std::regex::icase))) {
+				disassemble = true;
 			}
 			// if the user entered nonsense
 			else {
@@ -98,18 +106,32 @@ int main(int argc, char** argv) {
 	if (src_file.is_open()) {
 		// if it is precompiled
 		if (std::regex_search(src_file_path, std::regex(".sinc"))) {
-			try {
-				SINVM sinVM(src_file);	// we don't need to disassemble; is a .sinc file
-				sinVM.run_program();
-				sinVM._debug_values();
+			if (!disassemble) {
+				try {
+					SINVM sinVM(src_file);	// we don't need to disassemble; is a .sinc file
+					sinVM.run_program();
+					sinVM._debug_values();
 
-				std::cout << "Compiled." << std::endl;
+					std::cout << "Compiled." << std::endl;
+				}
+				catch (std::exception& e) {
+					std::cerr << e.what() << std::endl;
+					std::cerr << "Press enter to exit" << std::endl;
+					std::cin.get();
+					exit(1);
+				}
 			}
-			catch (std::exception& e) {
-				std::cerr << e.what() << std::endl;
-				std::cerr << "Press enter to exit" << std::endl;
-				std::cin.get();
-				exit(1);
+			else {
+				try {
+					Assembler assemble(&src_file);
+					assemble.disassemble(src_file, "disassembled.sina");
+				}
+				catch (std::exception& e) {
+					std::cerr << e.what() << std::endl;
+					std::cerr << "Press enter to exit" << std::endl;
+					std::cin.get();
+					exit(1);
+				}
 			}
 			std::cerr << "Press enter to exit" << std::endl;
 			std::cin.get();
@@ -135,7 +157,7 @@ int main(int argc, char** argv) {
 			else {
 				try {
 					Assembler assemble(&src_file);
-					assemble.create_sinc_file("multiply_compiled");
+					assemble.create_sinc_file("compiled");
 					std::cout << "Compiled." << std::endl;
 
 					std::cout << "Press enter to exit" << std::endl;

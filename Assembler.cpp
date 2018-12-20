@@ -114,6 +114,26 @@ bool Assembler::is_mnemonic(std::string candidate) {
 	return found;
 }
 
+bool Assembler::is_opcode(int candidate)
+{
+	// if the candidate is an opcode mnemonic, return true
+
+	int index = 0;
+	bool found = false;
+
+	while (!found && (index < num_instructions)) {
+		// if our candidate string is in the instructions list (use regex so we can ignore case)
+		if (candidate == opcodes[index]) {
+			found = true;
+		}
+		else {
+			index++;
+		}
+	}
+
+	return found;
+}
+
 int Assembler::get_integer_value(std::string value) {
 	// if the string begins with a prefix to denote its base (i.e. $ or %), convert it
 	// else, just use std::stoi to convert the integer
@@ -252,10 +272,9 @@ std::list<std::tuple<std::string, int>> Assembler::construct_symbol_table() {
 		}
 		// if it's not a label and its not a mnemonic, but it isalpha(), then it must be a macro
 		else if (isalpha(line_data[0])) {
-			// macros at the beginning of a line are used by the assembler itself, and will not go into the final .sinc file
-			// as such, ignore it; skip the rest of the line
-			this->read_while(&this->is_not_newline);	// read until peek() returns a newline character
-			this->asm_file->get();	// eat the newline character
+			// Macros should be skipped in pass 1
+			this->read_while(&this->is_not_newline);
+			this->skip();
 			continue;
 		}
 	}
@@ -317,6 +336,39 @@ int Assembler::get_opcode(std::string mnemonic) {
 	// otherwise, throw an exception; the instruction they want was not recognized
 	else {
 		throw std::exception(("Unrecognized instruction '" + mnemonic + "'").c_str());
+	}
+}
+
+// get the mnemonic of a given opcode
+std::string Assembler::get_mnemonic(int opcode)
+{
+	// some utility variables -- an index and a variable to tell us whether we have found the right instruction
+	bool found = false;
+	int index = 0;
+
+	// iterate through the list as long as we a) haven't found the right opcode and b) haven't gone past the end
+	while ((!found) && (index < num_instructions)) {
+		// if our instruction is in the list
+		// it's a small enough list that we can iterate over it without concern
+		if (opcode == opcodes[index]) {
+			// set found
+			found = true;
+		}
+		else {
+			// only increment the index if we haven't found it
+			index++;
+		}
+	}
+
+	// if we found the mnemonic during our search, return it
+	if (found) {
+		return instructions_list[index];
+	}
+	// otherwise, throw an exception; the instruction they want was not recognized
+	else {
+		std::stringstream hex_number;
+		hex_number << std::hex << opcode;	// format the decimal number as hex
+		throw std::exception(("Unrecognized instruction opcode '$" + hex_number.str() + "'").c_str());
 	}
 }
 
@@ -506,7 +558,7 @@ std::vector<uint8_t> Assembler::assemble()
 						}
 					}
 					// if the value is 'A'
-					else if (value == "A" || value == "a") {
+					else if ((value.size() == 1) && (value == "A" || value == "a")) {
 						// check to make sure the opcode is a bitshift instruction
 						if (is_bitshift(opcode)) {
 							// addressing mode for register operations is 0x07
@@ -543,8 +595,23 @@ std::vector<uint8_t> Assembler::assemble()
 						// push_back the addressing mode and turn 'value' into a series of big_endian bytes
 						program_data.push_back(addressing_mode);
 
-						// get the integer value of the string that contains our value (might have flags like $ or %)
-						int converted_value = get_integer_value(value);
+						// if 'value' starts with a pound sign, delete it
+						if (value[0] == '#') {
+							value = value.substr(1);
+						}
+						
+						// declare the converted_value variable
+						int converted_value;
+
+						// now, if 'value' starts with a letter, get its value
+						if (isalpha(value[0])) {
+							converted_value = this->get_value_of(value);	// get the value associated with the symbol
+						}
+						// otherwise, it must be a digit
+						else {
+							// get the integer value of the string that contains our value (might have flags like $ or %)
+							converted_value = get_integer_value(value);
+						}
 
 						// Get the bytes in big-endian format -- we first get the highest byte, then the second-highest...
 						for (int i = this->_WORDSIZE / 8; i > 0; i--) {
@@ -575,11 +642,34 @@ std::vector<uint8_t> Assembler::assemble()
 			else if (isalpha(opcode_or_symbol[0])) {
 				// if we have a macro
 				if (string_delimited.size() >= 3) {
-					if (string_delimited[2] == "=") {
+					if (string_delimited[1] == "=") {
 						// we have a macro
 
-						// TODO: enable macros
+						// macros can only be assigned one time; as such, if it is at the beginning of the line, then we have the initial assignment
+						std::string macro_name = string_delimited[0];
+						int macro_value = this->get_integer_value(string_delimited[2]);
 
+						// if the macro name is already in the symbol table, update the value
+						bool is_in_symbol_table = false;
+						std::list<std::tuple<std::string, int>>::iterator iter = this->symbol_table.begin();
+
+						while (iter != this->symbol_table.end() && !is_in_symbol_table) {
+							if (macro_name == std::get<0>(*iter)) {
+								is_in_symbol_table = true;
+							}
+							else {
+								iter++;
+							}
+						}
+						
+						// if it's not in the symbol table, add it
+						if (!is_in_symbol_table) {
+							this->symbol_table.push_back(std::make_tuple(macro_name, macro_value));
+						}
+						// otherwise, update the reference
+						else {
+							*iter = std::make_tuple(macro_name, macro_value);
+						}
 					}
 					else {
 						throw std::exception(("Leading macros must be followed by an equals sign. (line " + std::to_string(this->line_counter) + ")").c_str());
@@ -609,6 +699,101 @@ std::vector<uint8_t> Assembler::assemble()
 	// return our machine code
 	return program_data;
 }
+
+
+
+// disassemble a .sinc file and produce a .sina file of the same name
+
+void Assembler::disassemble(std::istream& sinc_file, std::string output_file_name) {
+	// first, read in the file data
+	std::tuple<uint8_t, std::vector<uint8_t>> file_data = load_sinc_file(sinc_file);	// a vector of bytes for our .sinc file data
+	
+	// load the file data appropriately
+	this->_WORDSIZE = std::get<0>(file_data);
+	std::vector<uint8_t> program_data = std::get<1>(file_data);
+
+	// create our output file
+	std::ofstream sina_file;
+	sina_file.open(output_file_name, std::ios::out);
+
+	// iterate through our vector of bytes
+	std::vector<uint8_t>::iterator program_iterator = program_data.begin();
+	while (program_iterator != program_data.end()) {
+		int opcode = *program_iterator;
+
+		// if we have a valid opcode
+		if (is_opcode(opcode)) {
+			// if it's a standalone opcode, write it to the file, add a newline character, and continue
+			if (is_standalone(*program_iterator)) {
+				sina_file << get_mnemonic(*program_iterator) << std::endl;
+				program_iterator++;
+				continue;
+			}
+			else {
+				// get the addressing mode
+				program_iterator++;
+				uint8_t addressing_mode = *program_iterator;
+
+				program_iterator++;
+				// get the number of bytes as is appropriate for the wordsize
+				int value = 0;
+				for (int i = this->_WORDSIZE / 8; i > 0; i--) {
+					value += *program_iterator;	// add the value of the program iterator to 'value'
+					value = value << ((i - 1) * 8);	// will shift by 0 the last time
+					program_iterator++;	// increment the iterator
+				}
+
+				// write the opcode
+				sina_file << get_mnemonic(opcode) << " ";
+
+				// write the value, the format of which depends on the addressing mode
+				if (addressing_mode == 0) {
+					sina_file << "$" << std::hex << value << std::endl;
+				}
+				else if (addressing_mode == 1) {
+					sina_file << "$" << std::hex << value << ", X" << std::endl;
+				}
+				else if (addressing_mode == 2) {
+					sina_file << "$" << std::hex << value << ", Y" << std::endl;
+				}
+				else if (addressing_mode == 3) {
+					sina_file << "#$" << std::hex << value << std::endl;
+				}
+				else if (addressing_mode == 4) {
+					// TODO: add 8-bit mode ?
+				}
+				else if (addressing_mode == 5) {
+					sina_file << "($" << std::hex << value << ", X)" << std::endl;
+				}
+				else if (addressing_mode == 6) {
+					sina_file << "($" << std::hex << value << ", Y)" << std::endl;
+				}
+				else if (addressing_mode == 7) {
+					sina_file << "A" << std::endl;
+				}
+
+				continue;
+			}
+		}
+		else {
+			std::stringstream hex_number;
+			hex_number << std::hex << *program_iterator;	// format the decimal number as hex
+			throw std::exception(("Unrecognized instruction opcode '$" + hex_number.str() + "'").c_str());
+		}
+	}
+
+	// close the file and return to caller
+	sina_file.close();
+	return;
+}
+
+
+
+/************************************************************************************************************************
+****************************************			.SINC FILE FORMAT			*****************************************
+************************************************************************************************************************/
+
+
 
 void Assembler::create_sinc_file(std::string output_file_name)
 {
@@ -669,6 +854,12 @@ void Assembler::create_sinc_file(std::string output_file_name)
 
 
 
+/************************************************************************************************************************
+****************************************			CLASS CONSTRUCTOR			*****************************************
+************************************************************************************************************************/
+
+
+
 Assembler::Assembler(std::ifstream* asm_file, uint8_t _WORDSIZE)
 {
 	// set our line counter to 0
@@ -684,13 +875,7 @@ Assembler::Assembler(std::ifstream* asm_file, uint8_t _WORDSIZE)
 	this->_WORDSIZE = _WORDSIZE;
 
 	// ensure it was actually a valid size
-	if (_WORDSIZE == 32) {
-		this->_WORDSIZE = 32;
-	}
-	else if (_WORDSIZE == 64) {
-		this->_WORDSIZE = 64;
-	}
-	else if (_WORDSIZE != 16) {
+	if (_WORDSIZE != 16 && _WORDSIZE != 32 && _WORDSIZE != 64) {
 		throw std::exception(("Cannot initialize machine word size to a value of " + std::to_string(_WORDSIZE) + "; must be 16, 32, or 64").c_str());
 	}
 }
