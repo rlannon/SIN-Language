@@ -30,12 +30,12 @@ int SINVM::get_data_of_wordsize() {
 
 	// loop one time too few
 	for (int i = 1; i < this->_WORDSIZE / 8; i++) {
-		data_to_load = data_to_load + *this->PC;
+		data_to_load = data_to_load + this->memory[this->PC];
 		data_to_load = data_to_load << 8;
 		this->PC++;
 	}
 	// and put the data in on the last time -- this is to prevent incrementing PC too much or bitshifting too far
-	data_to_load = data_to_load + *this->PC;
+	data_to_load = data_to_load + this->memory[this->PC];
 
 	return data_to_load;
 }
@@ -250,6 +250,49 @@ void SINVM::execute_instruction(int opcode) {
 				this->PC += 3;
 			}
 			break;
+		case JSR:
+		{
+			// get the addressing mode
+			this->PC++;
+			uint8_t addressing_mode = this->memory[this->PC];
+
+			// get the value
+			this->PC++;
+			int address_to_jump = this->get_data_of_wordsize();
+			address_to_jump += this->program_start_address;
+
+			int return_address = this->PC;
+
+			// if the CALL_SP is greater than _CALL_STACK_BOTTOM, we have not written past the end of it
+			if (this->CALL_SP >= _CALL_STACK_BOTTOM) {
+				// memory size is 16 bits but...do this anyways
+				for (int i = 0; i < (this->_WORDSIZE / 8);  i++) {
+					uint8_t memory_byte = return_address >> (i * 8);
+					this->memory[CALL_SP] = memory_byte;
+					this->CALL_SP--;
+				}
+			}
+			else {
+				throw std::exception("**** EXCEPTION: Stack overflow!");
+			}
+
+			this->PC = address_to_jump - 1;
+
+			break;
+		}
+		case RTS:
+		{
+			int return_address = 0;
+			if (this->CALL_SP <= _CALL_STACK) {
+				for (int i = (this->_WORDSIZE / 8); i > 0; i--) {
+					CALL_SP++;
+					return_address += memory[CALL_SP];
+					return_address = return_address << ((i - 1) * 8);
+				}
+			}
+			this->PC = return_address;
+			break;
+		}
 
 		// Register transfers
 		case TBA:
@@ -291,7 +334,7 @@ void SINVM::execute_instruction(int opcode) {
 		{
 			// get the addressing mode
 			this->PC++;
-			uint8_t addressing_mode = *this->PC;
+			uint8_t addressing_mode = this->memory[this->PC];
 
 			// increment the PC to point at the data and get the syscall number
 			this->PC++;
@@ -407,7 +450,7 @@ int SINVM::execute_load() {
 
 	// the next data we have is the addressing mode
 	this->PC++;
-	uint8_t addressing_mode = *this->PC;
+	uint8_t addressing_mode = this->memory[this->PC];
 
 	this->PC++;
 
@@ -467,7 +510,7 @@ int SINVM::execute_load() {
 void SINVM::execute_store(int reg_to_store) {
 	// our next byte is the addressing mode
 	this->PC++;
-	uint8_t addressing_mode = *this->PC;
+	uint8_t addressing_mode = this->memory[this->PC];
 
 	this->PC++;
 
@@ -553,7 +596,7 @@ void SINVM::execute_bitshift(int opcode)
 
 	// check our addressing mode
 	this->PC++;
-	int addressing_mode = *this->PC;
+	int addressing_mode = this->memory[this->PC];
 
 	if (addressing_mode != 7) {
 		int value_at_address;
@@ -755,7 +798,7 @@ void SINVM::execute_jmp() {
 	*/
 
 	this->PC++;
-	uint8_t addressing_mode = *this->PC;
+	uint8_t addressing_mode = this->memory[this->PC];
 
 	// get the memory address to which we want to jump
 	this->PC++;
@@ -766,16 +809,16 @@ void SINVM::execute_jmp() {
 	// check our addressing mode to see how we need to handle the data we just received
 	if (addressing_mode == 0) {
 		// if absolute, set it to memory address - 1 so when it gets incremented at the end of the instruction, it's at the proper address
-		this->PC = &this->memory[memory_address - 1];
+		this->PC = memory_address - 1;
 		return;
 	}
 	else if (addressing_mode == 1) {
 		memory_address += REG_X;
-		this->PC = &this->memory[memory_address - 1];
+		this->PC = memory_address - 1;
 	}
 	else if (addressing_mode == 2) {
 		memory_address += REG_Y;
-		this->PC = &this->memory[memory_address - 1];
+		this->PC = memory_address - 1;
 	}
 
 	// TODO: Indirect indexed ?
@@ -793,16 +836,15 @@ void SINVM::push_stack() {
 	// push the current value in A onto the stack, decrementing the SP (because the stack grows downwards)
 
 	// first, make sure the stack hasn't hit its bottom
-	if (this->SP < 0x10) {
+	if (this->SP < _STACK_BOTTOM) {
 		throw std::exception("**** ERROR: Stack overflow.");
 	}
 
-	// TODO: we must do this as many times as is necessary to fill a word on the VM (2 times for 16 bit, 4 for 32)
 	for (int i = (this->_WORDSIZE / 8); i > 0; i--) {
 		this->memory[SP] = REG_A >> ((i - 1) * 8);
 		this->SP--;
 	}
-	std::cout << std::endl;
+
 	return;
 }
 
@@ -810,7 +852,7 @@ void SINVM::pop_stack() {
 	// pop the most recently pushed value off the stack; this means we must increment the SP (as the current value pointed to by SP is the one to which we will write next; also, the stack grows downwards so we want to increase the address if we pop something off), and then dereference; this means this area of memory is the next to be written to if we push something onto the stack
 
 	// first, make sure we aren't going beyond the bounds of the stack
-	if (this->SP > 0x1f) {
+	if (this->SP > _STACK) {
 		throw std::exception("**** ERROR: Stack underflow.");
 	}
 
@@ -938,7 +980,7 @@ void SINVM::run_program() {
 	// as long as the H flag (HALT) is not set (the VM has not received the HALT signal)
 	while (!(this->is_flag_set('H'))) {
 		// execute the instruction pointed to by the program counter
-		this->execute_instruction(*this->PC);
+		this->execute_instruction(this->memory[this->PC]);
 
 		// advance the program counter to point to the next instruction
 		this->PC++;
@@ -978,7 +1020,15 @@ SINVM::SINVM(std::istream& file)
 
 	// copy our instructions into memory so that the program is at the end of memory
 	size_t program_size = instructions.size();
-	this->program_start_address = memory_size - program_size;	// the start addres for the program should be the total size - the program size
+	this->program_start_address = _PRG_TOP - program_size;	// the start addres for the program should be the total size - the program size
+
+	// ensure the program start address is not too low
+	if (this->program_start_address < _PRG_BOTTOM) {
+		throw std::exception("Program too large for conventional memory map!");
+
+		// remap memory instead?
+
+	}
 
 	std::vector<uint8_t>::iterator instruction_iter = instructions.begin();
 	size_t memory_index = this->program_start_address;
@@ -988,15 +1038,15 @@ SINVM::SINVM(std::istream& file)
 		instruction_iter++;
 	}
 
-	// initialize the stack to location $1f; it grows downwards
-	this->SP = 0x1f;
+	// initialize the stack to location to our stack's upper limit; it grows downwards
+	this->SP = _STACK;
 
 	// always initialize our status register so that all flags are not set
 	this->STATUS = 0;
 
 	// initialize the program counter to start at the top of the program
 	if (instructions.size() != 0) {
-		this->PC = &this->memory[this->program_start_address];	// make sure that we don't read memory that doesn't exist if our program is empty
+		this->PC = this->program_start_address;	// make sure that we don't read memory that doesn't exist if our program is empty
 	}
 	else {
 		// throw an exception; the VM cannot execute an empty program
@@ -1011,7 +1061,15 @@ SINVM::SINVM(Assembler& assembler) {
 
 	// copy our instructions into memory so that the program is at the end of memory
 	size_t program_size = instructions.size();
-	this->program_start_address = memory_size - program_size;	// the start addres for the program should be the total size - the program size
+	this->program_start_address = _PRG_TOP - program_size;	// the start addres for the program should be the total size - the program size
+
+	// ensure the program start address is not too low
+	if (this->program_start_address < _PRG_BOTTOM) {
+		throw std::exception("Program too large for conventional memory map!");
+
+		// remap memory instead?
+
+	}
 
 	std::vector<uint8_t>::iterator instruction_iter = instructions.begin();
 	size_t memory_index = this->program_start_address;
@@ -1021,15 +1079,17 @@ SINVM::SINVM(Assembler& assembler) {
 		instruction_iter++;
 	}
 
-	// initialize the stack to location $1f; it grows downwards
-	this->SP = 0x1f;
+	// initialize the stack to location to our stack's upper limit; it grows downwards
+	this->SP = _STACK;
+	this->CALL_SP = _CALL_STACK;	// initialize the call stack's pointer
 
 	// always initialize our status register so that all flags are not set
 	this->STATUS = 0;
 
 	// initialize the program counter to start at the top of the program
 	if (instructions.size() != 0) {
-		this->PC = &this->memory[this->program_start_address];	// make sure that we don't read memory that doesn't exist if our program is empty
+		// TODO: convert to PC_16
+		this->PC = this->program_start_address;
 	}
 	else {
 		// throw an exception; the VM cannot execute an empty program

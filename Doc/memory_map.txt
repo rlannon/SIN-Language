@@ -1,0 +1,20 @@
+MEMORY_MAP.TXT
+
+An overview of how memory addresses in the SIN VM are organized.
+
+$0000	-	$0FFF:		_DATA
+	Used for variables, etc. 2K
+	Ascending
+
+$1000	-	$1FFF:		_STACK	
+	Our stack; used for function arguments, local variables, etc.
+	Descending
+
+$2000	-	$2FFF		_CALL_STACK
+	Used for subroutine calls. This way, our regular stack won't be affected by subroutine calls, and will allow us to more easily push function arguments to the stack before calling.
+
+$3000	-	$EFFF:		_PRG
+	Used for the program data itself
+
+$F000	-	$FFFF:		_ENV and _ARG
+	Used for command-line arguments and such to the program

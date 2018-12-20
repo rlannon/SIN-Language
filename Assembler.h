@@ -49,8 +49,8 @@ Quick guide to the assembly (see Doc/sinasm for more information):
 const uint8_t sinc_version = 1;
 
 // opcodes which do not need values to follow them (and, actually, for which proceeding values are forbidden)
-const size_t num_standalone_opcodes = 20;
-const int standalone_opcodes[num_standalone_opcodes] = { HALT, NOOP, CLC, SEC, INCA, DECA, INCX, DECX, INCY, DECY, TBA, TXA, TYA, TSPA, TAB, TAX, TAY, TASP, PHA, PLA };
+const size_t num_standalone_opcodes = 21;
+const int standalone_opcodes[num_standalone_opcodes] = { HALT, NOOP, CLC, SEC, INCA, DECA, INCX, DECX, INCY, DECY, RTS, TBA, TXA, TYA, TSPA, TAB, TAX, TAY, TASP, PHA, PLA };
 
 // to test whether instructions are of particular "classes"
 const bool is_standalone(int opcode);	// tells us whether an opcode needs a value to follow

@@ -19,15 +19,26 @@
 class SINVM
 {
 	// declare how much memory the virtual machine has
-	static const size_t memory_size = 256;
+	static const size_t memory_size = 65536;	// 16k available to the VM
+
+	// declare our start addresses for different sections of memory
+	static const size_t _DATA = 0x0000;	// our "_DATA" section will always start at $00
+	static const size_t _STACK = 0x1fff;	// our "STACK" will always start at $2fff and grow downwards
+	static const size_t _STACK_BOTTOM = 0x1000;	// the bottom of the stack
+	static const size_t _CALL_STACK = 0x2fff;
+	static const size_t _CALL_STACK_BOTTOM = 0x2000;	// our call stack
+	static const size_t _PRG_TOP = 0xff00;	// the limit for our program data -- if it hits $ff00, it's too large
+	static const size_t _PRG_BOTTOM = 0x3000;	// our lowest possible memory address for the program
+	static const size_t _ARG = 0xff00;	// ff00 - ffff -- one page -- available for command-line/environment arguments
 
 	// the VM's word size
 	uint8_t _WORDSIZE;
 
 	// create objects for our program counter and stack pointer
-	uint8_t* PC;
-	size_t SP;	// why of different types? should be consistent...
-
+	uint16_t PC;
+	uint16_t SP;
+	uint16_t CALL_SP;	// the call stack pointer -- return addresses are not held on the regular stack; modified only by JSR and RTS
+	
 	// TODO: reconcile types...PC must be more than 1 byte, but if we are dealing with bytes...
 	// Combine opcode and addressing mode into one byte, and change from uint8_t as base memory unit to int ?
 	// OR, use 2 uint8_ts (or a uint16_t) for the PC
