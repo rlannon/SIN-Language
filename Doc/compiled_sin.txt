@@ -1,0 +1,15 @@
+COMPILED_SIN.TXT
+
+An overview of the formats for compiled SIN files (currently, for the SIN VM). Does not reflect current state of code, but rather the goals/future of the code.
+
+There are two main standards for compiled SIN files, .sinc and .sml, but their use depends on the purpose of the file. Each file has its own purpose and is used at different points in the compilation/linking/execution process.
+
+Note: This program uses static linking; it does not currently support and will not support dynamic linking at any point in the near future.
+
+COMPILED SIN FORMAT (.SINC)
+  The compiled SIN format (extension: .sinc) is used by the SIN linker to create executable files. The format is somewhat similar to the ELF format, but does not contain the same sort of cross-compatibility that ELF has. Rather, it is designed for used by the SIN VM. .sinc files can be executed by the VM, but .sml files are preferred for executables. .sinc files contain a lot of header information including symbol table information, and as such take up much more space than the raw executable, which is itself contained within the .sinc file.
+  .sinc files are used as object files during the linking process; all files within the SIN program are compiled into the .sinc format, at which point the linker is called upon to create a single executable file from all of them. The program headers in a .sinc file contains a symbol table for the file; any unresolved references will try to be resolved through examining the symbol tables of the other .sinc files; if they cannot, a linker error is thrown and the process is halted after the object files are created. This means that referencing functions not in the symbol table does NOT throw an error in the compiler or the assembler; rather, when this happens, it will add it to its symbol table with a class of "U" or "UNDEF"; if this class is not resolved during linking, it is then that an error will be thrown.
+  
+SIN EXECUTABLE FORMAT (.SML)
+  The SIN Executable Format (.sml for "SIN Machine Language file") is a file containing only the binary executable data for a SIN VM program. It has no file header; all of the binary data is loaded directly into memory.
+  Because .sml files do not contain headers or symbol tables, they are much smaller than .sinc files. However, this also means they cannot be easily pulled apart once linked into a single file. They can still be disassembled, but they cannot be turned into .sinc or .sin files (at least, not usefully) because they do not contain any label information; they only contain addresses (and offsets).
