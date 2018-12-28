@@ -8,6 +8,16 @@ std::string Statement::get_type() {
 	return Statement::statement_type;
 }
 
+std::string Statement::get_scope_name()
+{
+	return Statement::scope_name;
+}
+
+int Statement::get_scope_level()
+{
+	return Statement::scope_level;
+}
+
 Statement::Statement() {
 }
 
@@ -23,6 +33,25 @@ StatementBlock::StatementBlock() {
 }
 
 StatementBlock::~StatementBlock() {
+}
+
+
+
+/*******************		INCLUDE CLASS		********************/
+
+
+
+std::string Include::get_filename() {
+	return this->filename;
+}
+
+Include::Include(std::string filename) {
+	this->filename = filename;
+	this->statement_type = "include";
+}
+
+Include::Include() {
+	this->statement_type = "include";
 }
 
 
@@ -178,6 +207,11 @@ WhileLoop::WhileLoop() {
 
 std::shared_ptr<Expression> Definition::get_name() {
 	return this->name;
+}
+
+Type Definition::get_return_type()
+{
+	return this->return_type;
 }
 
 std::shared_ptr<StatementBlock> Definition::get_procedure() {

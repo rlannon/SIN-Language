@@ -10,7 +10,7 @@
 #include <regex>
 #include <sstream>	// to convert an integer into its hex equivalent string (e.g., convert decimal 10 into the string 'A' (10 in dexadecimal)
 
-#include "LoadSINC.h"
+#include "SinObjectFile.h"
 //#include "BinaryIO.h"	// all the functions used to write data to binary files (for SIN bytecode/compiled-SIN (.sinc) files) -- included in "LoadSINC.h"
 #include "OpcodeConstants.h"	// so we can reference opcodes by name rather than using hex values every time
 
@@ -46,7 +46,7 @@ Quick guide to the assembly (see Doc/sinasm for more information):
 */
 
 // to maintain the .sinc file standard
-const uint8_t sinc_version = 1;
+const uint8_t sinc_version = 2;
 
 // opcodes which do not need values to follow them (and, actually, for which proceeding values are forbidden)
 const size_t num_standalone_opcodes = 21;
@@ -55,6 +55,9 @@ const int standalone_opcodes[num_standalone_opcodes] = { HALT, NOOP, CLC, SEC, I
 // to test whether instructions are of particular "classes"
 const bool is_standalone(int opcode);	// tells us whether an opcode needs a value to follow
 const bool is_bitshift(int opcode);	// tests whether the opcode is a bitshift instruction
+
+// we also have some assembler directives that are NOT opcodes, but rather things for the assembler to do when it comes across them
+const std::string assembler_directives[3] = { "DB", "RS", "INCLUDE" };
 
 
 // Note: we are not defining memory locations for the various registers as they won't be considered to be part of the processor's address space in this VM's architecture
@@ -70,7 +73,7 @@ class Assembler
 	const uint8_t _MEM_WORDSIZE = 16;	// wordsize of our memory block; for now, set it to 16 bits no matter what (and 32 or 64 bit values will have to be divided)
 
 	// Initialize the file object to store our mnemonics
-	std::ifstream* asm_file;
+	std::istream* asm_file;
 
 	// utility variables and functions
 	int line_counter;	// to track the line number we are on
@@ -87,6 +90,9 @@ class Assembler
 	void skip();	// skip ahead in the istream by one character
 	void read_while(bool(*predicate)(char));	// read as long as "predicate" is true; this mirrors "read_while()" in "Lexer"
 
+	// get the line data as a series of separate strings, omitting comments
+	std::vector<std::string> get_line_data(std::string line);
+
 	// track what byte of memory we are on in the program so we know what addresses to store for labels
 	int current_byte;
 
@@ -99,10 +105,18 @@ class Assembler
 	static bool can_use_immediate_addressing(int opcode);	// determines whether the opcode is a store instruction (STOREA, STOREB, etc.)
 
 	// we need a symbol table to keep track of addresses when macros are used; we will use a list of tuples
-	std::list<std::tuple<std::string, int>> symbol_table;
+	// tuple is (symbol_name, symbol_value, class)
+	// class of "D" = defined, "U" = undefined, "R" = space reserved, "C" = constant
+	std::list<std::tuple<std::string, int, std::string>> symbol_table;
+	// we also need a list for our "_DATA" section
+	// this is simply a bytearray, and will convert string numbers where it can
+	// it goes (symbol_name, data)
+	std::list<std::tuple<std::string, std::vector<uint8_t>>> data_table;
+	// we also need a relocation table for all addresses used in control flow instructions
+	std::list<std::tuple<std::string, int>> relocation_table;
 
 	// we also need a function to construct the symbol table in the first pass of our code
-	std::list<std::tuple<std::string, int>> construct_symbol_table();
+	void construct_symbol_table();
 
 	// look into our symbol table to get the value of the symbol requested
 	int get_value_of(std::string symbol);
@@ -114,17 +128,23 @@ class Assembler
 
 	// TODO: write more assembler-related functions as needed
 
+	// we will need to return a list of file names that we need to be linked
+	std::vector<std::string> obj_files_to_link;
+
 	// get the instructions of a SINASM file and returns them in a vector<int>
 	std::vector<uint8_t> assemble();
 public:
 	// take a SINASM file as input and creates a .sinc file to be used by the SINVM; one of the entry functions for the class
 	void create_sinc_file(std::string output_file_name);
 
+	// get the list of object files for the linker
+	std::vector<std::string> get_obj_files_to_link();
+
 	// take a .sinc file and return a .sina file containing the disassembled file
 	void disassemble(std::istream& sinc_file, std::string output_file_name);
 
 	// class constructor/destructor
-	Assembler(std::ifstream* asm_file, uint8_t _WORDSIZE=16);
+	Assembler(std::istream& asm_file, uint8_t _WORDSIZE=16);
 	~Assembler();
 };
 

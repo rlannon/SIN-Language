@@ -1,5 +1,7 @@
 #pragma once
+
 #include <string>
+#include <tuple>
 #include <iostream>
 #include <fstream>
 #include <regex>
@@ -20,19 +22,23 @@ NOTE:
 
 */
 
+
+// Our lexeme data
+typedef std::tuple<std::string, std::string> lexeme;
+
 class Lexer
 {
-	std::ifstream* stream;
+	std::istream* stream;
 	int position;
 	bool exit_flag;
 
 	int stream_length;	// the length of ifstream* stream, without the ultimate \n character (if present)
 
-	std::tuple<std::string, std::string> lexeme;
+	lexeme current_lexeme;
 
 	static const std::vector<std::string> keywords;	// our keyword vector
 
-													// Strings for our longer/more complex regular expressions; this will make it easier to edit them
+	// Strings for our longer/more complex regular expressions; this will make it easier to edit them
 	static const std::string punc_exp;
 	static const std::string op_exp;
 	static const std::string id_exp;
@@ -100,9 +106,9 @@ public:
 	std::ostream& write(std::ostream& os) const;	// allows a lexeme to be written to an ostream
 
 	// read the next lexeme
-	std::tuple<std::string, std::string> read_next();
+	lexeme read_next();
 
-	Lexer(std::ifstream* input);
+	Lexer(std::istream& input);
 	~Lexer();
 };
 

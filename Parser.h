@@ -12,17 +12,19 @@
 #include "Expression.h"
 #include "Lexer.h"
 
+
+
 class Parser
 {
-	// Our lexeme data
-	typedef std::tuple<std::string, std::string> lexeme;
-
 	std::vector<lexeme> tokens;
 	int position;
 	int num_tokens;
 
 	// Sentinel variable
 	bool quit;
+
+	// 'include' directives can only come at the very beginning of the program; once any other statement comes, the include directives will throw errors
+	bool can_use_include_statement;
 
 	static const std::vector<std::tuple<std::string, int>> precedence;
 	static const int getPrecedence(std::string symbol);

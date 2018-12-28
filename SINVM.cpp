@@ -259,7 +259,6 @@ void SINVM::execute_instruction(int opcode) {
 			// get the value
 			this->PC++;
 			int address_to_jump = this->get_data_of_wordsize();
-			address_to_jump += this->program_start_address;
 
 			int return_address = this->PC;
 
@@ -290,7 +289,7 @@ void SINVM::execute_instruction(int opcode) {
 					return_address = return_address << ((i - 1) * 8);
 				}
 			}
-			this->PC = return_address;
+			this->PC = return_address;	// we don't need to offset because the absolute address was pushed to the call stack
 			break;
 		}
 
@@ -521,7 +520,7 @@ void SINVM::execute_store(int reg_to_store) {
 	// TODO: decide whether writing to an invalid location will wrap around or simply throw an exception
 	if (!address_is_valid(memory_address)) {
 		// as long as it is out of range, continue subtracting the max memory size until it is valid
-		while (memory_address > this->memory_size) {
+		while (memory_address > memory_size) {
 			memory_address -= memory_size;
 		}
 	}
@@ -803,8 +802,6 @@ void SINVM::execute_jmp() {
 	// get the memory address to which we want to jump
 	this->PC++;
 	int memory_address = this->get_data_of_wordsize();
-	// make sure it's a jump within the program, so add the offset of the program start
-	memory_address += (int)program_start_address;
 
 	// check our addressing mode to see how we need to handle the data we just received
 	if (addressing_mode == 0) {
@@ -1011,28 +1008,33 @@ void SINVM::_debug_values() {
 
 SINVM::SINVM(std::istream& file)
 {
-	// first, load the data from our .sinc file and copy it in appropriately
-	std::tuple<uint8_t, std::vector<uint8_t>> sinc_data = load_sinc_file(file);
+	// TODO: redo the SINVM constructor...
+	this->_WORDSIZE = readU8(file);
 
-	// set the data as is appropriate for the
-	this->_WORDSIZE = std::get<0>(sinc_data);
-	std::vector<uint8_t> instructions = std::get<1>(sinc_data);
+	size_t prg_size = (size_t)readU32(file);
+	std::vector<uint8_t> prg_data;
+
+	for (size_t i = 0; i < prg_size; i++) {
+		uint8_t next_byte = readU8(file);
+		prg_data.push_back(next_byte);
+	}
 
 	// copy our instructions into memory so that the program is at the end of memory
-	size_t program_size = instructions.size();
-	this->program_start_address = _PRG_TOP - program_size;	// the start addres for the program should be the total size - the program size
+	this->program_start_address = _PRG_BOTTOM;	// the start address is $2600
 
-	// ensure the program start address is not too low
-	if (this->program_start_address < _PRG_BOTTOM) {
+	// if the size of the program is greater than 0xF000 - 0x2600, it's too big
+	if (prg_data.size() > (_PRG_TOP - _PRG_BOTTOM)) {
 		throw std::exception("Program too large for conventional memory map!");
 
 		// remap memory instead?
 
 	}
 
-	std::vector<uint8_t>::iterator instruction_iter = instructions.begin();
+	// copy the program data into memory
+	std::vector<uint8_t>::iterator instruction_iter = prg_data.begin();
 	size_t memory_index = this->program_start_address;
-	while ((instruction_iter != instructions.end()) && memory_index < memory_size) {
+
+	while ((instruction_iter != prg_data.end())) {
 		this->memory[memory_index] = *instruction_iter;
 		memory_index++;
 		instruction_iter++;
@@ -1040,56 +1042,14 @@ SINVM::SINVM(std::istream& file)
 
 	// initialize the stack to location to our stack's upper limit; it grows downwards
 	this->SP = _STACK;
+	this->CALL_SP = _CALL_STACK;
 
 	// always initialize our status register so that all flags are not set
 	this->STATUS = 0;
 
 	// initialize the program counter to start at the top of the program
-	if (instructions.size() != 0) {
+	if (prg_data.size() != 0) {
 		this->PC = this->program_start_address;	// make sure that we don't read memory that doesn't exist if our program is empty
-	}
-	else {
-		// throw an exception; the VM cannot execute an empty program
-		throw std::exception("Cannot execute an empty program; program size must be > 0");
-	}
-}
-
-SINVM::SINVM(Assembler& assembler) {
-	// first, load a vector with our instructions from the .sinc file
-	this->_WORDSIZE = assembler._WORDSIZE;
-	std::vector<uint8_t> instructions = assembler.assemble();
-
-	// copy our instructions into memory so that the program is at the end of memory
-	size_t program_size = instructions.size();
-	this->program_start_address = _PRG_TOP - program_size;	// the start addres for the program should be the total size - the program size
-
-	// ensure the program start address is not too low
-	if (this->program_start_address < _PRG_BOTTOM) {
-		throw std::exception("Program too large for conventional memory map!");
-
-		// remap memory instead?
-
-	}
-
-	std::vector<uint8_t>::iterator instruction_iter = instructions.begin();
-	size_t memory_index = this->program_start_address;
-	while ((instruction_iter != instructions.end()) && memory_index < memory_size) {
-		this->memory[memory_index] = *instruction_iter;
-		memory_index++;
-		instruction_iter++;
-	}
-
-	// initialize the stack to location to our stack's upper limit; it grows downwards
-	this->SP = _STACK;
-	this->CALL_SP = _CALL_STACK;	// initialize the call stack's pointer
-
-	// always initialize our status register so that all flags are not set
-	this->STATUS = 0;
-
-	// initialize the program counter to start at the top of the program
-	if (instructions.size() != 0) {
-		// TODO: convert to PC_16
-		this->PC = this->program_start_address;
 	}
 	else {
 		// throw an exception; the VM cannot execute an empty program

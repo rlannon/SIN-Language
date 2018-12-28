@@ -1,12 +1,13 @@
 ﻿#include "Lexer.h"
 
 
-// TODO: Fix double ref pointer -- Lexer currently sees "**" as one lexeme, when it should be 2
+// define "lexeme" data type
+typedef std::tuple<std::string, std::string> lexeme;
 
 
 // keywords is an alphabetized list of the keywords in SIN
 // it must be alphabetized in order to use the find algorithm from the standard library
-const std::vector<std::string> Lexer::keywords{ "alloc", "and", "bool", "def", "else", "float", "if", "int", "let", "or", "ptr", "raw", "return", "string", "void", "while", "xor"};
+const std::vector<std::string> Lexer::keywords{ "alloc", "and", "bool", "def", "else", "float", "if", "include", "int", "let", "or", "ptr", "raw", "return", "string", "void", "while", "xor"};
 
 // Our regular expressions
 const std::string Lexer::punc_exp = "[\\.',;\\[\\]\\{\\}\\(\\)]";	// expression for punctuation
@@ -211,19 +212,19 @@ Reads the next character in the stream to determine what to do next.
 
 */
 
-std::tuple<std::string, std::string> Lexer::read_next() {
+lexeme Lexer::read_next() {
 	std::string type = "";
 	std::string value = "";
-	std::tuple<std::string, std::string> lexeme;
+	lexeme next_lexeme;
 
     this->read_while(&this->is_whitespace);	// continue reading through any whitespace
 
 	char ch = this->peek();	// peek to see if we are still within the file
 
 	if (this->stream->eof()) {
-		lexeme = std::make_tuple(NULL, NULL);	// return an empty tuple if we have reached the end of the file
+		next_lexeme = std::make_tuple(NULL, NULL);	// return an empty tuple if we have reached the end of the file
 		this->exit_flag = true;	// set our exit flag
-		return lexeme;
+		return next_lexeme;
 	}
 
 	if (ch == '#') {	// if we have a comment, skip down to the next line
@@ -241,9 +242,9 @@ std::tuple<std::string, std::string> Lexer::read_next() {
 			ch = this->peek();
 
 			if (this->stream->eof() || this->eof()) {	// check to make sure we haven't gone past the end of the file
-				lexeme = std::make_tuple(NULL, NULL);	// if we are, set the exit flag return an empty tuple
+				next_lexeme = std::make_tuple(NULL, NULL);	// if we are, set the exit flag return an empty tuple
 				this->exit_flag = true;	// set our exit flag
-				return lexeme;	// return the empty lexeme
+				return next_lexeme;	// return the empty lexeme
 			}
 			else if (ch == '#') {	// if not, check to see if we have another comment
 				is_comment = true;
@@ -302,9 +303,9 @@ std::tuple<std::string, std::string> Lexer::read_next() {
 		else if (ch == '\n') {	// if we encounter a newline character
 			this->peek();
 			if (this->stream->eof()) {
-				lexeme = std::make_tuple(NULL, NULL);	// if we have reached the end of file, set the exit flag and return an empty tuple
+				next_lexeme = std::make_tuple(NULL, NULL);	// if we have reached the end of file, set the exit flag and return an empty tuple
 				this->exit_flag = true;
-				return lexeme;
+				return next_lexeme;
 			}
 			else {
 				this->next();	// otherwise, continue by getting the next character
@@ -316,8 +317,8 @@ std::tuple<std::string, std::string> Lexer::read_next() {
 			this->exit_flag = true;
 		}
 
-		lexeme = std::make_tuple(type, value);	// create our lexeme with out (type, value) tuple
-		return lexeme;
+		next_lexeme = std::make_tuple(type, value);	// create our lexeme with out (type, value) tuple
+		return next_lexeme;
 
 	}
 	else if (ch == NULL) {	// if there is a NULL character
@@ -333,7 +334,7 @@ std::tuple<std::string, std::string> Lexer::read_next() {
 }
 
 void Lexer::read_lexeme() {
-	this->lexeme = this->read_next();
+	this->current_lexeme = this->read_next();
 }
 
 std::string Lexer::read_string() {
@@ -380,14 +381,14 @@ bool Lexer::exit_flag_is_set() {
 // allow a lexeme to be written to an ostream
 
 std::ostream& Lexer::write(std::ostream& os) const {
-	return os << "{ \"" << std::get<0>(this->lexeme) << "\" : \"" << std::get<1>(this->lexeme) << "\" }";
+	return os << "{ \"" << std::get<0>(this->current_lexeme) << "\" : \"" << std::get<1>(this->current_lexeme) << "\" }";
 }
 
 // Constructor and Destructor
 
-Lexer::Lexer(std::ifstream* input)
+Lexer::Lexer(std::istream& input)
 {
-	Lexer::stream = input;
+	Lexer::stream = &input;
 	Lexer::position = 0;
 	Lexer::exit_flag = false;
 }

@@ -1,6 +1,17 @@
 #include "Assembler.h"
 
 
+
+/*
+
+	TODO: Eliminate exceptions on unresolved symbols; if we have a symbol that's not resolved, we will let the linker handle it. It will use $0000 in the assembled code as a placeholder, and make note of /where/ that occurs in the relocation table so we can go back and change it later.
+
+	TODO: Update the .sinc file format to be an object file
+
+*/
+
+
+
 const bool is_standalone(int opcode) {
 	// returns true if the instruction is to be used without a value following
 	int i = 0;
@@ -84,6 +95,31 @@ void Assembler::read_while(bool(*predicate)(char)) {
 		}
 		return;
 	}
+}
+
+std::vector<std::string> Assembler::get_line_data(std::string line)
+{
+	const std::string delimiter = " ";
+
+	std::vector<std::string> string_delimited;	// to hold the parts of our string
+	size_t position = 0;
+	while ((position = line.find(delimiter)) != std::string::npos) {
+		string_delimited.push_back(line.substr(0, line.find(delimiter)));	// push the string onto the vector
+		line.erase(0, position + delimiter.length());	// erase the string from the beginning up to the next token
+	}
+	string_delimited.push_back(line);
+
+	// First, remove empty strings using std::remove_if (from <algorithm>)
+	string_delimited.erase(std::remove_if(string_delimited.begin(), string_delimited.end(), is_empty_string), string_delimited.end());
+
+	// Next, remove all comments by finding semicolons in the vector and deleting everything after them
+	// find ';' in the vector
+	std::vector<std::string>::iterator it;
+	it = std::find(string_delimited.begin(), string_delimited.end(), ";");
+	// remove all elements from there on
+	string_delimited.erase(it, string_delimited.end());
+
+	return string_delimited;
 }
 
 
@@ -201,10 +237,8 @@ bool Assembler::can_use_immediate_addressing(int opcode) {
 
 
 // Do an initial pass of the code so we can construct the symbol table
-std::list<std::tuple<std::string, int>> Assembler::construct_symbol_table() {
-	// Construct the symbol table in the first pass of our code
-
-	std::list<std::tuple<std::string, int>> labels;
+void Assembler::construct_symbol_table() {
+	// Construct the symbol and data tables in the first pass of our code
 
 	// continue reading from the file as long as we have not reached the end
 	while (!this->end_of_file()) {
@@ -214,38 +248,34 @@ std::list<std::tuple<std::string, int>> Assembler::construct_symbol_table() {
 		}
 		this->read_while(&this->is_whitespace);
 
-		std::string line_data;
+		std::string line;
+		this->getline(*this->asm_file, &line);
 
-		// get the first part of our line
-		*this->asm_file >> line_data;
+		std::vector<std::string> line_data_vector = this->get_line_data(line);
+
+		std::string line_data = line_data_vector[0];
 
 		// check its type
 		if (is_mnemonic(line_data)) {
 			if (is_standalone(this->get_opcode(line_data))) {
+				// increment by one; standalone opcodes are 1 byte in length
 				this->current_byte += 1;
+
 				// it's a standalone instruction, so we don't need the rest of the line
 				continue;
 			}
 			else {
 				this->current_byte += 2;	// increment the current byte by 2; one for the mnemonic itself and one for the addressing mode
-			}
 
-			// if the next character is a new line or EOF, then go back to the top of the loop; we don't have a value
-			if (this->asm_file->peek() == '\n' || this->asm_file->peek() == EOF) {
-				continue;
-			}
-			// otherwise, we must have a value
-			else {
-				// skip any spaces
-				this->read_while(&this->is_whitespace);
+				// check to see if we have a label; the first character in the data will be a dot
+				if (line_data_vector[1][0] == '.') {
+					std::string label_name = line_data_vector[1];
+				}
 
-				// if we have a value, skip ahead by the wordsize in bytes
+				// next, skip ahead in our byte count by the wordsize (in bytes)
 				int offset = this->_WORDSIZE / 8;	// _WORDSIZE / 8 is the number of bytes to offset
 				this->current_byte += offset;
 
-				// go to the next line
-				this->read_while(&this->is_not_newline);	// read until peek() returns a newline character
-				this->skip();	// eat the newline character
 				continue;
 			}
 		}
@@ -253,7 +283,7 @@ std::list<std::tuple<std::string, int>> Assembler::construct_symbol_table() {
 			// note: labels don't actually occupy any space in memory; they are a way for us to reference memory addresses for the assembler
 			// as such, we don't need to increment current_byte when we hit one; we push it to our symbol table and continue, as "current_byte" points to the first instruction /after/ the label
 
-			// verify there is a semicolon at the end of the label and remove it before we push it back
+			// verify there is a colon at the end of the label and remove it before we push it back
 			if (line_data[line_data.size() - 1] == ':') {
 				line_data = line_data.substr(0, line_data.size() - 1);	// removes the last character in "line_data"
 			}
@@ -263,29 +293,128 @@ std::list<std::tuple<std::string, int>> Assembler::construct_symbol_table() {
 			}
 
 			// push back the line_data as the symbol's name and "current_byte" as the current byte in memory; this will serve as the memory address
-			labels.push_back(std::make_tuple(line_data, this->current_byte));
+			this->symbol_table.push_back(std::make_tuple(line_data, this->current_byte, "D"));	// name, value, and class
 			
-			// skip to the next line
-			this->read_while(&this->is_not_newline);	// read until peek() returns a newline character
-			this->asm_file->get();	// eat the newline character
+			// continue on to the next loop iteration
 			continue;
 		}
-		// if it's not a label and its not a mnemonic, but it isalpha(), then it must be a macro
+		// assembler directives begin with '@'
+		else if (line_data[0] == '@') {
+			// if we have a file to include
+			if (line_data == "@include") {
+				// get the file's name -- should be immediate after the directive
+				std::string filename = line_data_vector[1];
+
+				// get the file extension
+				size_t ext_position = filename.find(".");
+				std::string file_extension = filename.substr(ext_position);
+				std::string filename_no_extension = filename.substr(0, ext_position);
+
+				// if it is a .sinc file, just add it to the vector
+				if (file_extension == ".sinc") {
+					this->obj_files_to_link.push_back(filename);
+				}
+				// if it is a .sina file, we need to assemble it
+				else if (file_extension == ".sina") {
+					// open the file
+					std::ifstream included_sina;
+					included_sina.open(filename);
+					if (included_sina.is_open()) {
+						Assembler included_assembler(included_sina, this->_WORDSIZE);
+						included_assembler.create_sinc_file(filename_no_extension);	// save it as the same filename, just with a different extension
+						
+						// iterate through the object files list of the included file and add them as dependencies to this file; this ensures all files get linked
+						// TODO: include guards in assembler? if they exist in the compiler, they should get covered here...
+						for (std::vector<std::string>::iterator it = included_assembler.obj_files_to_link.begin(); it != included_assembler.obj_files_to_link.end(); it++) {
+							this->obj_files_to_link.push_back(*it);
+						}
+
+						// close the included file
+						included_sina.close();
+					}
+					else {
+						throw std::exception(("**** Cannot locate included file '" + filename + "'").c_str());
+					}
+
+				}
+				// we can also include .bin files
+				else if (file_extension == ".bin") {
+
+					// TODO: add support for .bin files
+
+				}
+				// all other formats are unsupported at this time
+				else {
+					throw std::exception(("**** Format for included file '" + filename + "' is not supported by the assembler.").c_str());
+				}
+			}
+			// if we have an assembler directive
+			else if (line_data == "@rs") {
+				/*
+				Note:
+				Syntax is:
+				@rs _macro_name
+				*/
+
+				// the macro's name will come immediately after the directive
+				std::string macro_name = line_data_vector[1];
+
+				this->symbol_table.push_back(std::make_tuple(macro_name, 0, "R"));
+			}
+			else if (line_data == "@db") {
+				/*
+				Note:
+				Syntax is:
+				@db _macro_name (constant_value)
+				*/
+
+				// the macro's name will come immedaitely after the directive
+				std::string macro_name = line_data_vector[1];
+
+				std::string constant_data = "";
+				for (std::vector<std::string>::iterator it = line_data_vector.begin() + 2; it != line_data_vector.end(); it++) {
+					constant_data += *it;
+					constant_data += " ";	// spaces were removed, as they are the delimiter
+				}
+				// we need to remove the parens now -- we also added one too many spaces, so remove them
+				constant_data = constant_data.substr(1, constant_data.size() - 3);
+				
+				// add the constant to the data table
+				// if it is a number, we will use stoi
+				try {
+					int value = std::stoi(constant_data);
+					std::vector<uint8_t> data_array;
+					for (size_t i = (this->_WORDSIZE / 8); i > 0; i--) {
+						uint8_t to_add = value >> ((i - 1) * 8);
+						data_array.push_back(to_add);
+					}
+					this->data_table.push_back(std::make_tuple(macro_name, data_array));
+				}
+				// if we can't use stoi, just push back the ASCII-encoded bytes
+				catch (std::exception& e) {
+					std::vector<uint8_t> data_array;
+					for (std::string::iterator it = constant_data.begin(); it != constant_data.end(); it++) {
+						data_array.push_back(*it);
+					}
+					this->data_table.push_back(std::make_tuple(macro_name, data_array));
+				}
+
+				// add it to the symbol table as well so we can reference it from other files; we will not give its address, as it will live in the _DATA section and so its address will be unknown to us until link time
+				this->symbol_table.push_back(std::make_tuple(macro_name, 0, "C"));
+			}
+		}
+		// if it's not a label, directive, or mnemonic, but it isalpha(), then it must be a macro
 		else if (isalpha(line_data[0])) {
-			// Macros should be skipped in pass 1
-			this->read_while(&this->is_not_newline);
-			this->skip();
+			// macros skipped in pass 1
 			continue;
 		}
 	}
-
-	return labels;
 }
 
 // Look into the symbol table and get the value stored there for the symbol we want
 int Assembler::get_value_of(std::string symbol) {
 	
-	std::list<std::tuple<std::string, int>>::iterator symbol_table_iter = this->symbol_table.begin();
+	std::list<std::tuple<std::string, int, std::string>>::iterator symbol_table_iter = this->symbol_table.begin();
 	bool found = false;
 
 	while (!found && (symbol_table_iter != this->symbol_table.end())) {
@@ -299,11 +428,19 @@ int Assembler::get_value_of(std::string symbol) {
 		}
 	}
 
+	// if it's in the symbol table, return the value
 	if (found) {
+		// classes of C and R are technically defined but they still need to be added to the relocation table
+		if ((std::get<2>(*symbol_table_iter) == "C") || (std::get<2>(*symbol_table_iter) == "R")) {
+			this->relocation_table.push_back(std::make_tuple(std::get<0>(*symbol_table_iter), this->current_byte));
+		}
 		return std::get<1>(*symbol_table_iter);
 	}
+	// if it's NOT in the symbol table, add it with the class "U" and return 0
+	// note it will be added to the relocation table before the value is ever retrieved
 	else {
-		throw std::exception(("Cannot find '" + symbol + "' in symbol table (line " + std::to_string(this->line_counter) + ")").c_str());
+		this->symbol_table.push_back(std::make_tuple(symbol, 0x00, "U"));
+		return 0;
 	}
 }
 
@@ -439,7 +576,8 @@ std::vector<uint8_t> Assembler::assemble()
 
 	// Pass 1
 
-	this->symbol_table = this->construct_symbol_table();	// get the symbol table by doing one pass over the file
+	// constructs the symbol table for the current object
+	this->construct_symbol_table();
 	// reset our byte pointer and istream position pointer
 	this->asm_file->clear();
 	this->asm_file->seekg(0, std::ios::beg);
@@ -456,31 +594,13 @@ std::vector<uint8_t> Assembler::assemble()
 		std::string line;	// contains the whole line
 		std::string opcode_or_symbol;	// first part of data in a line; can be an opcode, a label, or a macro
 		std::string value;	// our value; whatever comes after the opcode/symbol
-		const std::string delimiter = " ";	// our delimiter is a single space
 
 		// read through any whitespace
 		this->read_while(&this->is_whitespace);	// read through any whitespace
 
 		this->getline(*this->asm_file, &line);	// get the whole line
 
-		// split the line into parts, if we can
-		std::vector<std::string> string_delimited;	// to hold the parts of our string
-		size_t position = 0;
-		while ((position = line.find(delimiter)) != std::string::npos) {
-			string_delimited.push_back(line.substr(0, line.find(delimiter)));	// push the string onto the vector
-			line.erase(0, position + delimiter.length());	// erase the string from the beginning up to the next token
-		}
-		string_delimited.push_back(line);
-
-		// First, remove empty strings using std::remove_if (from <algorithm>)
-		string_delimited.erase(std::remove_if(string_delimited.begin(), string_delimited.end(), is_empty_string), string_delimited.end());
-
-		// Next, remove all comments by finding semicolons in the vector and deleting everything after them
-		// find ';' in the vector
-		std::vector<std::string>::iterator it;
-		it = std::find(string_delimited.begin(), string_delimited.end(), ";");
-		// remove all elements from there on
-		string_delimited.erase(it, string_delimited.end());
+		std::vector<std::string> string_delimited = this->get_line_data(line);
 
 		if (string_delimited.size() > 0) {
 
@@ -493,7 +613,9 @@ std::vector<uint8_t> Assembler::assemble()
 
 			// first, test to see whether we have a mnemonic, a label, or something else
 			if (is_mnemonic(opcode_or_symbol)) {
-				// first, get the opcode of our mnemonic
+				// first, increment the current_byte by one; it now points to the byte AFTER the opcode
+				this->current_byte++;
+				// get the opcode of our mnemonic
 				int opcode = get_opcode(opcode_or_symbol);
 
 				// if the next character is not a comment and it's not the end of the vector
@@ -501,6 +623,7 @@ std::vector<uint8_t> Assembler::assemble()
 					// first, push back our opcode
 					program_data.push_back(opcode);
 
+					this->current_byte++;	// increment the current byte for the addressing mode
 					uint8_t addressing_mode;	// our addressing mode is only 1 byte
 
 					// the second value should be our value
@@ -534,7 +657,10 @@ std::vector<uint8_t> Assembler::assemble()
 						// now, get the integer value of the address
 						int address = get_integer_value(value);
 
-						// now, turn it into a series of big-endian bytes
+						// increment the current byte according to _WORDSIZE
+						this->current_byte += this->_WORDSIZE / 8;	// increment 1 per byte in the _WORDSIZE
+
+						// now, turn the integer into a series of big-endian bytes
 						for (int i = this->_WORDSIZE / 8; i > 0; i--) {
 							uint8_t byte = address << ((i - 1) * 8);
 							program_data.push_back(byte);
@@ -542,19 +668,26 @@ std::vector<uint8_t> Assembler::assemble()
 					}
 					// if the value is a label
 					else if (value[0] == '.') {
+						// we must first note that we have a reference in the relocation table
+						this->relocation_table.push_back(std::make_tuple(value, this->current_byte));
+
 						// addressing mode must be absolute
 						addressing_mode = 0;
 
 						// push_back the addressing mode
 						program_data.push_back(addressing_mode);
-						
-						// get the value at 'value' (a label)
-						int label_value = get_value_of(value);
 
-						// turn it into a series of big-endian bytes
+						//// get the value at 'value' (a label)
+						//int label_value = get_value_of(value);
+
+						// increment the current byte according to _WORDSIZE
+						this->current_byte += (this->_WORDSIZE / 8);	// increment 1 per byte in the _WORDSIZE
+
+						// turn the value into a series of big-endian bytes
 						for (int i = this->_WORDSIZE / 8; i > 0; i--) {
-							uint8_t byte = label_value << ((i - 1) * 8);
-							program_data.push_back(byte);
+							//uint8_t byte = label_value << ((i - 1) * 8);
+							//program_data.push_back(byte);
+							program_data.push_back(0x00);	// push back 0s; this will be updated by the linker
 						}
 					}
 					// if the value is 'A'
@@ -599,13 +732,14 @@ std::vector<uint8_t> Assembler::assemble()
 						if (value[0] == '#') {
 							value = value.substr(1);
 						}
-						
+
 						// declare the converted_value variable
 						int converted_value;
 
-						// now, if 'value' starts with a letter, get its value
+						// if it starts with a letter, add it to the relocation table
 						if (isalpha(value[0])) {
-							converted_value = this->get_value_of(value);	// get the value associated with the symbol
+							//converted_value = this->get_value_of(value);	// get the value associated with the symbol
+							this->relocation_table.push_back(std::make_tuple(value, current_byte));
 						}
 						// otherwise, it must be a digit
 						else {
@@ -613,10 +747,24 @@ std::vector<uint8_t> Assembler::assemble()
 							converted_value = get_integer_value(value);
 						}
 
-						// Get the bytes in big-endian format -- we first get the highest byte, then the second-highest...
-						for (int i = this->_WORDSIZE / 8; i > 0; i--) {
-							uint8_t byte = converted_value >> ((i - 1) * 8);
-							program_data.push_back(byte);
+						// increment the current byte according to _WORDSIZE
+						this->current_byte += this->_WORDSIZE / 8;	// increment 1 per byte in the _WORDSIZE
+
+						// if "value" was a macro
+						if (isalpha(value[0])) {
+							// push back all 0x00 if it is a label; it will be resolved
+							for (int i = (this->_WORDSIZE / 8); i > 0; i--) {
+								program_data.push_back(0x00);
+							}
+						}
+						// otherwise, it must be an actual value
+						else {
+							// Get the bytes in big-endian format -- we first get the highest byte, then the second-highest...
+							for (int i = this->_WORDSIZE / 8; i > 0; i--) {
+								// because it is an actual value, we can push back the bytes in it
+								uint8_t byte = converted_value >> ((i - 1) * 8);
+								program_data.push_back(byte);
+							}
 						}
 					}
 				}
@@ -629,6 +777,10 @@ std::vector<uint8_t> Assembler::assemble()
 					throw std::exception(("Expected a value following instruction mnemonic (line " + std::to_string(this->line_counter) + ")").c_str());
 				}
 			}
+			// if we have an assembler directive, skip the whole line
+			else if (opcode_or_symbol[0] == '@') {
+				this->read_while(&this->is_not_newline);
+			}
 			// if we have a label to start the line
 			else if (is_label(opcode_or_symbol)) {
 				// make sure it ends with a colon and move on to the next line
@@ -640,8 +792,8 @@ std::vector<uint8_t> Assembler::assemble()
 				}
 			}
 			else if (isalpha(opcode_or_symbol[0])) {
-				// if we have a macro
 				if (string_delimited.size() >= 3) {
+					// if we have a macro
 					if (string_delimited[1] == "=") {
 						// we have a macro
 
@@ -651,7 +803,7 @@ std::vector<uint8_t> Assembler::assemble()
 
 						// if the macro name is already in the symbol table, update the value
 						bool is_in_symbol_table = false;
-						std::list<std::tuple<std::string, int>>::iterator iter = this->symbol_table.begin();
+						std::list<std::tuple<std::string, int, std::string>>::iterator iter = this->symbol_table.begin();
 
 						while (iter != this->symbol_table.end() && !is_in_symbol_table) {
 							if (macro_name == std::get<0>(*iter)) {
@@ -661,14 +813,17 @@ std::vector<uint8_t> Assembler::assemble()
 								iter++;
 							}
 						}
-						
+
 						// if it's not in the symbol table, add it
+						// also, add it to the relocation table (and its address)
 						if (!is_in_symbol_table) {
-							this->symbol_table.push_back(std::make_tuple(macro_name, macro_value));
+							this->symbol_table.push_back(std::make_tuple(macro_name, macro_value, "D"));
+							//this->relocation_table.push_back(std::make_tuple(macro_name, ));
+							// TODO: figure out the memory addreses
 						}
 						// otherwise, update the reference
 						else {
-							*iter = std::make_tuple(macro_name, macro_value);
+							*iter = std::make_tuple(macro_name, macro_value, "D");
 						}
 					}
 					else {
@@ -676,7 +831,7 @@ std::vector<uint8_t> Assembler::assemble()
 					}
 				}
 				else {
-					throw std::exception(("Non-opcode identifiers must be labels or macros (line " + std::to_string(this->line_counter) + ")").c_str());
+					throw std::exception(("Non-opcode identifiers must be labels, macros, or assembler directive instructions (line " + std::to_string(this->line_counter) + ")").c_str());
 				}
 			}
 			else if (is_comment(opcode_or_symbol[0])) {
@@ -703,14 +858,16 @@ std::vector<uint8_t> Assembler::assemble()
 
 
 // disassemble a .sinc file and produce a .sina file of the same name
+// TODO: update for new .sinc format; use labels / macros
 
 void Assembler::disassemble(std::istream& sinc_file, std::string output_file_name) {
-	// first, read in the file data
-	std::tuple<uint8_t, std::vector<uint8_t>> file_data = load_sinc_file(sinc_file);	// a vector of bytes for our .sinc file data
-	
+	// create an object for our object file
+	SinObjectFile object_file;
+	object_file.load_sinc_file(sinc_file);
+
 	// load the file data appropriately
-	this->_WORDSIZE = std::get<0>(file_data);
-	std::vector<uint8_t> program_data = std::get<1>(file_data);
+	this->_WORDSIZE = object_file.get_wordsize();
+	std::vector<uint8_t> program_data = object_file.get_program_data();
 
 	// create our output file
 	std::ofstream sina_file;
@@ -797,27 +954,19 @@ void Assembler::disassemble(std::istream& sinc_file, std::string output_file_nam
 
 void Assembler::create_sinc_file(std::string output_file_name)
 {
-	/*
-	SINC FILE TYPE SPECIFICATION:
-		A .sinc file is a compiled SIN or SIN bytecode file. It is a binary file containing a small header followed by the program data itself as a series of integers. The size of said integers is specified in the header of the file. The integers can be 16, 32, or 64 bits, depending on the machine, but it will default to the 16 bits if not specified. You can specify the word size in settings when compiling from .sin to .sina files.
-		The word size in the file mostly serves as a check to ensure that the numbers are not too large for the machine running the code.
+	// Create a .sinc (SIN object file) file for the current program
+	// The format specification can be found in "Doc/sinc_specification.txt"
 
-	FILE HEADER:
-		The file header contains a few bytes of information:
-			uint8_t magic_number[4]	=	sinC
-			uint8_t version	=	(current version = 1)
-			uint8_t word_size (contains the number corresponding to the number of bits in the integers represented)
-			uint16_t program_size	(serves as a checksum for loading)
-	BODY:
-		The body of the program is simply a list of integers, corresponding to the integers produced by the assemble() function.
+	// first, add the file name to our list of files we need linked
+	this->obj_files_to_link.push_back(output_file_name + ".sinc");
 
-	*/
-	
 	// create a binary file of the specified name (with the sinc extension)
 	std::ofstream sinc_file(output_file_name + ".sinc", std::ios::out | std::ios::binary);
 
 	// create a vector<int> to hold the binary program data; it will be initialized to our assembled file
 	std::vector<uint8_t> program_data = this->assemble();
+	// after assembly, "this->relocation_table" and "this->symbol_table" will contain the correct data
+
 
 
 	/************************************************************
@@ -829,18 +978,94 @@ void Assembler::create_sinc_file(std::string output_file_name)
 	char * header = ("sinC");
 	sinc_file.write(header, 4);
 
-	// write the version information
-	writeU8(sinc_file, sinc_version);
-
 	// write the word size
 	writeU8(sinc_file, this->_WORDSIZE);
 
+	// write the endianness
+	writeU8(sinc_file, 2);	// sinVM uses big endian for its byte order
+	writeU8(sinc_file, 1);	// BinaryIO uses little endian
+
+	// write the version information
+	writeU8(sinc_file, sinc_version);
+	writeU8(sinc_file, 1);	// target sinVM version is 1
+
+	// entry point
+	writeU16(sinc_file, 0x00);
+
+	
+
+	/************************************************************
+	********************	PROGRAM HEADER	*********************
+	************************************************************/
+
+
+
 	// write the size of the program
-	writeU16(sinc_file, program_data.size());
+	writeU32(sinc_file, program_data.size());
+
+
+	// Symbol table info:
+
+	// write the number of entries in our symbol table
+	int num_symbols = this->symbol_table.size();
+	writeU32(sinc_file, num_symbols);
+
+	// write data in for each symbol in the table
+	for (std::list<std::tuple<std::string, int, std::string>>::iterator symbol_iter = this->symbol_table.begin(); symbol_iter != this->symbol_table.end(); symbol_iter++) {
+		// get the various values so we don't need to use std::get<> every time
+		std::string symbol_name = std::get<0>(*symbol_iter);
+		int symbol_value = std::get<1>(*symbol_iter);
+		uint8_t symbol_class;
+
+		// set the symbol class
+		if (std::get<2>(*symbol_iter) == "D") {
+			symbol_class = 1;
+		}
+		else if (std::get<2>(*symbol_iter) == "C") {
+			symbol_class = 2;
+		}
+		else if (std::get<2>(*symbol_iter) == "R") {
+			symbol_class = 3;
+		}
+		else if (std::get<2>(*symbol_iter) == "U") {
+			symbol_class = 4;
+		}
+		else {
+			throw std::exception(("Cannot understand classifier in symbol table. Expected 'D', 'C', 'R', or 'U' but found '" + std::get<2>(*symbol_iter) + "'").c_str());
+		}
+
+		// write the symbol value and class
+		writeU16(sinc_file, symbol_value);
+		writeU8(sinc_file, symbol_class);
+
+		// and use writeString to write the symbol's name
+		writeString(sinc_file, symbol_name);
+	}
+
+
+	// Relocation table info:
+
+	// write the number of entries in the relocation table
+	int num_relocation_entries = this->relocation_table.size();
+	writeU32(sinc_file, num_relocation_entries);
+
+	// write the data for each symbol in the relocation table
+	for (std::list<std::tuple<std::string, int>>::iterator relocation_iter = this->relocation_table.begin(); relocation_iter != this->relocation_table.end(); relocation_iter++) {
+		// like before, get the various values so we don't need to use std::get<> every time
+		std::string relocation_name = std::get<0>(*relocation_iter);
+		uint16_t relocation_pointer = std::get<1>(*relocation_iter);
+
+		// write the address it points to in the program
+		writeU16(sinc_file, relocation_pointer);
+
+		// write the name of the symbol
+		writeString(sinc_file, relocation_name);
+	}
+
 
 
 	/************************************************************
-	********************	FILE CONTENTS	*********************
+	********************	.TEXT SECTION	*********************
 	************************************************************/
 
 	// write each byte of data in sequentually by using a vector iterator
@@ -849,7 +1074,51 @@ void Assembler::create_sinc_file(std::string output_file_name)
 		writeU8(sinc_file, *data_iter);
 	}
 
+
+
+	/************************************************************
+	********************	.DATA SECTION	*********************
+	************************************************************/
+
+	// Data header
+
+	// write in the number of entries
+	writeU32(sinc_file, this->data_table.size());
+
+	// write in all of the constants
+	// iterate through the data_table and write data accordingly
+	for (std::list<std::tuple<std::string, std::vector<uint8_t>>>::iterator it = this->data_table.begin(); it != this->data_table.end(); it++) {
+		// 0x00 - 0x01	->	number of bytes in the constant
+		writeU16(sinc_file, std::get<1>(*it).size());
+
+		// symbol name
+		writeString(sinc_file, std::get<0>(*it));
+
+		// the data
+		for (std::vector<uint8_t>::iterator data_iter = std::get<1>(*it).begin(); data_iter != std::get<1>(*it).end(); data_iter++) {
+			writeU8(sinc_file, *data_iter);
+		}
+	}
+
+
+	/************************************************************
+	********************	.BSS SECTION	*********************
+	************************************************************/
+
+	// .BSS header
+
+	// number of macros in .bss
+	// TODO: fully implement rs directive
+	// write in all of the non-constant macro names
+	// TODO: complete .BSS
+
+
 	sinc_file.close();
+}
+
+std::vector<std::string> Assembler::get_obj_files_to_link()
+{
+	return this->obj_files_to_link;
 }
 
 
@@ -860,13 +1129,13 @@ void Assembler::create_sinc_file(std::string output_file_name)
 
 
 
-Assembler::Assembler(std::ifstream* asm_file, uint8_t _WORDSIZE)
+Assembler::Assembler(std::istream& asm_file, uint8_t _WORDSIZE)
 {
 	// set our line counter to 0
 	this->line_counter = 0;
 
 	// set our ASM file to be equal to the file we pass into the constructor
-	this->asm_file = asm_file;
+	this->asm_file = &asm_file;
 
 	// initialize the current byte to 0
 	this->current_byte = 0;
