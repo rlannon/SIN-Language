@@ -1,6 +1,6 @@
 # SIN-Language
 
-SIN is a custom procedural programming language based on C, C++, and Python, designed as an exercise in computer language design. This repository contains the entire toolchain for using the SIN language, including a Lexer, Parser, Interpreter, Compiler, Assembler, Linker, and Virtual Machine to execute SIN programs. It can currently be interpreted directly from an abstract syntax tree produced by the Parser, or it can be compiled into working binaries for the SIN Virtual Machine, a simulated processor based on the MOS 6502.
+SIN is a custom procedural programming language based on C, C++, and Python, designed as an exercise in computer language design. This repository contains the entire toolchain for using the SIN language, including a Lexer, Parser, Interpreter, Compiler, Assembler, Linker, and Virtual Machine to execute SIN programs. It can currently be interpreted directly from an abstract syntax tree produced by the Parser, or it can be compiled into working binaries for the SIN Virtual Machine, a simulated processor based on the [MOS 6502](https://en.wikipedia.org/wiki/MOS_Technology_6502).
 
 ## Goal of the Project
 
@@ -14,7 +14,7 @@ There are currently no working binaries for the toolchain; you must compile and 
 
 ### Using SIN
 
-Consult the wiki for an introduction and reference to the language. It is small and simple, but will continually grow in complexity as I wrote more code to allow for compilation / interpretation.
+Consult the [wiki](https://github.com/truffly/SIN-Language/wiki) for a reference to the language and the [pages](https://truffly.github.io/SIN-Language) for more information. It is small and simple, but will continually grow in complexity as I wrote more code to allow for compilation / interpretation.
 _The program currently only supports ASCII-encoded files_, it will not be able to parse Unicode or other encoding standards. This is something I intend to change once the parser and compiler are more or less functional.
 
 ## Future Goals
