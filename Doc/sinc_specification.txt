@@ -83,10 +83,4 @@ PROGRAM HEADER:
 			0x00 - 0x03	-	_bss_data		-	data in the bss
 				OR
 			0x00 - 0x07
-
-
-
-
-Note:
-	"hello, world" =
-		34 104 101 108 108 111 44 32 119 111 114 108 100 33 34
+			
