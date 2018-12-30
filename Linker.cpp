@@ -3,16 +3,15 @@
 
 
 void Linker::get_metadata() {
-	// iterate through the .sinc files to get the wordsize
-	// if they don't agree, throw an exception
-
-	// we also need to get the VM version from each file so the start address can be set properly
-	// they should all be the same, but we could devise an algorithm that will work for different versions or memory configurations
+	// iterate through the .sinc files to get the file metadata and ensure they are all compatible
+	// if they aren't, throw an exception
 	
 	// first, we need to get the wordsize and version of the 0th file; this will be our reference
 	uint8_t wordsize_compare = this->object_files[0]._wordsize;
 	uint8_t version_compare = this->object_files[0]._sinvm_version;
 
+	// then, iterate through our file vector and compare the word size to the 0th file
+	// if they match, continue; if they don't, throw an exception and die
 	for (std::vector<SinObjectFile>::iterator file_iter = this->object_files.begin(); file_iter != this->object_files.end(); file_iter++) {
 		if (file_iter->_wordsize != wordsize_compare) {
 			throw std::exception("**** Word sizes in all object files must match.");
@@ -26,7 +25,7 @@ void Linker::get_metadata() {
 	// now that we know everything matches, set the start address and word size to be used by the linker in creating a .sml file
 	this->_wordsize = wordsize_compare;
 
-	// the offset is different between memory configurations
+	// the offset might be different between memory configurations
 	if (version_compare == 1) {
 		this->_start_offset = 0x2600;
 	}
