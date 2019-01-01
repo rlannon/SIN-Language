@@ -4,13 +4,13 @@ An overview of the error codes and their meanings. Errors are usually accompanie
 
 PROGRAM EXIT ERRORS:
 	There are a few instances in which a program may exit with a code. There are far fewer error codes for the main body of the program than in the Lexer, Parser, or Interpreter.
-1	-	Invalid file format (must be .sin or .txt)
-2	-	Could not open file
-3	-	Exception thrown in file; see exception error code for more information
+1	-	Could not open file
+2	-	Exception thrown during program execution; see exception error code for more information
 
 
 LEXER ERRORS:
 	The SIN Lexer will throw errors in a few circumstances, typically when it encounters a character it doesn't recognize.
+
 
 PARSER ERRORS:
 	A few different types of errors may be thrown by the parser when it is analyzing the token stream. Here is a list, along with brief explanations.

@@ -1,8 +1,6 @@
 #include "Parser.h"
 
 
-// define "lexeme" data type
-typedef std::tuple<std::string, std::string> lexeme;
 
 // Define our symbols and their precedences as a vector of tuples
 const std::vector<std::tuple<std::string, int>> Parser::precedence{ std::make_tuple("&", 2), std::make_tuple("|", 3), \
@@ -132,7 +130,7 @@ StatementBlock Parser::createAST() {
 		}
 
 		// Parse a statement and add it to our AST
-		prog.StatementsList.push_back(this->parseStatement());
+		prog.statements_list.push_back(this->parseStatement());
 
 		// check to see if we are at the end now that we have advanced through the tokens list; if not, continue; if so, do nothing and the while loop will abort and return the AST we have produced
 		if (!this->is_at_end() && !(std::get<1>(this->peek()) == "}")) {
@@ -166,6 +164,31 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 
 		// Check to see what the keyword is
 
+		// parse an "include" directive
+		if (lex_val == "include") {
+			if (this->can_use_include_statement) {
+
+				lexeme next = this->next();
+
+				if (std::get<0>(next) == "string") {
+					std::string filename = std::get<1>(next);
+
+					return std::make_shared<Include>(filename);
+				}
+				else {
+					throw ParserException("Expected a filename in quotes in 'include' statement", 0);
+					// TODO: error numbers for includes
+				}
+			}
+			else {
+				throw std::exception("Include statements must come at the top of the file.");
+			}
+		}
+		else {
+			can_use_include_statement = false;
+		}
+
+		// parse an ITE
 		if (lex_val == "if") {
 			// Get the next lexeme
 			lexeme next = this->next();
@@ -779,6 +802,7 @@ Parser::Parser(Lexer& lexer) {
 		Parser::tokens.push_back(token);
 	}
 	Parser::quit = false;
+	Parser::can_use_include_statement = true;	// include statements must be first in the file
 	Parser::position = 0;
 	Parser::num_tokens = Parser::tokens.size();
 }

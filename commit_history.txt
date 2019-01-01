@@ -4,6 +4,53 @@ A list of changes made since last git commit. This file will go into more detail
 This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
+12/31 commit to Assembler-Directives:
+
+- Changed assembler labels; they no longer begin with "." unless it is a sublabel. Sublabels are always in reference to the most recent "global-level" loop above them. For example:
+	MyLabel:
+		... 
+	.loop:
+
+This will create two labels in the symbol table:
+	MyLabel
+	MyLabel.loop
+Referencing .loop underneath "MyLabel" will look for "MyLabel.loop".
+
+- Because of this, the "is_label()" function was modified to look for a colon at the end of the label rather than a period at the start.
+
+- Added macro support. While label and constant values will be updated by the linker, macro values will not; this is because macro values, when set, are set to a specific value. As such, they should remain unchanged. This is achieved through the sue of another symbol class, "M"
+
+- Modified the values corresponding to the various symbol classes.
+
+--------------------------------------------------------------------------------------------
+
+12/28 commit to Assembler-Directives:
+
+- Updated main program so that it's cleaner and has better support for flags
+
+- Added processor directives:
+	- @db - define a constant
+	- @rs - reserve memory space (not fully implemented)
+	- @include - include a file
+
+This entailed:
+	- Updating the linker and adding "C" and "R" classes
+	- Updating the assembler
+		- Pass 1 now processes all assembler directives; pass 2 ignores them
+		- Pass 1 now does what pass 2 does to parse lines -- it creates an array of strings, delimited by spaces
+	- Updating the SinObjectFile class
+	- Updating the SINVM
+
+Further:
+- Began work on the compiler proper
+- Added a SymbolTable class for use in the compiler's symbol tables
+- Bug fixes
+- More comments
+- Added includes to SIN files, which required updating the Lexer and Parser classes
+
+Note there are many "TODO:" comments in the code. One major area of focus next is the disassemble function in the Assembler class; it must be updated to support the new .sinc format. These "TODO:" comments will be addressed in future commits.
+
+--------------------------------------------------------------------------------------------
 
 - "changelog.txt" renamed to "commit_history.txt"
 

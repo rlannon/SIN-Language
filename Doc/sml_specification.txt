@@ -1,0 +1,13 @@
+SML_SPECIFICATION.TXT
+
+An overview of the SML file format.
+
+SIN VM Executable files (.sml, for "SIN Machine Language") are produced by the Linker from SIN object fiels (.sinc). SML files are very simple and contain a small header to properly initialize the VM, followed by a series of bytes for the program data.
+
+FILE HEADER:
+	0x00 - 0x03	-	_magic_number	-	's' 'm' 'l' '$'
+	0x04		-	_wordsize	-	1 = 8; 2 = 16; 3 = 32; 4 = 64
+	0x05		-	_ver		-	SIN VM version
+	0x06 - 0x09	-	_prg_size	-	number of bytes to read as program data
+	0x0A - 0x0F	-	currently unused but reserved for future file versions
+	0x10 +		-	PRG_DATA

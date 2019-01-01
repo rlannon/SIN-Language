@@ -8,9 +8,10 @@
 #include <iostream>
 
 #include "Assembler.h"
-#include "LoadSINC.h"	// to load a .SINC file
+#include "SinObjectFile.h"	// to load a .SINC file
 // #include "BinaryIO.h"	// included in Assembler.h, but commenting here to denote that functions from it are being used in this class
 // #include "OpcodeConstants.h"	// included in Assembler.h, but commenting here to serve as a reminder that the constants are used in this class so we don't need to use the hex values whenever referencing an instruction
+#include "VMMemoryMap.h"	// contains the constants that define where various blocks of memory begin and end in the VM
 
 /*
 	The virtual machine that will be responsible for interpreting SIN bytecode
@@ -18,30 +19,15 @@
 
 class SINVM
 {
-	// declare how much memory the virtual machine has
-	static const size_t memory_size = 65536;	// 16k available to the VM
-
-	// declare our start addresses for different sections of memory
-	static const size_t _DATA = 0x0000;	// our "_DATA" section will always start at $00
-	static const size_t _STACK = 0x1fff;	// our "STACK" will always start at $2fff and grow downwards
-	static const size_t _STACK_BOTTOM = 0x1000;	// the bottom of the stack
-	static const size_t _CALL_STACK = 0x2fff;
-	static const size_t _CALL_STACK_BOTTOM = 0x2000;	// our call stack
-	static const size_t _PRG_TOP = 0xff00;	// the limit for our program data -- if it hits $ff00, it's too large
-	static const size_t _PRG_BOTTOM = 0x3000;	// our lowest possible memory address for the program
-	static const size_t _ARG = 0xff00;	// ff00 - ffff -- one page -- available for command-line/environment arguments
 
 	// the VM's word size
+	// TODO: use initializer list so that this can be a const member?
 	uint8_t _WORDSIZE;
 
 	// create objects for our program counter and stack pointer
-	uint16_t PC;
-	uint16_t SP;
+	uint16_t PC;	// points to the memory address in the VM containing the next byte we want
+	uint16_t SP;	// points to the next byte to be written in the stack
 	uint16_t CALL_SP;	// the call stack pointer -- return addresses are not held on the regular stack; modified only by JSR and RTS
-	
-	// TODO: reconcile types...PC must be more than 1 byte, but if we are dealing with bytes...
-	// Combine opcode and addressing mode into one byte, and change from uint8_t as base memory unit to int ?
-	// OR, use 2 uint8_ts (or a uint16_t) for the PC
 
 	// create objects for our registers
 	int REG_A;
@@ -68,6 +54,11 @@ class SINVM
 	// create an array to hold our program memory
 	uint8_t memory[memory_size];
 	size_t program_start_address;
+	uint16_t memory_offset;	// the offset for memory addresses due to include files
+	// TODO: eliminate this? We need it in the assembler but maybe not here...
+
+	// TODO: eliminate memory offsets in SINVM and Assembler -- we will do all address adjustments in the Linker. The only offset we will do here is adding $2600 to our offsets
+	// TODO: always start at memory location $2600; it's ok to have empty space between $2600 and $F000 (i.e. don't start at $F000 and work backwards)
 
 	// check whether a memory address is legal
 	static const bool address_is_valid(size_t address);
@@ -109,7 +100,6 @@ public:
 
 	// constructor/destructor
 	SINVM(std::istream& file);	// if we have a .sinc file we want to load
-	SINVM(Assembler& assembler);
 	~SINVM();
 };
 

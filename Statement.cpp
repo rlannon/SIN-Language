@@ -8,6 +8,16 @@ std::string Statement::get_type() {
 	return Statement::statement_type;
 }
 
+std::string Statement::get_scope_name()
+{
+	return Statement::scope_name;
+}
+
+int Statement::get_scope_level()
+{
+	return Statement::scope_level;
+}
+
 Statement::Statement() {
 }
 
@@ -23,6 +33,24 @@ StatementBlock::StatementBlock() {
 }
 
 StatementBlock::~StatementBlock() {
+}
+
+
+
+/*******************		INCLUDE CLASS		********************/
+
+
+
+std::string Include::get_filename() {
+	return this->filename;
+}
+
+Include::Include(std::string filename) : filename(filename) {
+	this->statement_type = "include";
+}
+
+Include::Include() {
+	this->statement_type = "include";
 }
 
 
@@ -55,10 +83,8 @@ std::string Allocation::getVarName() {
 	return this->value;
 }
 
-Allocation::Allocation(Type type, std::string value) {
+Allocation::Allocation(Type type, std::string value) : type(type), value(value) {
 	Allocation::statement_type = "alloc";
-	Allocation::type = type;
-	Allocation::value = value;
 }
 
 Allocation::Allocation() {
@@ -87,9 +113,8 @@ std::shared_ptr<Expression> Assignment::getRValue() {
 	return this->rvalue_ptr;
 }
 
-Assignment::Assignment(LValue lvalue, std::shared_ptr<Expression> rvalue) {
+Assignment::Assignment(LValue lvalue, std::shared_ptr<Expression> rvalue) : lvalue(lvalue) {
 	Assignment::statement_type = "assign";
-	Assignment::lvalue = lvalue;
 	Assignment::rvalue_ptr = rvalue;
 }
 
@@ -165,9 +190,7 @@ std::shared_ptr<StatementBlock> WhileLoop::get_branch()
 	return WhileLoop::branch;
 }
 
-WhileLoop::WhileLoop(std::shared_ptr<Expression> condition, std::shared_ptr<StatementBlock> branch) {
-	WhileLoop::condition = condition;
-	WhileLoop::branch = branch;
+WhileLoop::WhileLoop(std::shared_ptr<Expression> condition, std::shared_ptr<StatementBlock> branch) : condition(condition), branch(branch) {
 	WhileLoop::statement_type = "while";
 }
 
@@ -178,6 +201,11 @@ WhileLoop::WhileLoop() {
 
 std::shared_ptr<Expression> Definition::get_name() {
 	return this->name;
+}
+
+Type Definition::get_return_type()
+{
+	return this->return_type;
 }
 
 std::shared_ptr<StatementBlock> Definition::get_procedure() {
@@ -215,10 +243,8 @@ std::shared_ptr<Expression> Call::get_arg(int num) {
 	return this->args[num];
 }
 
-Call::Call(std::shared_ptr<LValue> func, std::vector<std::shared_ptr<Expression>> args) {
+Call::Call(std::shared_ptr<LValue> func, std::vector<std::shared_ptr<Expression>> args) : func(func), args(args) {
 	Call::statement_type = "call";
-	Call::func = func;
-	Call::args = args;
 }
 
 Call::Call() {

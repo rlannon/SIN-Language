@@ -1,0 +1,86 @@
+SINC_SPECIFICATION.TXT
+
+The specification for the SIN Object File (.sinc) format.
+
+A .sinc file is a SIN object file. It contains all the necessary information for creating a SIN Executable file (.sml). SIN object files are not directly executable, but can easily be turned into an executable and can be included in other SIN programs.
+
+SINC files are structured as follows:
+	- file header
+	- program header
+	- .text section
+	- .data section
+	- .bss section
+
+FILE HEADER:
+	The file header contains information about the type of code contained within. Listed are the offsets from the header start, their name, and descriptors.
+
+	0x00 - 0x03		-	_magic_number		-	's' 'i' 'n' 'C'
+
+	0x04			-	_wordsize			-	contains the wordsize to be used (16, 32, 64)
+
+	0x05			-	_text_end			-	endianness of the .text section -> 1 for little, 2 for big
+		Note the SIN VM uses big endian format
+
+	0x06			-	_sinc_end			-	endianness of the .sinc headers -> 1 for little, 2 for big
+		Note "BinaryIO" currently uses little endian
+	
+	0x07			-	_file_version		-	.sinc file version - currently 2
+
+	0x08			-	_sinvm_version		-	target SINVM version - currently 1
+
+	0x09 - 0x0A		-	_text_start			-	entry point for the program (base is 0x00)
+
+PROGRAM HEADER:
+	The program header contains information specific to the program, specifically the symbol and relocation tables.
+	
+	0x00 - 0x03			-	_prog_size		-	the number of bytes of instructions
+
+	SYMBOL DATA:
+		0x00 - 0x03		-	_st_size		-	tells us how many entries in the symbol table
+		
+		For each symbol:
+			0x00 - 0x01	-	_sy_val			-	symbol value
+			0x02		-	_class			-	1 = defined; 2 = constant; 3 = bss; 4 = undefined
+			0x03 - 0x04 -	_sn_len			-	length of symbol name
+			0x05 +		-	_sy_name		-	symbol name (of length specified in _sn_len)
+
+	RELOCATION DATA:
+		0x00 - 0x03		-	_rt_size		-	tells us how many entries in the relocation table
+
+		For each entry:
+			0x00 - 0x01	-	_addr			-	address where the symbol occurs
+			0x02 - 0x03	-	_rs_len			-	length of symbol name
+			0x04 +		-	_sy_name		-	symbol name (of length specified in _sn_len)
+
+.TEXT SECTION
+	Contains the actual assembled code for the program.
+
+.DATA SECTION
+	Contains all constants defined in the assembly file (using the `db` directive).
+
+	.DATA HEADER
+		0x00 - 0x03		-	_ds_size		-	how many entries in the .data section
+
+		For each entry:
+			0x00 - 0x01	-	_data_len		-	the number of bytes in the data
+			0x02 - 0x03	-	_sy_len			-	length of the symbol name
+			0x04 +		-	_sy_name		-	the symbol name
+	_sy_name + :
+			0x00 +		-	_data			-	the data associated with the symbol
+
+.BSS SECTION
+	Contains all macros that were not assigned absolute addresses (using the `rs` directive).
+
+	.BSS HEADER
+		0x00 - 0x03		-	_bss_len		-	entries in the .bss section
+
+		For each entry:
+			0x00 - 0x01	-	_sy_len			-	length of the symbol name
+			0x02+		-	_sy_name		-	symbol name
+	_sy_name + :
+			0x00 - 0x01
+				OR
+			0x00 - 0x03	-	_bss_data		-	data in the bss
+				OR
+			0x00 - 0x07
+			

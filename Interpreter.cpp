@@ -305,7 +305,7 @@ void Interpreter::evaluateAssignment(Assignment assign, std::list<std::tuple<Typ
 // Execute a block of statements
 void Interpreter::executeBranch(StatementBlock prog, std::list<std::tuple<Type, std::string, std::string>>* vars_table) {
 	// iterate through the statement list supplied
-	for (std::vector<std::shared_ptr<Statement>>::iterator statement_iter = prog.StatementsList.begin(); statement_iter != prog.StatementsList.end(); statement_iter++) {
+	for (std::vector<std::shared_ptr<Statement>>::iterator statement_iter = prog.statements_list.begin(); statement_iter != prog.statements_list.end(); statement_iter++) {
 		// get the statement to execute by using dynamic_cast on the statement
 		Statement* to_execute = dynamic_cast<Statement*>(statement_iter->get());
 
@@ -386,8 +386,8 @@ std::tuple<Type, std::string> Interpreter::evaluateValueReturningFunction(ValueR
 	int i = 0;
 	StatementBlock* procedure = dynamic_cast<StatementBlock*>(func_def.get_procedure().get());
 	Expression* return_exp = new Expression();
-	while (i < procedure->StatementsList.size()) {
-		Statement* statement = dynamic_cast<Statement*>(procedure->StatementsList[i].get());
+	while (i < procedure->statements_list.size()) {
+		Statement* statement = dynamic_cast<Statement*>(procedure->statements_list[i].get());
 		if (statement->get_type() != "return") {
 			this->executeStatement(statement, &local_vars);
 		}

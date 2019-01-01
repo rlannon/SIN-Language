@@ -8,6 +8,8 @@
 This header lays out all of the necessary functions for writing and reading binary files. It establishes our fundamental data types and functions for reading/writing those types to binary files.
 Note that these functions are used for reading and writing *unsigned* 8/16/32 bit values; for signed values, simply cast the signed integer to an unsigned value before writing and cast back to a signed value after reading.
 
+Note: this library currently uses little endian format for writing data beyond 1 byte
+
 */
 
 // We need readU8 and writeU8 because of the terminator character -- we can't simply read or write 1 byte with file.write() and file.read().

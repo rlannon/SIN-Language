@@ -11,11 +11,14 @@ For a documentation of the language, see either the doc folder in this project o
 
 */
 
-// Pre-made libraries
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <exception>
+// Pre-existing libraries
+// These are all included in other included headers, but leaving them here to show we will be using them
+//#include <iostream>
+//#include <fstream>
+//#include <string>
+//#include <vector>
+//#include <exception>
+//#include <algorithm>	// for std::find
 
 // Custom headers
 //#include "Lexer.h"
@@ -23,214 +26,363 @@ For a documentation of the language, see either the doc folder in this project o
 #include "Interpreter.h"
 #include "SINVM.h"
 //#include "Assembler.h"	// included by SINVM.h, but included here as a comment to denote that those functions are being used in this file
+#include "Compiler.h"
+#include "Linker.h"
+#include "SinObjectFile.h"
 
 
-int main(int argc, char** argv) {
-	/*
-	
-	The main function currently serves to test the tokenizer and parser. As the program gets more advanced, the main function will be modified, and eventually accept command-line arguments so that the program may be used in the command line to parse and interpret/compile files. Currently, however, everything is hard-coded and will remain that way for the forseeable future.
-	
-	*/
 
-	// Program mode -- interpret by default; compile only if we set the flag
+void file_error(std::string filename) {
+	std::cerr << "**** Cannot open file '" + filename + "'!" << "\n\n" << "Press enter to exit..." << std::endl;
+	std::cin.get();
+	return;
+}
+
+
+void help(std::string flag="") {
+
+}
+
+
+
+int main (int argc, char** argv[]) {
+	// first, make a vector of strings to hold **argv 
+	std::vector<std::string> program_arguments;
+	// create a vector of SinObjectFile to hold any filenames that are passed as parameters
+	std::vector<SinObjectFile> objects_vector;
+
+	// if we didn't pass in any command-line parameters, we need to make sure we get the necessary information from the user
+	if (argc == 1) {
+		std::string parameters;
+		std::cout << "Parameters: ";
+		std::getline(std::cin, parameters);	// get the parameters as a string
+
+		// now, turn that into a vector of strings using a delimiter (in this case, a space)
+		// split the line into parts, if we can
+		std::vector<std::string> string_delimited;	// to hold the parts of our string
+		size_t position = 0;
+		while ((position = parameters.find(' ')) != std::string::npos) {
+			string_delimited.push_back(parameters.substr(0, parameters.find(' ')));	// push the string onto the vector
+			parameters.erase(0, position + 1);	// erase the string from the beginning up to the next token
+		}
+		string_delimited.push_back(parameters);	// add the last thing (we iterated one time too few so we didn't try to erase more than what existed)
+
+		// and set program_arguments equal to that new vector
+		program_arguments = string_delimited;
+	}
+	// otherwise, just push all of **argv onto program_arguments
+	else {
+		for (int i = 0; i < argc; i++) {
+			program_arguments.push_back(*argv[i]);
+		}
+	}
+
+	// now, create booleans for our various flags and set them if necessary
 	bool compile = false;
 	bool disassemble = false;
+	bool assemble = false;	// will automatically assemble files with the -c flag; if --no-assemble is set, it will clear it
+	bool link = false;
+	bool execute = false;
+	bool debug_values = false;	// if we want "SINVM::_debug_values()" after execution
+	bool parse = false;	// if we want to produce a .absn (Abstract-SIN) file
 
-	// Create the path for our source file
-	std::string src_file_path;
+	// wordsize will default to 16, but we can set it with the --wsxx flag
+	uint8_t wordsize = 16;
 
-	// First, check for command-line arguments beyond the name of the program
-	// If we only have one argument, then we need to get other information from the user
-	if (argc == 1) {
-		// Prompt the user for a file
-		// This allows us to use the program without the command line
-		std::cout << "No input file specified. Enter a filename:" << std::endl;
-		std::getline(std::cin, src_file_path);
+	// our file name should be the zeroth element in the vector (syntax is "SIN file_name flags")
+	std::string filename = program_arguments[0];
+	std::string file_extension;
+	std::string filename_no_extension;
 
-		if (src_file_path.substr(src_file_path.size() - 2) == "-c") {
-			compile = true;
-			src_file_path.erase((src_file_path.size() - 3), (src_file_path.size() - 1));
-		}
-		else if (src_file_path.substr(src_file_path.size() - 2) == "-d") {
-			disassemble = true;
-			src_file_path.erase((src_file_path.size() - 3), (src_file_path.size() - 1));
-		}
+	// get the file extension using "std::find"
+	size_t extension_position = filename.find(".");
+	if (extension_position != filename.npos) {
+		file_extension = filename.substr(extension_position);	// using substr() we can get the extension from the position we just found
+		// create a copy of the filename without an extension
+		filename_no_extension = filename.substr(0, extension_position);
 	}
 	else {
-		// if we have 2 command-line arguments, then the second one should be a filename
-		if (argc == 2) {
-			// The path to our file should be our first argument, should it be executed from the command line with arguments
-			src_file_path = argv[1];
+		if (program_arguments[0] == "--help") {
+			help();
+			std::cout << "Press enter to exit..." << std::endl;
+			std::cin.get();
+			exit(0);
 		}
-		// if we have 3, then we are supplying another keyword -- "interpret" or "compile"
-		// note: use std::regex::icase to ignore case
-		else if (argc == 3) {
-			// check to see if we want to interpret or compile
-			if (std::regex_search(argv[1], std::regex("(interpret)|(-i)", std::regex::icase))) {
-				compile = false;
-			}
-			else if (std::regex_search(argv[1], std::regex("(compile)|(-c)", std::regex::icase))) {
+		else {
+			std::cerr << "**** First argument must be a filename." << std::endl;
+			std::cerr << "Press enter to exit..." << std::endl;
+			std::cin.get();
+			exit(1);
+		}
+	}
+
+	// iterate through the vector and set flags appropriately
+	for (std::vector<std::string>::iterator arg_iter = program_arguments.begin(); arg_iter != program_arguments.end(); arg_iter++) {
+		// only check for flags if the first character is '-'
+		if ((*arg_iter)[0] == '-') {
+
+			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*c.*", std::regex_constants::icase)) || (*arg_iter == "--compile")) {
 				compile = true;
 			}
-			else if (std::regex_search(argv[1], std::regex("(disassemble)|(-d)", std::regex::icase))) {
+
+			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*s.*", std::regex_constants::icase)) || (*arg_iter == "--assemble")) {
+				assemble = true;
+			}
+
+			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*d.*", std::regex_constants::icase)) || (*arg_iter == "--disassemble")) {
 				disassemble = true;
 			}
-			// if the user entered nonsense
-			else {
-				// print an error message
-				std::cerr << "Error: '" << argv[1] << "' is an invalid operation mode. Options are 'interpret' or 'compile' (or '-i' and '-c', respectively)" << std::endl;
-				// quit
-				exit(2);
+
+			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*l.*", std::regex_constants::icase)) || (*arg_iter == "--link")) {
+				link = true;
 			}
-			// the third argument should be a filename
-			src_file_path = argv[2];
+
+			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*e.*", std::regex_constants::icase)) || (*arg_iter == "--execute")) {
+				execute = true;
+			}
+
+			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*h.*", std::regex_constants::icase)) || (*arg_iter == "--help")) {
+				help();
+			}
+
+			// if the parse-only flag is set
+			if ((*arg_iter == "--parse-only")) {
+				// overrides all other flags
+				compile = false;
+				assemble = false;
+				disassemble = false;
+				link = false;
+				execute = false;
+
+				parse = true;
+			}
+
+			// if the compile-only flag is set, it will both produce an AST file and compile the code to SINASM
+			if ((*arg_iter == "--compile-only")) {
+				compile = true;	// set only the compile flag; clear all others regardless if we set them or not
+				assemble = false;
+				disassemble = false;
+				link = false;
+				execute = false;
+			}
+
+			// if the debug flag is set
+			if ((*arg_iter == "--debug")) {
+				debug_values = true;
+			}
+
+			// if we explicitly set word size
+			if (std::regex_match(*arg_iter, std::regex("--ws.+", std::regex_constants::icase))) {
+				std::string wordsize_string = arg_iter->substr(4);
+				wordsize = (uint8_t)std::stoi(wordsize_string);
+			}
+		}
+		// if we have a .sinc file as a parameter
+		else if (std::regex_match(*arg_iter, std::regex("[a-zA-Z0-9_]+\.sinc"))) {
+			std::ifstream sinc_file;
+			sinc_file.open(*arg_iter, std::ios::in | std::ios::binary);
+			if (sinc_file.is_open()) {
+				// initialize the object file
+				SinObjectFile obj_file(sinc_file);
+				objects_vector.push_back(obj_file);
+
+				sinc_file.close();
+			}
+			else {
+				file_error(filename);
+				exit(1);
+			}
 		}
 	}
 
-	// Check to make sure our file is a valid type; quit if it isn't
-	if (!std::regex_search(src_file_path, std::regex("(.sin)|(.sinc)|(.sinasm)"))) {
-		std::cerr << std::endl << "File must be either a .sin, .sina, or .snc file!" << std::endl << "Press enter to exit." << std::endl;
-		std::cin.get();
-		exit(1);
-	}
+	// Now that we have the flags all proper, we can execute things in the correct order
+	// The functions are called in this order: compile, disassemble, assemble, link, execute
 
-	// Open our file
-	std::ifstream src_file;
+	try {
+		// compile a .sin file
+		if (compile) {
+			// validate file type
+			if (file_extension == ".sin") {
+				// open the file
+				std::ifstream sin_file;
+				sin_file.open(filename, std::ios::in);
 
-	// try opening the file; if we can't, then we will handle the exception
-	src_file.open(src_file_path, std::ios::in);
+				if (sin_file.is_open()) {
+					// create a vector of file names
+					std::vector<std::string> object_file_names;
+					// compile the file
+					Compiler compiler(sin_file, wordsize, &object_file_names);
+					
+					// create SinObjectFile objects for each item in object_file_names
+					for (std::vector<std::string>::iterator it = object_file_names.begin(); it != object_file_names.end(); it++) {
+						// open the file of the name stored in object_file_names at the iterator's current position
+						std::ifstream sinc_file;
+						sinc_file.open(*it, std::ios::in | std::ios::binary);
 
-	// Create an object for our abstract syntax tree
-	StatementBlock prog;
+						if (sinc_file.is_open()) {
+							// if we can find the file, then create an object from it and add it to the object vector
+							SinObjectFile obj(sinc_file);
+							objects_vector.push_back(obj);
+						}
+						else {
+							file_error(*it);
+							exit(1);
+						}
 
-	if (src_file.is_open()) {
-		// if it is precompiled
-		if (std::regex_search(src_file_path, std::regex(".sinc"))) {
-			if (!disassemble) {
-				try {
-					SINVM sinVM(src_file);	// we don't need to disassemble; is a .sinc file
-					sinVM.run_program();
-					sinVM._debug_values();
+						// close the file before the next iteration
+						sinc_file.close();
+					}
 
-					std::cout << "Compiled." << std::endl;
-				}
-				catch (std::exception& e) {
-					std::cerr << e.what() << std::endl;
-					std::cerr << "Press enter to exit" << std::endl;
-					std::cin.get();
+					// update the filename
+					file_extension = ".sina";
+					filename = filename_no_extension + file_extension;
+
+					sin_file.close();
+				} else {
+					file_error(filename);
 					exit(1);
 				}
 			}
 			else {
-				try {
-					Assembler assemble(&src_file);
-					assemble.disassemble(src_file, "disassembled.sina");
+				throw std::exception("**** To compile, file type must be 'sin'.");
+			}
+		}
+		
+		// use an Assembler object for assembly and disassembly alike
+		if (disassemble || assemble) {
+			if (disassemble) {
+				// validate file type
+				if ((file_extension == ".sinc") || file_extension == ".sml") {
+					std::ifstream to_disassemble;
+					to_disassemble.open(filename, std::ios::in | std::ios::binary);
+					if (to_disassemble.is_open()) {
+						// initialize the assembler with the file and our "wordsize" variable, which defaults to 16
+						Assembler disassembler(to_disassemble, wordsize);
+						disassembler.disassemble(to_disassemble, filename_no_extension);
+
+						// update the filename
+						file_extension = ".sina";
+						filename = filename_no_extension + file_extension;
+
+						to_disassemble.close();
+					}
+					else {
+						file_error(filename);
+						exit(1);
+					}
 				}
-				catch (std::exception& e) {
-					std::cerr << e.what() << std::endl;
-					std::cerr << "Press enter to exit" << std::endl;
-					std::cin.get();
-					exit(1);
+				else {
+					throw std::exception("**** To disassemble, file type must be 'sinc' or 'sml'.");
 				}
 			}
-			std::cerr << "Press enter to exit" << std::endl;
-			std::cin.get();
-		}
-		else if (std::regex_search(src_file_path, std::regex(".sina"))) {
-			if (!compile) {
-				try {
-					Assembler assemble(&src_file);
-					SINVM myVM(assemble);
-					myVM.run_program();
-					myVM._debug_values();
+			else if (assemble) {
+				if (file_extension == ".sina") {
+					std::ifstream sina_file;
+					sina_file.open(filename, std::ios::in);
+					if (sina_file.is_open()) {
+						// assemble the file
+						Assembler assemble(sina_file, wordsize);
+						assemble.create_sinc_file(filename_no_extension);
 
-					std::cout << "Press enter to exit" << std::endl;
-					std::cin.get();
+						// update our object files list
+						std::vector<std::string> obj_filenames = assemble.get_obj_files_to_link();	// so we don't need to execute a function in every iteration of the loop
+						for (std::vector<std::string>::iterator it = obj_filenames.begin(); it != obj_filenames.end(); it++) {
+							// create the SinObjectFile object as well as the file stream for the sinc file
+							SinObjectFile obj_file_from_assembler;
+							std::ifstream sinc_file;
+							sinc_file.open(*it, std::ios::in | std::ios::binary);
+
+							if (sinc_file.is_open()) {
+								// open the file
+								obj_file_from_assembler.load_sinc_file(sinc_file);
+								// add it to our objects vector
+								objects_vector.push_back(obj_file_from_assembler);
+								// close the file
+								sinc_file.close();
+							}
+							else {
+								throw std::exception(("**** Could not load object file '" + *it + "' after assembly.").c_str());
+							}
+						}
+
+						// update the filename
+						file_extension = ".sinc";
+						filename = filename_no_extension + file_extension;
+
+						sina_file.close();
+					}
+					else {
+						file_error(filename);
+						exit(1);
+					}
 				}
-				catch (std::exception& e) {
-					std::cerr << e.what() << std::endl;
-					std::cerr << "Press enter to exit." << std::endl;
-					std::cin.get();
-					exit(3);
+				else {
+					throw std::exception("**** To assemble, file type must be 'sina'.");
 				}
+			}
+		}
+
+		// link files
+		if (link) {
+			// if we have object files to linke
+			if (objects_vector.size() != 0) {
+				// create a linker object using our objects vector
+				Linker linker(objects_vector);
+				linker.create_sml_file(filename_no_extension);
+
+				// update the filename
+				file_extension = ".sml";
+				filename = filename_no_extension + file_extension;
 			}
 			else {
-				try {
-					Assembler assemble(&src_file);
-					assemble.create_sinc_file("compiled");
-					std::cout << "Compiled." << std::endl;
-
-					std::cout << "Press enter to exit" << std::endl;
-					std::cin.get();
-				}
-				catch (std::exception& e) {
-					std::cerr << e.what() << std::endl << "Press enter to quit" << std::endl;
-					std::cin.get();
-					exit(3);
-				}
+				throw std::exception("**** You must supply object files to link.");
 			}
 		}
-		// if it isn't precompiled
-		else {
-			// Parse the token file to create the abstract syntax tree
-			try {
-				std::cout << "> Tokenizing..." << std::endl;
-				Lexer lex(&src_file);
-				Parser parser(lex);
 
-				src_file.close();
+		// execute a file
+		if (execute) {
+			// validate file extension
+			if (file_extension == ".sml") {
+				std::ifstream sml_file;
+				sml_file.open(filename, std::ios::in | std::ios::binary);
+				if (sml_file.is_open()) {
+					// create an instance of the SINVM with our SML file and run it
+					SINVM vm(sml_file);
+					vm.run_program();
 
-				std::cout << "> Creating AST..." << std::endl;
+					if (debug_values) {
+						vm._debug_values();
+						std::cout << "Done. Press enter to exit..." << std::endl;
+						std::cin.get();
+					}
 
-				prog = parser.createAST();
-			}
-			catch (ParserException& pe) {
-				std::cerr << std::endl << "Parser Error:" << std::endl;
-				std::cerr << "\t" << pe.what() << std::endl;
-				std::cerr << "\tCode: " << pe.get_code() << std::endl << std::endl;
-			}
-			catch (LexerException& le) {
-				std::cerr << std::endl << "Lexer Error:" << std::endl;
-				std::cerr << "\t" << le.what() << "\n\tViolating Character: " << le.get_char() << "\n\tPosition: " << le.get_pos() << std::endl << std::endl;
-			}
-			catch (std::exception& e) {
-				std::cerr << std::endl << e.what() << std::endl << std::endl;
-			}
-
-			// if we want to interpret
-			if (!compile) {
-				// Create the interpreter object
-				Interpreter interpreter;
-
-				std::cout << "> Executing program..." << std::endl << std::endl;
-				// Parse our abstract syntax tree
-				try {
-					interpreter.interpretAST(prog);
+					sml_file.close();
 				}
-				catch (int e) {
-					std::cout << "Exception code: " << e << std::endl;
+				else {
+					file_error(filename);
+					exit(1);
 				}
 
-				// print a "done" message and wait until user hits enter before closing the program
-				std::cout << std::endl << "> Done. Press enter to exit." << std::endl;
-				std::cin.get();
 			}
-			// if we want to compile
-			else if (compile) {
-				// currently, we don't support it, so abort
-				std::cout << "Program compilation currently not supported. Exiting..." << std::endl;
-				// wait for the user to hit enter
-				std::cin.get();
+			else {
+				throw std::exception("**** The SIN VM may only run SIN VM executable files (.sml).");
 			}
-
-			// exit the program
-			return 0;
 		}
 	}
-		// if we can't open the file, print an error and quit
-	else {
-		std::cerr << "Could not open the file specified." << std::endl << "Press enter to exit." << std::endl;
+	// if an exception was thrown, catch it
+	catch (std::exception& e) {
+		// print the error message
+		std::cerr << "The program had to abort because the following exception occurred:" << std::endl;
+		std::cerr << "\t" << e.what() << std::endl;
+		std::cerr << "\nPress enter to exit..." << std::endl;
+
+		// wait for user input before exiting
 		std::cin.get();
+
+		// exit with code 2 (an execption occurred)
 		exit(2);
 	}
+
+	// exit the program
+	return 0;
 }

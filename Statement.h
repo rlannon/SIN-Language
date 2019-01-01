@@ -12,9 +12,16 @@
 class Statement
 {
 protected:
-	std::string statement_type;
+	std::string statement_type;	// tells us whether its an Allocation, and Assignment, an ITE...
+	std::string scope_name;	// to track the scope name under which the statement is being executed
+	int scope_level;	// to track the scope level
+
+	// TODO: add scope information to statements in Parser
+
 public:
 	std::string get_type();
+	std::string get_scope_name();
+	int get_scope_level();
 
 	Statement();
 	virtual ~Statement();
@@ -23,10 +30,19 @@ public:
 class StatementBlock
 {
 public:
-	std::vector<std::shared_ptr<Statement>> StatementsList;
+	std::vector<std::shared_ptr<Statement>> statements_list;
 
 	StatementBlock();
 	~StatementBlock();
+};
+
+class Include : public Statement
+{
+	std::string filename;
+public:
+	std::string get_filename();
+	Include(std::string filename);
+	Include();
 };
 
 class Allocation : public Statement
