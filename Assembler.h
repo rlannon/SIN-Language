@@ -48,10 +48,6 @@ Quick guide to the assembly (see Doc/sinasm for more information):
 // to maintain the .sinc file standard
 const uint8_t sinc_version = 2;
 
-// opcodes which do not need values to follow them (and, actually, for which proceeding values are forbidden)
-const size_t num_standalone_opcodes = 21;
-const int standalone_opcodes[num_standalone_opcodes] = { HALT, NOOP, CLC, SEC, INCA, DECA, INCX, DECX, INCY, DECY, RTS, TBA, TXA, TYA, TSPA, TAB, TAX, TAY, TASP, PHA, PLA };
-
 // to test whether instructions are of particular "classes"
 const bool is_standalone(int opcode);	// tells us whether an opcode needs a value to follow
 const bool is_bitshift(int opcode);	// tests whether the opcode is a bitshift instruction
@@ -95,6 +91,9 @@ class Assembler
 
 	// track what byte of memory we are on in the program so we know what addresses to store for labels
 	int current_byte;
+
+	// track the current scope we are in for relative labels
+	std::string current_scope;
 
 	// test for various types (label, macro, etc)
 	static bool is_label(std::string candidate);	// tests whether the string is a label

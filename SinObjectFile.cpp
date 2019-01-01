@@ -50,16 +50,19 @@ void SinObjectFile::load_sinc_file(std::istream & file)
 				// get the symbol class as a string from the uint8_t we read in
 				std::string symbol_class;
 				if (_class == 1) {
-					symbol_class = "D";
+					symbol_class = "U";
 				}
 				else if (_class == 2) {
-					symbol_class = "C";
+					symbol_class = "D";
 				}
 				else if (_class == 3) {
-					symbol_class = "R";
+					symbol_class = "C";
 				}
 				else if (_class == 4) {
-					symbol_class = "U";
+					symbol_class = "R";
+				}
+				else if (_class == 5) {
+					symbol_class = "M";
 				}
 				else {
 					throw std::exception("**** Error: bad number in symbol class specifier.");

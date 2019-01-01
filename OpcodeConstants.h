@@ -8,6 +8,8 @@ OPCODECONSTANTS.H
 
 This file is simply used to contain all of the constants for our opcodes. It is much easier to house them here, in their own header file, rather than in Assembler.h, where they used to live.
 
+This file also contains lists of the opcodes so that the opcode can be easily retrieved from the mnemonic, and vice versa.
+
 */
 
 // the number of instructions in our machine language
@@ -92,3 +94,7 @@ const int SYSCALL = 0x36;
 // some constants for opcode comparisons (used for maintainability)
 const std::string instructions_list[num_instructions] = { "HALT", "NOOP", "LOADA", "STOREA", "LOADB", "STOREB", "LOADX", "STOREX", "LOADY", "STOREY", "CLC", "SEC", "ADDCA", "SUBCA", "ANDA", "ORA", "XORA", "LSR", "LSL", "ROR", "ROL", "INCA", "DECA", "INCX", "DECX", "INCY", "DECY", "CMPA", "CMPB", "CMPX", "CMPY", "JMP", "BRNE", "BREQ", "BRGT", "BRLT", "BRZ", "JSR", "RTS", "TBA", "TXA", "TYA", "TSPA", "TAB", "TAX", "TAY", "TASP", "PHA", "PLA", "SYSCALL" };
 const int opcodes[num_instructions] = { HALT, NOOP, LOADA, STOREA, LOADB, STOREB, LOADX, STOREX, LOADY, STOREY, CLC, SEC, ADDCA, SUBCA, ANDA, ORA, XORA, LSR, LSL, ROR, ROL, INCA, DECA, INCX, DECX, INCY, DECY, CMPA, CMPB, CMPX, CMPY, JMP, BRNE, BREQ, BRGT, BRLT, BRZ, JSR, RTS, TBA, TXA, TYA, TSPA, TAB, TAX, TAY, TASP, PHA, PLA, SYSCALL };
+
+// opcodes which do not need values to follow them (and, actually, for which proceeding values are forbidden)
+const size_t num_standalone_opcodes = 21;
+const int standalone_opcodes[num_standalone_opcodes] = { HALT, NOOP, CLC, SEC, INCA, DECA, INCX, DECX, INCY, DECY, RTS, TBA, TXA, TYA, TSPA, TAB, TAX, TAY, TASP, PHA, PLA };

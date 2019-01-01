@@ -227,7 +227,7 @@ int main (int argc, char** argv[]) {
 				// validate file type
 				if ((file_extension == ".sinc") || file_extension == ".sml") {
 					std::ifstream to_disassemble;
-					to_disassemble.open(filename);
+					to_disassemble.open(filename, std::ios::in | std::ios::binary);
 					if (to_disassemble.is_open()) {
 						// initialize the assembler with the file and our "wordsize" variable, which defaults to 16
 						Assembler disassembler(to_disassemble, wordsize);
@@ -263,7 +263,7 @@ int main (int argc, char** argv[]) {
 							// create the SinObjectFile object as well as the file stream for the sinc file
 							SinObjectFile obj_file_from_assembler;
 							std::ifstream sinc_file;
-							sinc_file.open(*it);
+							sinc_file.open(*it, std::ios::in | std::ios::binary);
 
 							if (sinc_file.is_open()) {
 								// open the file
@@ -330,6 +330,8 @@ int main (int argc, char** argv[]) {
 
 					if (debug_values) {
 						vm._debug_values();
+						std::cout << "Done. Press enter to exit..." << std::endl;
+						std::cin.get();
 					}
 
 					sml_file.close();
@@ -358,4 +360,7 @@ int main (int argc, char** argv[]) {
 		// exit with code 2 (an execption occurred)
 		exit(2);
 	}
+
+	// exit the program
+	return 0;
 }

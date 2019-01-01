@@ -3,7 +3,7 @@
 
 
 void Linker::get_metadata() {
-	// iterate through the .sinc files to get the file metadata and ensure they are all compatible
+	// iterate through the .sinc files to get the file metadata and ensure they are compatible
 	// if they aren't, throw an exception
 	
 	// first, we need to get the wordsize and version of the 0th file; this will be our reference
@@ -11,7 +11,7 @@ void Linker::get_metadata() {
 	uint8_t version_compare = this->object_files[0]._sinvm_version;
 
 	// then, iterate through our file vector and compare the word size to the 0th file
-	// if they match, continue; if they don't, throw an exception and die
+	// if they match, continue; if they don't, throw an error and die
 	for (std::vector<SinObjectFile>::iterator file_iter = this->object_files.begin(); file_iter != this->object_files.end(); file_iter++) {
 		if (file_iter->_wordsize != wordsize_compare) {
 			throw std::exception("**** Word sizes in all object files must match.");
@@ -49,6 +49,7 @@ void Linker::create_sml_file(std::string file_name) {
 		file_iter->_text_start = current_offset;
 
 		// add this offset to every "value" field in the symbol table where the symbol class is "D", "C", or "R"
+		// symbols with class "M" will not be updated; the address defined will remain
 		for (std::list<std::tuple<std::string, int, std::string>>::iterator symbol_iter = file_iter->symbol_table.begin(); symbol_iter != file_iter->symbol_table.end(); symbol_iter++) {
 			
 			// if our symbol is defined
@@ -117,7 +118,8 @@ void Linker::create_sml_file(std::string file_name) {
 		// only add defined references to the table
 		// find them by iterating through each symbol table and adding the defined symbols to the master table
 		for (std::list<std::tuple<std::string, int, std::string>>::iterator symbol_iter = file_iter->symbol_table.begin(); symbol_iter != file_iter->symbol_table.end(); symbol_iter++) {
-			if ((std::get<2>(*symbol_iter) == "D") || (std::get<2>(*symbol_iter) == "C") || (std::get<2>(*symbol_iter) == "R")) {
+			std::string class_symbol = std::get<2>(*symbol_iter);
+			if ((class_symbol == "D") || (class_symbol == "C") || (class_symbol == "R") || (class_symbol == "M")) {
 				master_symbol_table.push_back(*symbol_iter);
 			}
 			else {
@@ -130,17 +132,10 @@ void Linker::create_sml_file(std::string file_name) {
 	for (std::vector<SinObjectFile>::iterator file_iter = this->object_files.begin(); file_iter != this->object_files.end(); file_iter++) {
 		// look for undefined symbols
 		for (std::list<std::tuple<std::string, int, std::string>>::iterator symbol_iter = file_iter->symbol_table.begin(); symbol_iter != file_iter->symbol_table.end(); symbol_iter++) {
-			// if it is a constant, the symbol table should now have the proper address
-			/*if (std::get<2>(*symbol_iter) == "C") {
-				// TODO: resolve constants references
-
-			}
-			// if it is a macro (using rs directive), look in the data from the .bss section for a resolution
-			else if (std::get<2>(*symbol_iter) == "R") {
-				// TODO: .bss data...
-			}*/
+			// if it is a constant, the symbol should now have the proper address
 			// if it's undefined
-			if ((std::get<2>(*symbol_iter) == "U") || (std::get<2>(*symbol_iter) == "C") || (std::get<2>(*symbol_iter) == "R")) {
+			std::string class_symbol = std::get<2>(*symbol_iter);
+			if ((class_symbol == "U") || (class_symbol == "C") || (class_symbol == "R")) {
 				// iterate through the master table and find the symbol referenced
 				std::vector<std::tuple<std::string, int, std::string>>::iterator master_table_iter = master_symbol_table.begin();
 				bool found = false;

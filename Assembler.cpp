@@ -2,16 +2,6 @@
 
 
 
-/*
-
-	TODO: Eliminate exceptions on unresolved symbols; if we have a symbol that's not resolved, we will let the linker handle it. It will use $0000 in the assembled code as a placeholder, and make note of /where/ that occurs in the relocation table so we can go back and change it later.
-
-	TODO: Update the .sinc file format to be an object file
-
-*/
-
-
-
 const bool is_standalone(int opcode) {
 	// returns true if the instruction is to be used without a value following
 	int i = 0;
@@ -128,7 +118,7 @@ std::vector<std::string> Assembler::get_line_data(std::string line)
 
 bool Assembler::is_label(std::string candidate) {
 	// if the candidate is a label, return true
-	return (candidate[0] == '.');
+	return (candidate[candidate.length() - 1] == ':');
 }
 
 bool Assembler::is_mnemonic(std::string candidate) {
@@ -240,6 +230,9 @@ bool Assembler::can_use_immediate_addressing(int opcode) {
 void Assembler::construct_symbol_table() {
 	// Construct the symbol and data tables in the first pass of our code
 
+	// First, set our scope to global
+	this->current_scope = "global";
+
 	// continue reading from the file as long as we have not reached the end
 	while (!this->end_of_file()) {
 		// continue reading through comments and whitespace
@@ -283,17 +276,20 @@ void Assembler::construct_symbol_table() {
 			// note: labels don't actually occupy any space in memory; they are a way for us to reference memory addresses for the assembler
 			// as such, we don't need to increment current_byte when we hit one; we push it to our symbol table and continue, as "current_byte" points to the first instruction /after/ the label
 
-			// verify there is a colon at the end of the label and remove it before we push it back
-			if (line_data[line_data.size() - 1] == ':') {
-				line_data = line_data.substr(0, line_data.size() - 1);	// removes the last character in "line_data"
+			std::string label_name = line_data.substr(0, (line_data.size() - 1));
+
+			// if the label begins with a dot, it is a sublabel
+			if (label_name[0] == '.') {
+				// the label in memory will be the scope + the sublabel
+				label_name = this->current_scope + label_name;
 			}
-			// throw an exception; if a label has a colon, the second pass will ignore it; if it doesn't, the second pass will try and replace it with a memory address
+			// otherwise, if it is not a sublabel, then update the scope we are in
 			else {
-				throw std::exception(("Missing colon in label creation (line " + std::to_string(this->line_counter) + ")").c_str());
+				this->current_scope = label_name;
 			}
 
 			// push back the line_data as the symbol's name and "current_byte" as the current byte in memory; this will serve as the memory address
-			this->symbol_table.push_back(std::make_tuple(line_data, this->current_byte, "D"));	// name, value, and class
+			this->symbol_table.push_back(std::make_tuple(label_name, this->current_byte, "D"));	// name, value, and class
 			
 			// continue on to the next loop iteration
 			continue;
@@ -324,7 +320,6 @@ void Assembler::construct_symbol_table() {
 						included_assembler.create_sinc_file(filename_no_extension);	// save it as the same filename, just with a different extension
 						
 						// iterate through the object files list of the included file and add them as dependencies to this file; this ensures all files get linked
-						// TODO: include guards in assembler? if they exist in the compiler, they should get covered here...
 						for (std::vector<std::string>::iterator it = included_assembler.obj_files_to_link.begin(); it != included_assembler.obj_files_to_link.end(); it++) {
 							this->obj_files_to_link.push_back(*it);
 						}
@@ -578,13 +573,17 @@ std::vector<uint8_t> Assembler::assemble()
 
 	// constructs the symbol table for the current object
 	this->construct_symbol_table();
+
+
+	// Pass 2
+
 	// reset our byte pointer and istream position pointer
 	this->asm_file->clear();
 	this->asm_file->seekg(0, std::ios::beg);
 	this->current_byte = 0;
 	this->line_counter = 0;
-
-	// Pass 2
+	// reset our scope
+	this->current_scope = "global";
 
 	// create objects to hold our opcodes and line data
 	std::vector<uint8_t> program_data;
@@ -606,10 +605,6 @@ std::vector<uint8_t> Assembler::assemble()
 
 			// our opcode/symbol should be the 0th item in the vector we created
 			opcode_or_symbol = string_delimited[0];
-
-			// get the first part of the line's data, storing it in line data
-			// this can contain a label, a mnemonic, or a macro
-			//*this->asm_file >> opcode_or_symbol;
 
 			// first, test to see whether we have a mnemonic, a label, or something else
 			if (is_mnemonic(opcode_or_symbol)) {
@@ -667,7 +662,17 @@ std::vector<uint8_t> Assembler::assemble()
 						}
 					}
 					// if the value is a label
-					else if (value[0] == '.') {
+					else if (isalpha(value[0]) || (value[0] == '.')) {
+						// first, make sure that the label does not end with a colon; throw an error if it does
+						if (value[value.size() - 1] == ':') {
+							throw std::exception(("Labels must not be followed by colons when referenced (line " + std::to_string(this->line_counter) + ")").c_str());
+						}
+
+						// next, check to see if it is a sublabel or not
+						if (value[0] == '.') {
+							value = this->current_scope + value;
+						}
+
 						// we must first note that we have a reference in the relocation table
 						this->relocation_table.push_back(std::make_tuple(value, this->current_byte));
 
@@ -736,15 +741,12 @@ std::vector<uint8_t> Assembler::assemble()
 						// declare the converted_value variable
 						int converted_value;
 
-						// if it starts with a letter, add it to the relocation table
-						if (isalpha(value[0])) {
-							//converted_value = this->get_value_of(value);	// get the value associated with the symbol
-							this->relocation_table.push_back(std::make_tuple(value, current_byte));
-						}
-						// otherwise, it must be a digit
-						else {
-							// get the integer value of the string that contains our value (might have flags like $ or %)
+						// make sure it isn't a symbol/label
+						if (!isalpha(value[0]) && (value[0] != '.')) {
 							converted_value = get_integer_value(value);
+						}
+						else {
+							throw std::exception(("**** ERROR: label/macro should have been caught (offending symbol: ' " + value + " ')").c_str());
 						}
 
 						// increment the current byte according to _WORDSIZE
@@ -783,12 +785,15 @@ std::vector<uint8_t> Assembler::assemble()
 			}
 			// if we have a label to start the line
 			else if (is_label(opcode_or_symbol)) {
-				// make sure it ends with a colon and move on to the next line
-				if (opcode_or_symbol[opcode_or_symbol.size() - 1] == ':') {
-					continue;
+				// eliminate the colon at the end
+				std::string label_name = opcode_or_symbol.substr(0, (opcode_or_symbol.size() - 1));
+
+				// if it is not a sublabel, update the scope
+				if (label_name[0] != '.') {
+					this->current_scope = label_name;
 				}
 				else {
-					throw std::exception(("A label marker must end with a colon (line " + std::to_string(this->line_counter) + ")").c_str());
+					// do nothing
 				}
 			}
 			else if (isalpha(opcode_or_symbol[0])) {
@@ -796,6 +801,8 @@ std::vector<uint8_t> Assembler::assemble()
 					// if we have a macro
 					if (string_delimited[1] == "=") {
 						// we have a macro
+
+						// TODO: move macros into first pass?
 
 						// macros can only be assigned one time; as such, if it is at the beginning of the line, then we have the initial assignment
 						std::string macro_name = string_delimited[0];
@@ -817,13 +824,11 @@ std::vector<uint8_t> Assembler::assemble()
 						// if it's not in the symbol table, add it
 						// also, add it to the relocation table (and its address)
 						if (!is_in_symbol_table) {
-							this->symbol_table.push_back(std::make_tuple(macro_name, macro_value, "D"));
-							//this->relocation_table.push_back(std::make_tuple(macro_name, ));
-							// TODO: figure out the memory addreses
+							this->symbol_table.push_back(std::make_tuple(macro_name, macro_value, "M"));
 						}
 						// otherwise, update the reference
 						else {
-							*iter = std::make_tuple(macro_name, macro_value, "D");
+							*iter = std::make_tuple(macro_name, macro_value, "M");
 						}
 					}
 					else {
@@ -1015,23 +1020,27 @@ void Assembler::create_sinc_file(std::string output_file_name)
 		// get the various values so we don't need to use std::get<> every time
 		std::string symbol_name = std::get<0>(*symbol_iter);
 		int symbol_value = std::get<1>(*symbol_iter);
+		std::string symbol_class_string = std::get<2>(*symbol_iter);
 		uint8_t symbol_class;
 
 		// set the symbol class
-		if (std::get<2>(*symbol_iter) == "D") {
+		if (symbol_class_string == "U") {
 			symbol_class = 1;
 		}
-		else if (std::get<2>(*symbol_iter) == "C") {
+		else if (symbol_class_string == "D") {
 			symbol_class = 2;
 		}
-		else if (std::get<2>(*symbol_iter) == "R") {
+		else if (symbol_class_string == "C") {
 			symbol_class = 3;
 		}
-		else if (std::get<2>(*symbol_iter) == "U") {
+		else if (symbol_class_string == "R") {
 			symbol_class = 4;
 		}
+		else if (symbol_class_string == "M") {
+			symbol_class = 5;
+		}
 		else {
-			throw std::exception(("Cannot understand classifier in symbol table. Expected 'D', 'C', 'R', or 'U' but found '" + std::get<2>(*symbol_iter) + "'").c_str());
+			throw std::exception(("Cannot understand classifier in symbol table. Expected 'D', 'C', 'R', 'U', or 'M', but found '" + std::get<2>(*symbol_iter) + "'").c_str());
 		}
 
 		// write the symbol value and class

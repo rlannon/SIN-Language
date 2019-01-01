@@ -1,8 +1,0 @@
-@include some_definitions.sina
-
-loada len
-loadb #msg  ; must load the address of message, not the value at the address of message
-
-syscall #$14
-
-halt
