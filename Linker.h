@@ -7,6 +7,7 @@
 #include <fstream>
 
 #include "SinObjectFile.h"
+#include "VMMemoryMap.h"	// the memory map for SINVM version 1
 
 class Linker
 {
@@ -22,6 +23,7 @@ class Linker
 	// our program metadata
 	uint8_t _wordsize;	// the wordsize of the program
 	size_t _start_offset;	// the start address of the program; in 16-bit VM version 1, it is 0x2600
+	size_t _rs_start;	// the start address for macros/variables using the @rs directive
 
 	// get the word size, start address, etc. based on the info in our .sinc files
 	void get_metadata();
@@ -29,6 +31,7 @@ public:
 	// entry function; creates an sml file; this will use Linker::object_files
 	void create_sml_file(std::string file_name);
 
+	Linker();
 	Linker(std::vector<SinObjectFile> object_files);
 	~Linker();
 };

@@ -998,7 +998,8 @@ void SINVM::_debug_values() {
 
 	std::cout << "Memory: " << std::endl;
 	for (int i = 0; i < 10; i++) {
-		std::cout << "\t$000" << i << ": $" << std::hex << (int)this->memory[i] << std::endl;
+		// display the first 10 addresses from each of the first two pages of memory
+		std::cout << "\t$000" << i << ": $" << std::hex << (int)this->memory[i] << "\t\t$0" << 256 + i << ": $" << (int)this->memory[256 + i] << std::endl;
 	}
 
 	std::cout << std::endl;

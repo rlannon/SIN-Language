@@ -178,18 +178,13 @@ void Compiler::compile(std::string sina_filename) {
 
 
 // If we initialize the compiler with a file, it will automatically lex and parse
-Compiler::Compiler(std::istream& sin_file, uint8_t _wordsize, std::vector<std::string>* object_file_names) {
+Compiler::Compiler(std::istream& sin_file, uint8_t _wordsize, std::vector<std::string>* object_file_names) : _wordsize(_wordsize), object_file_names(object_file_names) {
 	// create the parser and lexer objects
 	Lexer lex(sin_file);
 	Parser parser(lex);
 	
 	// get the AST from the parser
 	this->AST = parser.createAST();
-
-	// set the target wordsize
-	this->_wordsize = _wordsize;
-
-	this->object_file_names = object_file_names;
 
 	this->current_scope = 0;	// start at the global scope
 								

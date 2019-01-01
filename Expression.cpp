@@ -133,8 +133,8 @@ std::string Expression::getExpType() {
 	return this->type;
 }
 
-Expression::Expression(std::string type) {
-	Expression::type = type;
+Expression::Expression(std::string type) : type(type) {
+	// uses initializer list
 }
 
 Expression::Expression() {
@@ -153,10 +153,8 @@ std::string Literal::get_value() {
 	return this->value;
 }
 
-Literal::Literal(Type data_type, std::string value) {
+Literal::Literal(Type data_type, std::string value) : data_type(data_type), value(value) {
 	Literal::type = "literal";
-	Literal::data_type = data_type;
-	Literal::value = value;
 }
 
 Literal::Literal() {
@@ -186,8 +184,7 @@ LValue::LValue(std::string value, std::string LValue_Type) {
 	LValue::LValue_Type = LValue_Type;
 }
 
-LValue::LValue(std::string value) {
-	LValue::value = value;
+LValue::LValue(std::string value) : value(value) {
 	LValue::type = "LValue";
 	LValue::LValue_Type = "var";
 }
@@ -204,8 +201,7 @@ LValue AddressOf::get_target() {
 	return this->target;
 }
 
-AddressOf::AddressOf(LValue target) {
-	AddressOf::target = target;
+AddressOf::AddressOf(LValue target) : target(target) {
 	AddressOf::type = "address_of";
 }
 
@@ -240,8 +236,7 @@ std::shared_ptr<Expression> Dereferenced::get_ptr_shared() {
 	return this->ptr;
 }
 
-Dereferenced::Dereferenced(std::shared_ptr<Expression> ptr) {
-	this->ptr = ptr;
+Dereferenced::Dereferenced(std::shared_ptr<Expression> ptr) : ptr(ptr) {
 	this->type = "dereferenced";
 }
 
@@ -263,10 +258,7 @@ exp_operator Binary::get_operator() {
 	return this->op;
 }
 
-Binary::Binary(std::shared_ptr<Expression> left_exp, std::shared_ptr<Expression> right_exp, exp_operator op) {
-	Binary::left_exp = left_exp;
-	Binary::right_exp = right_exp;
-	Binary::op = op;
+Binary::Binary(std::shared_ptr<Expression> left_exp, std::shared_ptr<Expression> right_exp, exp_operator op) : left_exp(left_exp), right_exp(right_exp), op(op) {
 	Binary::type = "binary";
 }
 
@@ -284,10 +276,8 @@ std::shared_ptr<Expression> Unary::get_operand() {
 	return this->operand;
 }
 
-Unary::Unary(std::shared_ptr<Expression> operand, exp_operator op) {
+Unary::Unary(std::shared_ptr<Expression> operand, exp_operator op) : operand(operand), op(op) {
 	Unary::type = "unary";
-	Unary::operand = operand;
-	Unary::op = op;
 }
 
 Unary::Unary() {
@@ -318,9 +308,7 @@ int ValueReturningFunctionCall::get_args_size() {
 	return this->args.size();
 }
 
-ValueReturningFunctionCall::ValueReturningFunctionCall(std::shared_ptr<LValue> name, std::vector<std::shared_ptr<Expression>> args) {
-	ValueReturningFunctionCall::name = name;
-	ValueReturningFunctionCall::args = args;
+ValueReturningFunctionCall::ValueReturningFunctionCall(std::shared_ptr<LValue> name, std::vector<std::shared_ptr<Expression>> args) : name(name), args(args) {
 	ValueReturningFunctionCall::type = "value_returning";
 }
 

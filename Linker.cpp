@@ -25,9 +25,10 @@ void Linker::get_metadata() {
 	// now that we know everything matches, set the start address and word size to be used by the linker in creating a .sml file
 	this->_wordsize = wordsize_compare;
 
-	// the offset might be different between memory configurations
+	// set our memory location information based on the version of the SIN VM
 	if (version_compare == 1) {
-		this->_start_offset = 0x2600;
+		this->_start_offset = _PRG_BOTTOM;
+		this->_rs_start = _RS_START;
 	}
 	else {
 		throw std::exception("**** Currently, only SINVM version 1 is supported (it is the highest version!).");
@@ -40,26 +41,27 @@ void Linker::get_metadata() {
 // create a .sml file from all of our objects
 void Linker::create_sml_file(std::string file_name) {
 
-	// first, update all the offsets
+	// first, update all the memory offsets
 	size_t current_offset = this->_start_offset;	// current offset starts at the start address of VM memory
+	size_t current_rs_address = this->_rs_start;	// the next available address for a @rs directive starts at Linker::_rs_start
 
 	// iterate over the whole vector
 	for (std::vector<SinObjectFile>::iterator file_iter = this->object_files.begin(); file_iter != this->object_files.end(); file_iter++) {
 		// _text_start holds the start address, from which all control flow addresses in the file are offset
 		file_iter->_text_start = current_offset;
 
-		// add this offset to every "value" field in the symbol table where the symbol class is "D", "C", or "R"
+		// add this offset to every "value" field in the symbol table where the symbol class is "D", or "C"
 		// symbols with class "M" will not be updated; the address defined will remain
 		for (std::list<std::tuple<std::string, int, std::string>>::iterator symbol_iter = file_iter->symbol_table.begin(); symbol_iter != file_iter->symbol_table.end(); symbol_iter++) {
 			
 			// if our symbol is defined
-			if ((std::get<2>(*symbol_iter) == "D") || (std::get<2>(*symbol_iter) == "C") || (std::get<2>(*symbol_iter) == "R")) {
+			if ((std::get<2>(*symbol_iter) == "D") || (std::get<2>(*symbol_iter) == "C")) {
 				// update the value stored in the symbol table to be the current value plus the offset
 				std::get<1>(*symbol_iter) = std::get<1>(*symbol_iter) + current_offset;
 			}
 
 			/*
-			if the symbol table is "C" or "R", we also need to add the offsets from both:
+			if the symbol table is "C", we also need to add the offsets from both:
 				a) the size of the .text section
 				b) the offset from the /end/ of the .text section
 			*/
@@ -88,10 +90,16 @@ void Linker::create_sml_file(std::string file_name) {
 				}
 			}
 
-			// otherwise
-			else {
-				continue;	// continue on; "U" class will be updated later
+			// if the symbol class is "R", we need to allocate space in memory for it
+			if (std::get<2>(*symbol_iter) == "R") {
+				// we will change the value of the symbol to the next available memory address based on "current_rs_address"
+				std::get<1>(*symbol_iter) = current_rs_address;
+				// update current_rs_address; advance by one word
+				size_t wordsize_bytes = this->_wordsize / 8;
+				current_rs_address += wordsize_bytes;
 			}
+
+			// the "U" class will be updated later, so ignore it here
 		}
 
 		// update current_offset to add the size of the program just added
@@ -133,7 +141,7 @@ void Linker::create_sml_file(std::string file_name) {
 		// look for undefined symbols
 		for (std::list<std::tuple<std::string, int, std::string>>::iterator symbol_iter = file_iter->symbol_table.begin(); symbol_iter != file_iter->symbol_table.end(); symbol_iter++) {
 			// if it is a constant, the symbol should now have the proper address
-			// if it's undefined
+			// if it's undefined, a constant, or a reserved macro
 			std::string class_symbol = std::get<2>(*symbol_iter);
 			if ((class_symbol == "U") || (class_symbol == "C") || (class_symbol == "R")) {
 				// iterate through the master table and find the symbol referenced
@@ -269,9 +277,13 @@ void Linker::create_sml_file(std::string file_name) {
 	sml_file.close();
 }
 
-Linker::Linker(std::vector<SinObjectFile> object_files)
+
+Linker::Linker() {
+}
+
+
+Linker::Linker(std::vector<SinObjectFile> object_files) : object_files(object_files)
 {
-	this->object_files = object_files;	// initialize our object file vector
 	this->get_metadata();	// get our metadata so we can form the sml file
 }
 

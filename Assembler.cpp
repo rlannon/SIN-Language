@@ -741,19 +741,19 @@ std::vector<uint8_t> Assembler::assemble()
 						// declare the converted_value variable
 						int converted_value;
 
-						// make sure it isn't a symbol/label
-						if (!isalpha(value[0]) && (value[0] != '.')) {
-							converted_value = get_integer_value(value);
+						// if it is a symbol or label, add an entry to the relocation table
+						if (isalpha(value[0]) || (value[0] == '.')) {
+							this->relocation_table.push_back(std::make_tuple(value, this->current_byte));
 						}
 						else {
-							throw std::exception(("**** ERROR: label/macro should have been caught (offending symbol: ' " + value + " ')").c_str());
+							converted_value = get_integer_value(value);
 						}
 
 						// increment the current byte according to _WORDSIZE
 						this->current_byte += this->_WORDSIZE / 8;	// increment 1 per byte in the _WORDSIZE
 
-						// if "value" was a macro
-						if (isalpha(value[0])) {
+						// if "value" was a symbol
+						if (isalpha(value[0]) || (value[0] == '.')) {
 							// push back all 0x00 if it is a label; it will be resolved
 							for (int i = (this->_WORDSIZE / 8); i > 0; i--) {
 								program_data.push_back(0x00);
@@ -779,9 +779,10 @@ std::vector<uint8_t> Assembler::assemble()
 					throw std::exception(("Expected a value following instruction mnemonic (line " + std::to_string(this->line_counter) + ")").c_str());
 				}
 			}
-			// if we have an assembler directive, skip the whole line
+			// if we have an assembler directive, skip it; these were assessed in the first pass
 			else if (opcode_or_symbol[0] == '@') {
-				this->read_while(&this->is_not_newline);
+				// since we already have all of the line data, continue to the next loop iteration
+				continue;
 			}
 			// if we have a label to start the line
 			else if (is_label(opcode_or_symbol)) {
@@ -1138,19 +1139,13 @@ std::vector<std::string> Assembler::get_obj_files_to_link()
 
 
 
-Assembler::Assembler(std::istream& asm_file, uint8_t _WORDSIZE)
+Assembler::Assembler(std::istream& asm_file, uint8_t _WORDSIZE) : asm_file(&asm_file), _WORDSIZE(_WORDSIZE)
 {
 	// set our line counter to 0
 	this->line_counter = 0;
 
-	// set our ASM file to be equal to the file we pass into the constructor
-	this->asm_file = &asm_file;
-
 	// initialize the current byte to 0
 	this->current_byte = 0;
-
-	// set the wordsize
-	this->_WORDSIZE = _WORDSIZE;
 
 	// ensure it was actually a valid size
 	if (_WORDSIZE != 16 && _WORDSIZE != 32 && _WORDSIZE != 64) {

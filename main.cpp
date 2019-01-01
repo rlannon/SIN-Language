@@ -11,7 +11,7 @@ For a documentation of the language, see either the doc folder in this project o
 
 */
 
-// Pre-made libraries
+// Pre-existing libraries
 // These are all included in other included headers, but leaving them here to show we will be using them
 //#include <iostream>
 //#include <fstream>
@@ -36,6 +36,11 @@ void file_error(std::string filename) {
 	std::cerr << "**** Cannot open file '" + filename + "'!" << "\n\n" << "Press enter to exit..." << std::endl;
 	std::cin.get();
 	return;
+}
+
+
+void help(std::string flag="") {
+
 }
 
 
@@ -79,6 +84,7 @@ int main (int argc, char** argv[]) {
 	bool link = false;
 	bool execute = false;
 	bool debug_values = false;	// if we want "SINVM::_debug_values()" after execution
+	bool parse = false;	// if we want to produce a .absn (Abstract-SIN) file
 
 	// wordsize will default to 16, but we can set it with the --wsxx flag
 	uint8_t wordsize = 16;
@@ -96,10 +102,18 @@ int main (int argc, char** argv[]) {
 		filename_no_extension = filename.substr(0, extension_position);
 	}
 	else {
-		std::cerr << "**** First argument must be a filename." << std::endl;
-		std::cerr << "Press enter to exit..." << std::endl;
-		std::cin.get();
-		exit(1);
+		if (program_arguments[0] == "--help") {
+			help();
+			std::cout << "Press enter to exit..." << std::endl;
+			std::cin.get();
+			exit(0);
+		}
+		else {
+			std::cerr << "**** First argument must be a filename." << std::endl;
+			std::cerr << "Press enter to exit..." << std::endl;
+			std::cin.get();
+			exit(1);
+		}
 	}
 
 	// iterate through the vector and set flags appropriately
@@ -127,7 +141,23 @@ int main (int argc, char** argv[]) {
 				execute = true;
 			}
 
-			// if the compile-only flag is set
+			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*h.*", std::regex_constants::icase)) || (*arg_iter == "--help")) {
+				help();
+			}
+
+			// if the parse-only flag is set
+			if ((*arg_iter == "--parse-only")) {
+				// overrides all other flags
+				compile = false;
+				assemble = false;
+				disassemble = false;
+				link = false;
+				execute = false;
+
+				parse = true;
+			}
+
+			// if the compile-only flag is set, it will both produce an AST file and compile the code to SINASM
 			if ((*arg_iter == "--compile-only")) {
 				compile = true;	// set only the compile flag; clear all others regardless if we set them or not
 				assemble = false;
@@ -165,12 +195,9 @@ int main (int argc, char** argv[]) {
 		}
 	}
 
-	// TODO: validate flags against file extension
-
 	// Now that we have the flags all proper, we can execute things in the correct order
 	// The functions are called in this order: compile, disassemble, assemble, link, execute
-	
-	// TODO: update "filename" and "extension" after we run various functions; this is how we will validate
+
 	try {
 		// compile a .sin file
 		if (compile) {
@@ -251,7 +278,7 @@ int main (int argc, char** argv[]) {
 			else if (assemble) {
 				if (file_extension == ".sina") {
 					std::ifstream sina_file;
-					sina_file.open(filename);
+					sina_file.open(filename, std::ios::in);
 					if (sina_file.is_open()) {
 						// assemble the file
 						Assembler assemble(sina_file, wordsize);
@@ -302,11 +329,6 @@ int main (int argc, char** argv[]) {
 				// create a linker object using our objects vector
 				Linker linker(objects_vector);
 				linker.create_sml_file(filename_no_extension);
-
-				// TODO: update the file name after linking
-
-				// TODO: pass "filename_no_extension" into the objects so they produce files of the proper name?
-				// TODO: add functionality to compiler to return a list of file names that are needed at link time; add to assembler as well
 
 				// update the filename
 				file_extension = ".sml";
