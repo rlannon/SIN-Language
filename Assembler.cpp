@@ -399,7 +399,7 @@ void Assembler::construct_symbol_table() {
 			}
 		}
 		// if it's not a label, directive, or mnemonic, but it isalpha(), then it must be a macro
-		else if (isalpha(line_data[0])) {
+		else if (isalpha(line_data[0]) || (line_data[0] == '_')) {
 			// macros skipped in pass 1
 			continue;
 		}
@@ -520,30 +520,31 @@ uint8_t Assembler::get_address_mode(std::string value, std::string offset) {
 	??	$04	-	8-bit		(e.g., 'STOREA $12')
 	$05	-	Indirect indexed with X	(e.g., 'LOADA ($1234, X)')
 	$06	-	Indirect indexed with Y	(e.g., 'LOADA ($1234, Y)')
-	$07	-	Register	(e.g., 'LSR A')	-	Can only be used with bitshift operations
+	$07	-	Register A	(e.g., 'LSR A')	-	Can only be used with bitshift operations
+	$08	-	Register B	-	can only be used with ALU instructions to add in to the A register
 
 	*/
 
 	// immediate addressing
 	if (value[0] == '#') {
-		return 3;
+		return addressmode::immediate;
 	}
 	// otherwise, we are accessing memory
 	else {
 		// if offset is an empty string, then we have absolute addressing
 		if (offset == "") {
-			return 0;
+			return addressmode::absolute;
 		}
 		// if we have data in 'offset', check to see if there is a comma after 'value'
 		else if (value[value.size() - 1] == ',') {
 			// if so, check to see what the first character of 'offset' is
 			if (offset[0] == 'X') {
 				// we have X-indexed addressing
-				return 1;
+				return addressmode::indirect_x;
 			}
 			else if (offset[0] == 'Y') {
 				// we have Y-indexed addressing
-				return 2;
+				return addressmode::indirect_y;
 			}
 			// if it's not X or Y, it's not proper; throw exception
 			else {
@@ -637,8 +638,8 @@ std::vector<uint8_t> Assembler::assemble()
 							throw std::exception(("Indirect addressing requires a second string; however, one was not found (line " + std::to_string(this->line_counter) + ")").c_str());
 						}
 
-						// if the addressing mode is 1 or 2, add 4 to it to get to the indirect/indexed
-						if (addressing_mode == 2 || addressing_mode == 3) {
+						// if the addressing mode is x/y indexed, add 4 to it to get to the indirect/indexed (they are 4 apart)
+						if (addressing_mode == addressmode::x_index || addressing_mode == addressmode::y_index) {
 							addressing_mode += 4;
 						}
 						// if neither, it's improper syntax -- cannot use parens with any other mode
@@ -662,7 +663,7 @@ std::vector<uint8_t> Assembler::assemble()
 						}
 					}
 					// if the value is a label
-					else if (isalpha(value[0]) || (value[0] == '.')) {
+					else if ((isalpha(value[0])) || (value[0] == '.') || (value[0] == '_') && !std::regex_match(value, std::regex("[ab]", std::regex_constants::icase))) {
 						// first, make sure that the label does not end with a colon; throw an error if it does
 						if (value[value.size() - 1] == ':') {
 							throw std::exception(("Labels must not be followed by colons when referenced (line " + std::to_string(this->line_counter) + ")").c_str());
@@ -677,7 +678,7 @@ std::vector<uint8_t> Assembler::assemble()
 						this->relocation_table.push_back(std::make_tuple(value, this->current_byte));
 
 						// addressing mode must be absolute
-						addressing_mode = 0;
+						addressing_mode = addressmode::absolute;
 
 						// push_back the addressing mode
 						program_data.push_back(addressing_mode);
@@ -699,13 +700,24 @@ std::vector<uint8_t> Assembler::assemble()
 					else if ((value.size() == 1) && (value == "A" || value == "a")) {
 						// check to make sure the opcode is a bitshift instruction
 						if (is_bitshift(opcode)) {
-							// addressing mode for register operations is 0x07
-							addressing_mode = 0x07;
+							addressing_mode = addressmode::reg_a;
 							program_data.push_back(addressing_mode);
 						}
 						// if it's not a bitshift instruction, throw an exception
 						else {
 							throw std::exception(("Cannot use 'A' as an operand unless with a bitshift instruction (line " + std::to_string(this->line_counter) + ")").c_str());
+						}
+					}
+					// if the value is 'B'
+					else if ((value.size() == 1) && (value == "B" || value == "b")) {
+						// make sure it is an addition or subtraction
+						if ((opcode == ADDCA) || (opcode == SUBCA)) {
+							addressing_mode = addressmode::reg_b;
+							program_data.push_back(addressing_mode);
+						}
+						// if it's not, throw an exception
+						else {
+							throw std::exception(("May only use 'B' as an operand with addition and subtraction instructions (line " + std::to_string(this->line_counter) + ")").c_str());
 						}
 					}
 					// otherwise, carry on normally
@@ -742,7 +754,7 @@ std::vector<uint8_t> Assembler::assemble()
 						int converted_value;
 
 						// if it is a symbol or label, add an entry to the relocation table
-						if (isalpha(value[0]) || (value[0] == '.')) {
+						if (isalpha(value[0]) || (value[0] == '.') || (value[0] == '_')) {
 							this->relocation_table.push_back(std::make_tuple(value, this->current_byte));
 						}
 						else {
@@ -753,7 +765,7 @@ std::vector<uint8_t> Assembler::assemble()
 						this->current_byte += this->_WORDSIZE / 8;	// increment 1 per byte in the _WORDSIZE
 
 						// if "value" was a symbol
-						if (isalpha(value[0]) || (value[0] == '.')) {
+						if (isalpha(value[0]) || (value[0] == '.') || (value[0] == '_')) {
 							// push back all 0x00 if it is a label; it will be resolved
 							for (int i = (this->_WORDSIZE / 8); i > 0; i--) {
 								program_data.push_back(0x00);
@@ -803,11 +815,12 @@ std::vector<uint8_t> Assembler::assemble()
 					if (string_delimited[1] == "=") {
 						// we have a macro
 
-						// TODO: move macros into first pass?
-
 						// macros can only be assigned one time; as such, if it is at the beginning of the line, then we have the initial assignment
 						std::string macro_name = string_delimited[0];
-						int macro_value = this->get_integer_value(string_delimited[2]);
+
+						// to make it more readable, this is the string that has the macro value
+						std::string macro_value_string = string_delimited[2];
+						int macro_value = this->get_integer_value(macro_value_string);
 
 						// if the macro name is already in the symbol table, update the value
 						bool is_in_symbol_table = false;

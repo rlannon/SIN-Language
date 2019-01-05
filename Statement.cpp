@@ -18,6 +18,16 @@ int Statement::get_scope_level()
 	return Statement::scope_level;
 }
 
+int Statement::get_line_number()
+{
+	return this->line_number;
+}
+
+void Statement::set_line_number(int line_number)
+{
+	this->line_number = line_number;
+}
+
 Statement::Statement() {
 }
 

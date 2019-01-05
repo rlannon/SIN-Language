@@ -12,6 +12,7 @@
 // #include "BinaryIO.h"	// included in Assembler.h, but commenting here to denote that functions from it are being used in this class
 // #include "OpcodeConstants.h"	// included in Assembler.h, but commenting here to serve as a reminder that the constants are used in this class so we don't need to use the hex values whenever referencing an instruction
 #include "VMMemoryMap.h"	// contains the constants that define where various blocks of memory begin and end in the VM
+//#include "AddressingModeConstants.h"	// included in Assembler.h
 
 /*
 	The virtual machine that will be responsible for interpreting SIN bytecode
@@ -84,8 +85,8 @@ class SINVM
 	void execute_jmp();
 
 	// stack functions; ALWAYS use register A
-	void push_stack();
-	void pop_stack();
+	void push_stack(int reg_to_push);
+	int pop_stack();
 
 	// status flag utility
 	void set_status_flag(char flag); // set the status flag whose abbreviation is equal to the character 'flag'

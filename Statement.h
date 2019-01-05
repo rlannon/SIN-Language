@@ -15,6 +15,7 @@ protected:
 	std::string statement_type;	// tells us whether its an Allocation, and Assignment, an ITE...
 	std::string scope_name;	// to track the scope name under which the statement is being executed
 	int scope_level;	// to track the scope level
+	int line_number;	// the line number on which the first token of the statement can be found in the file
 
 	// TODO: add scope information to statements in Parser
 
@@ -22,6 +23,8 @@ public:
 	std::string get_type();
 	std::string get_scope_name();
 	int get_scope_level();
+	int get_line_number();
+	void set_line_number(int line_number);
 
 	Statement();
 	virtual ~Statement();

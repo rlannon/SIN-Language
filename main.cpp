@@ -79,12 +79,18 @@ int main (int argc, char** argv[]) {
 
 	// now, create booleans for our various flags and set them if necessary
 	bool compile = false;
+	bool compile_only = false;
 	bool disassemble = false;
 	bool assemble = false;	// will automatically assemble files with the -c flag; if --no-assemble is set, it will clear it
 	bool link = false;
 	bool execute = false;
 	bool debug_values = false;	// if we want "SINVM::_debug_values()" after execution
 	bool parse = false;	// if we want to produce a .absn (Abstract-SIN) file
+	bool produce_asm_file = false;
+
+	// if we wrote to a stringstream
+	bool saved_stringstream = false;
+	std::stringstream sina_code;
 
 	// wordsize will default to 16, but we can set it with the --wsxx flag
 	uint8_t wordsize = 16;
@@ -121,27 +127,31 @@ int main (int argc, char** argv[]) {
 		// only check for flags if the first character is '-'
 		if ((*arg_iter)[0] == '-') {
 
-			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*c.*", std::regex_constants::icase)) || (*arg_iter == "--compile")) {
+			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*c.*")) || (*arg_iter == "--compile")) {
 				compile = true;
 			}
 
-			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*s.*", std::regex_constants::icase)) || (*arg_iter == "--assemble")) {
+			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*s.*")) || (*arg_iter == "--assemble")) {
 				assemble = true;
 			}
 
-			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*d.*", std::regex_constants::icase)) || (*arg_iter == "--disassemble")) {
+			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*d.*")) || (*arg_iter == "--disassemble")) {
 				disassemble = true;
 			}
 
-			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*l.*", std::regex_constants::icase)) || (*arg_iter == "--link")) {
+			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*l.*")) || (*arg_iter == "--link")) {
 				link = true;
 			}
 
-			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*e.*", std::regex_constants::icase)) || (*arg_iter == "--execute")) {
+			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*e.*")) || (*arg_iter == "--execute")) {
 				execute = true;
 			}
 
-			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*h.*", std::regex_constants::icase)) || (*arg_iter == "--help")) {
+			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*a.*")) || (*arg_iter == "--produce-asm-file")) {
+				produce_asm_file = true;
+			}
+
+			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*h.*")) || (*arg_iter == "--help")) {
 				help();
 			}
 
@@ -159,6 +169,7 @@ int main (int argc, char** argv[]) {
 
 			// if the compile-only flag is set, it will both produce an AST file and compile the code to SINASM
 			if ((*arg_iter == "--compile-only")) {
+				compile_only = true;
 				compile = true;	// set only the compile flag; clear all others regardless if we set them or not
 				assemble = false;
 				disassemble = false;
@@ -195,6 +206,10 @@ int main (int argc, char** argv[]) {
 		}
 	}
 
+	if (!compile_only && compile && !produce_asm_file) {
+		assemble = true;
+	}
+
 	// Now that we have the flags all proper, we can execute things in the correct order
 	// The functions are called in this order: compile, disassemble, assemble, link, execute
 
@@ -212,30 +227,40 @@ int main (int argc, char** argv[]) {
 					std::vector<std::string> object_file_names;
 					// compile the file
 					Compiler compiler(sin_file, wordsize, &object_file_names);
-					
-					// create SinObjectFile objects for each item in object_file_names
-					for (std::vector<std::string>::iterator it = object_file_names.begin(); it != object_file_names.end(); it++) {
-						// open the file of the name stored in object_file_names at the iterator's current position
-						std::ifstream sinc_file;
-						sinc_file.open(*it, std::ios::in | std::ios::binary);
 
-						if (sinc_file.is_open()) {
-							// if we can find the file, then create an object from it and add it to the object vector
-							SinObjectFile obj(sinc_file);
-							objects_vector.push_back(obj);
-						}
-						else {
-							file_error(*it);
-							exit(1);
+					// if we want to produce an asm file
+					if (produce_asm_file) {
+						compiler.produce_sina_file(filename_no_extension + ".sina");
+
+						// create SinObjectFile objects for each item in object_file_names
+						for (std::vector<std::string>::iterator it = object_file_names.begin(); it != object_file_names.end(); it++) {
+							// open the file of the name stored in object_file_names at the iterator's current position
+							std::ifstream sinc_file;
+							sinc_file.open(*it, std::ios::in | std::ios::binary);
+
+							if (sinc_file.is_open()) {
+								// if we can find the file, then create an object from it and add it to the object vector
+								SinObjectFile obj(sinc_file);
+								objects_vector.push_back(obj);
+							}
+							else {
+								file_error(*it);
+								exit(1);
+							}
+
+							// close the file before the next iteration
+							sinc_file.close();
 						}
 
-						// close the file before the next iteration
-						sinc_file.close();
+						// update the filename
+						file_extension = ".sina";
+						filename = filename_no_extension + file_extension;
 					}
-
-					// update the filename
-					file_extension = ".sina";
-					filename = filename_no_extension + file_extension;
+					// if we just want to generate code and assemble it
+					else {
+						sina_code << compiler.compile_to_stringstream().str();
+						saved_stringstream = true;
+					}
 
 					sin_file.close();
 				} else {
@@ -276,12 +301,55 @@ int main (int argc, char** argv[]) {
 				}
 			}
 			else if (assemble) {
-				if (file_extension == ".sina") {
-					std::ifstream sina_file;
-					sina_file.open(filename, std::ios::in);
-					if (sina_file.is_open()) {
-						// assemble the file
-						Assembler assemble(sina_file, wordsize);
+				if ((compile && produce_asm_file) || !compile) {
+					if (file_extension == ".sina") {
+						std::ifstream sina_file;
+						sina_file.open(filename, std::ios::in);
+						if (sina_file.is_open()) {
+							// assemble the file
+							Assembler assemble(sina_file, wordsize);
+							assemble.create_sinc_file(filename_no_extension);
+
+							// update our object files list
+							std::vector<std::string> obj_filenames = assemble.get_obj_files_to_link();	// so we don't need to execute a function in every iteration of the loop
+							for (std::vector<std::string>::iterator it = obj_filenames.begin(); it != obj_filenames.end(); it++) {
+								// create the SinObjectFile object as well as the file stream for the sinc file
+								SinObjectFile obj_file_from_assembler;
+								std::ifstream sinc_file;
+								sinc_file.open(*it, std::ios::in | std::ios::binary);
+
+								if (sinc_file.is_open()) {
+									// open the file
+									obj_file_from_assembler.load_sinc_file(sinc_file);
+									// add it to our objects vector
+									objects_vector.push_back(obj_file_from_assembler);
+									// close the file
+									sinc_file.close();
+								}
+								else {
+									throw std::exception(("**** Could not load object file '" + *it + "' after assembly.").c_str());
+								}
+							}
+
+							// update the filename
+							file_extension = ".sinc";
+							filename = filename_no_extension + file_extension;
+
+							sina_file.close();
+						}
+						else {
+							file_error(filename);
+							exit(1);
+						}
+					}
+					else {
+						throw std::exception("**** To assemble, file type must be 'sina'.");
+					}
+				}
+				else if (compile && !produce_asm_file) {
+					if (saved_stringstream) {
+						// assemble the code in the stream
+						Assembler assemble(sina_code, wordsize);
 						assemble.create_sinc_file(filename_no_extension);
 
 						// update our object files list
@@ -308,16 +376,10 @@ int main (int argc, char** argv[]) {
 						// update the filename
 						file_extension = ".sinc";
 						filename = filename_no_extension + file_extension;
-
-						sina_file.close();
 					}
 					else {
-						file_error(filename);
-						exit(1);
+						throw std::exception("**** Stringstream was not saved!");
 					}
-				}
-				else {
-					throw std::exception("**** To assemble, file type must be 'sina'.");
 				}
 			}
 		}

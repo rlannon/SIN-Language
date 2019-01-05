@@ -24,7 +24,17 @@ NOTE:
 
 
 // Our lexeme data
-typedef std::tuple<std::string, std::string> lexeme;
+typedef struct lexeme {
+	std::string type;
+	std::string value;
+	int line_number;
+	
+	// overload the == operator
+	bool operator==(const lexeme& b);
+
+	lexeme();
+	lexeme(std::string type, std::string value, int line_number);
+};
 
 class Lexer
 {
@@ -35,6 +45,7 @@ class Lexer
 	int stream_length;	// the length of ifstream* stream, without the ultimate \n character (if present)
 
 	lexeme current_lexeme;
+	unsigned int current_line;	// track what line we are on in the file
 
 	static const std::vector<std::string> keywords;	// our keyword vector
 

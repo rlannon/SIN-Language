@@ -1,14 +1,24 @@
 #include "SymbolTable.h"
 
+// Our Symbol object
 
+Symbol::Symbol(std::string name, Type type, std::string scope_name, int scope_level) : name(name), type(type), scope_name(scope_name), scope_level(scope_level) {
+	this->defined = false;
+}
+
+Symbol::~Symbol() {
+
+}
+
+// Our SymbolTable object
 
 void SymbolTable::insert(std::string name, Type type, std::string scope_name, int scope_level)
-{
-	if (this->is_in_symbol_table(name, scope_name)) {
+{	
+	if (this-> is_in_symbol_table(name, scope_name)) {
 		throw std::exception(("**** Symbol Table Error: \"" + name + "\"already in symbol table.").c_str());
 	}
 	else {
-		this->symbols.push_back(std::make_tuple(name, type, scope_name, scope_level, false));	// an allocation is NOT a definition
+		this->symbols.push_back(Symbol(name, type, scope_name, scope_level));	// an allocation is NOT a definition
 	}
 }
 
@@ -23,16 +33,53 @@ void SymbolTable::define(std::string symbol_name, std::string scope_name)
 
 
 
-std::tuple<std::string, Type, std::string, int, bool>* SymbolTable::lookup(std::string symbol_name)
+void SymbolTable::remove(std::string symbol_name, std::string scope_name, int scope_level) {
+	/*
+	
+	Intended for use in local scopes, specifically ITE and While loops to remove any symbols that were declared within. This way, they cannot be accessed in scopes of the same level (or higher) that are not within that block.
+
+	Iterates through the symbol table, checking for a variable matching the symbol name within the scope and level specified, and removes it if it finds one.
+
+	*/
+
+	std::vector<Symbol>::iterator symbol_iter = this->symbols.begin();
+	
+	while (symbol_iter != this->symbols.end()) {
+		if ((symbol_iter->name == symbol_name) && (symbol_iter->scope_name == scope_name) && (symbol_iter->scope_level == scope_level)) {
+			// remove the symbol, but do not increment the symbol_iter; it now will point to the element after the one we just erased
+			this->symbols.erase(symbol_iter);
+		}
+		else {
+			symbol_iter++;
+		}
+	}
+}
+
+
+
+Symbol* SymbolTable::lookup(std::string symbol_name, std::string scope_name)
 {
 	// iterate through our vector
 	bool found = false;
-	std::vector<std::tuple<std::string, Type, std::string, int, bool>>::iterator iter = this->symbols.begin();
+	std::vector<Symbol>::iterator iter = this->symbols.begin();
 
 	while ((iter != this->symbols.end()) && !found) {
 		// if our name is in the symbol table
-		if (symbol_name == std::get<0>(*iter)) {
-			found = true;	// set our 'found' flag to true
+		if (symbol_name == iter->name) {
+			// if we need to look at the scope
+			if (scope_name != "") {
+				// ensure the scope name also matches
+				if (scope_name == iter->scope_name) {
+					found = true;	// we have found the symbol
+				}
+				else {
+					iter++;	// increment the iterator
+				}
+			}
+			// if we are just checking for any match
+			else {
+				found = true;	// set our 'found' flag to true
+			}
 		}
 		else {
 			iter++;	// increment the iterator
@@ -47,11 +94,11 @@ bool SymbolTable::is_in_symbol_table(std::string symbol_name, std::string scope_
 {
 	// iterate through our vector
 	bool found = false;
-	std::vector<std::tuple<std::string, Type, std::string, int, bool>>::iterator iter = this->symbols.begin();
+	std::vector<Symbol>::iterator iter = this->symbols.begin();
 
 	while ((iter != this->symbols.end()) && !found) {
 		// if we have an entry in the same scope of the same name
-		if ((symbol_name == std::get<0>(*iter)) && (scope_name == std::get<2>(*iter))) {
+		if ((symbol_name == iter->name) && (scope_name == iter->scope_name)) {
 			found = true;	// set our 'found' flag to true
 		} else {
 			iter++;	// increment the iterator

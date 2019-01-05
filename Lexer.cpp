@@ -1,8 +1,18 @@
 ﻿#include "Lexer.h"
 
 
-// define "lexeme" data type
-typedef std::tuple<std::string, std::string> lexeme;
+// implement "lexeme" data type
+// allow direct comparisons of two lexemes using the == operator
+bool lexeme::operator==(const lexeme& b) {
+	// note: we don't care about the line number; we only want to know if they have the same type/value pair
+	return ((this->type == b.type) && (this->value == b.value));
+}
+
+lexeme::lexeme() {
+}
+
+lexeme::lexeme(std::string type, std::string value, int line_number) : type(type), value(value), line_number(line_number) {
+}
 
 
 // keywords is an alphabetized list of the keywords in SIN
@@ -38,6 +48,12 @@ char Lexer::peek() {
 char Lexer::next() {
 	if (!this->eof()) {
 		char ch = this->stream->get();
+		
+		// increment the line number if we hit a newline character
+		if (ch == '\n') {
+			this->current_line += 1;
+		}
+
 		return ch;
 	}
 }
@@ -222,7 +238,7 @@ lexeme Lexer::read_next() {
 	char ch = this->peek();	// peek to see if we are still within the file
 
 	if (this->stream->eof()) {
-		next_lexeme = std::make_tuple(NULL, NULL);	// return an empty tuple if we have reached the end of the file
+		next_lexeme = lexeme("", "", NULL);	// return an empty tuple if we have reached the end of the file
 		this->exit_flag = true;	// set our exit flag
 		return next_lexeme;
 	}
@@ -242,7 +258,7 @@ lexeme Lexer::read_next() {
 			ch = this->peek();
 
 			if (this->stream->eof() || this->eof()) {	// check to make sure we haven't gone past the end of the file
-				next_lexeme = std::make_tuple(NULL, NULL);	// if we are, set the exit flag return an empty tuple
+				next_lexeme = lexeme("", "", NULL);	// if we are, set the exit flag return an empty tuple
 				this->exit_flag = true;	// set our exit flag
 				return next_lexeme;	// return the empty lexeme
 			}
@@ -303,7 +319,7 @@ lexeme Lexer::read_next() {
 		else if (ch == '\n') {	// if we encounter a newline character
 			this->peek();
 			if (this->stream->eof()) {
-				next_lexeme = std::make_tuple(NULL, NULL);	// if we have reached the end of file, set the exit flag and return an empty tuple
+				next_lexeme = lexeme("", "", NULL);	// if we have reached the end of file, set the exit flag and return an empty tuple
 				this->exit_flag = true;
 				return next_lexeme;
 			}
@@ -317,7 +333,7 @@ lexeme Lexer::read_next() {
 			this->exit_flag = true;
 		}
 
-		next_lexeme = std::make_tuple(type, value);	// create our lexeme with out (type, value) tuple
+		next_lexeme = lexeme(type, value, this->current_line);	// create our lexeme with our information
 		return next_lexeme;
 
 	}
@@ -381,7 +397,7 @@ bool Lexer::exit_flag_is_set() {
 // allow a lexeme to be written to an ostream
 
 std::ostream& Lexer::write(std::ostream& os) const {
-	return os << "{ \"" << std::get<0>(this->current_lexeme) << "\" : \"" << std::get<1>(this->current_lexeme) << "\" }";
+	return os << "{ \"" << this->current_lexeme.type << "\" : \"" << this->current_lexeme.value << "\" }";
 }
 
 // Constructor and Destructor
@@ -390,6 +406,7 @@ Lexer::Lexer(std::istream& input)
 {
 	Lexer::stream = &input;
 	Lexer::position = 0;
+	Lexer::current_line = 1;
 	Lexer::exit_flag = false;
 }
 

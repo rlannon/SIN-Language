@@ -3,6 +3,20 @@ COMMIT_HISTORY.TXT
 A list of changes made since last git commit. This file will go into more detail about the changes than the commit text will.
 This file now contains a history of changes.
 
+
+--------------------------------------------------------------------------------------------
+1/5 committ to Compiler:
+
+- Added constants for the addressing modes in assembler/SINVM. Now, address modes can be referenced by addressmode::___ instead of a number. This makes for less obfuscated and more maintainable code.
+
+- Added beginning to the compiler. Currently capable of producing simple allocations and assignments (literals only) as well as function definitions.
+
+- Modified the 'lexeme' typedef to be a 'typedef struct' instead of an alias for tuple<string, string>. As such, all references to lexemes were modified (and are now much more readable and maintainable). Further, 'int line_number' was added so that the line number where the lexeme was found is included.
+
+- Added a line counter to the Lexer; every time we call next(), if the character is \n, the counter is incremented.
+
+- Added a line number variable to the Statement class, which uses the line number of the first lexeme in the statement to determine the line on which the statement occurred. This allows the compiler to show what line errors occurred on.
+
 --------------------------------------------------------------------------------------------
 12/31 commit to Assembler-Directives:
 

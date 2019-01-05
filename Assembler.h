@@ -13,6 +13,7 @@
 #include "SinObjectFile.h"
 //#include "BinaryIO.h"	// all the functions used to write data to binary files (for SIN bytecode/compiled-SIN (.sinc) files) -- included in "LoadSINC.h"
 #include "OpcodeConstants.h"	// so we can reference opcodes by name rather than using hex values every time
+#include "AddressingModeConstants.h"	// so we can reference addressing modes by name
 
 /*
 
