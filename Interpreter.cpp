@@ -130,7 +130,7 @@ void Interpreter::setVarValue(LValue variable, std::tuple<Type, std::string> new
 				while (is_ptr_type(std::get<0>(*dereferenced))) {
 					// get the address stored in the current variable 'dereferenced'
 					address = (intptr_t)std::stoi(std::get<2>(*dereferenced));
-					// put the tuple at that address in "dereferenced"
+					// put the tuple at that address in DEREFERENCED
 					dereferenced = (std::tuple<Type, std::string, std::string>*)address;
 				}
 
@@ -159,7 +159,7 @@ void Interpreter::setVarValue(LValue variable, std::tuple<Type, std::string> new
 // allocate a variable
 void Interpreter::allocateVar(Allocation allocation, std::list<std::tuple<Type, std::string, std::string>>* vars_table) {
 	// Initialize the variable with its type, name, and no value / NULL value
-	std::tuple<Type, std::string, std::string> var = std::make_tuple<Type, std::string, std::string>(allocation.getVarType(), allocation.getVarName(), "");
+	std::tuple<Type, std::string, std::string> var = std::make_tuple<Type, std::string, std::string>(allocation.get_var_type(), allocation.get_var_name(), "");
 
 	// Push our newly-allocated variable to our variables vector
 	vars_table->push_back(var);
@@ -176,21 +176,21 @@ void Interpreter::executeStatement(Statement* statement, std::list<std::tuple<Ty
 		throw InterpreterException("Expected a statement", 3411);
 	}
 	else {
-		std::string stmt_type = statement->get_type();
+		stmt_type stmt_type = statement->get_statement_type();
 
-		if (stmt_type == "alloc") {
+		if (stmt_type == ALLOCATION) {
 			Allocation* alloc = dynamic_cast<Allocation*>(statement);
 			this->allocateVar(*alloc, vars_table);
 		}
-		else if (stmt_type == "def") {
+		else if (stmt_type == DEFINITION) {
 			Definition* def = dynamic_cast<Definition*>(statement);
 			this->defineFunction(*def);
 		}
-		else if (stmt_type == "assign") {
+		else if (stmt_type == ASSIGNMENT) {
 			Assignment* assign = dynamic_cast<Assignment*>(statement);
 			this->evaluateAssignment(*assign, vars_table);
 		}
-		else if (stmt_type == "ite") {
+		else if (stmt_type == IF_THEN_ELSE) {
 			IfThenElse* if_block = dynamic_cast<IfThenElse*>(statement);
 			Expression* condition = dynamic_cast<Expression*>(if_block->get_condition().get());
 			if (toBool(std::get<1>(this->evaluateExpression(condition, vars_table)))) {
@@ -204,7 +204,7 @@ void Interpreter::executeStatement(Statement* statement, std::list<std::tuple<Ty
 				}
 			}
 		}
-		else if (stmt_type == "while") {
+		else if (stmt_type == WHILE_LOOP) {
 			// parse a while loop
 			WhileLoop* while_loop = dynamic_cast<WhileLoop*>(statement);
 			Expression* condition = dynamic_cast<Expression*>(while_loop->get_condition().get());
@@ -215,11 +215,11 @@ void Interpreter::executeStatement(Statement* statement, std::list<std::tuple<Ty
 				loop = toBool(std::get<1>(this->evaluateExpression(condition, vars_table)));
 			}
 		}
-		else if (stmt_type == "return") {
+		else if (stmt_type == RETURN_STATEMENT) {
 			// return statements are inappropriate here
 			throw InterpreterException("A return statement is inappopriate here", 3412);
 		}
-		else if (stmt_type == "call") {
+		else if (stmt_type == CALL) {
 			Call* call = dynamic_cast<Call*>(statement);
 			// check to see if it is a pre-defined function
 			if (call->get_func_name() == "print") {
@@ -230,25 +230,25 @@ void Interpreter::executeStatement(Statement* statement, std::list<std::tuple<Ty
 				}
 				else {
 					std::shared_ptr<Expression> _arg = call->get_arg(0);
-					std::string arg_type = _arg->getExpType();
+					exp_type arg_type = _arg->get_expression_type();
 
-					if (_arg->getExpType() == "literal") {
+					if (_arg->get_expression_type() == LITERAL) {
 						Literal* arg = dynamic_cast<Literal*>(_arg.get());
 						std::cout << arg->get_value() << std::endl;
 					}
-					else if (arg_type == "LValue" || arg_type == "dereferenced" || arg_type == "address_of") {
+					else if (arg_type == LVALUE || arg_type == DEREFERENCED || arg_type == ADDRESS_OF) {
 						// an LValue for our argument
 						LValue arg;
 
 						// parse the argument correctly -- ensure we evaluate pointer values if necessary
-						if (arg_type == "dereferenced") {
+						if (arg_type == DEREFERENCED) {
 							Dereferenced* deref = dynamic_cast<Dereferenced*>(_arg.get());
 
 							std::tuple<Type, std::string> dereferenced_value = this->evaluateExpression(deref, vars_table);
 							std::cout << std::get<1>(dereferenced_value) << std::endl;
 							return;
 						}
-						else if (arg_type == "address_of") {
+						else if (arg_type == ADDRESS_OF) {
 							// if we have an address_of object
 							AddressOf* addr_of = dynamic_cast<AddressOf*>(_arg.get());
 							arg = addr_of->get_target();
@@ -258,7 +258,7 @@ void Interpreter::executeStatement(Statement* statement, std::list<std::tuple<Ty
 							std::cout << &ptd_val << std::endl;
 							return;
 						}
-						else if (arg_type == "LValue") {
+						else if (arg_type == LVALUE) {
 							arg = *dynamic_cast<LValue*>(_arg.get());
 						}
 
@@ -267,11 +267,11 @@ void Interpreter::executeStatement(Statement* statement, std::list<std::tuple<Ty
 						std::cout << val << std::endl;
 						return;
 					}
-					else if (arg_type == "binary") {
+					else if (arg_type == BINARY) {
 						Binary* arg = dynamic_cast<Binary*>(_arg.get());
 						std::cout << std::get<1>(this->evaluateExpression(arg, vars_table)) << std::endl;
 					}
-					else if (arg_type == "value_returning") {
+					else if (arg_type == VALUE_RETURNING_CALL) {
 						ValueReturningFunctionCall* val_ret = dynamic_cast<ValueReturningFunctionCall*>(_arg.get());
 						std::tuple<Type, std::string> _exp_tuple = this->evaluateValueReturningFunction(*val_ret, vars_table);
 						std::cout << std::get<1>(_exp_tuple) << std::endl;
@@ -289,8 +289,8 @@ void Interpreter::executeStatement(Statement* statement, std::list<std::tuple<Ty
 
 // evaluate an assignment statement
 void Interpreter::evaluateAssignment(Assignment assign, std::list<std::tuple<Type, std::string, std::string>>* vars_table) {
-	LValue lvalue = assign.getLValue();
-	Expression* RValue = dynamic_cast<Expression*>(assign.getRValue().get());
+	LValue lvalue = assign.get_lvalue();
+	Expression* RValue = dynamic_cast<Expression*>(assign.get_rvalue().get());
 
 	Type lvalue_type = std::get<0>(this->getVar(lvalue.getValue(), vars_table));
 
@@ -328,17 +328,17 @@ void Interpreter::evaluateVoidFunction(Call func_to_evaluate, std::list<std::tup
 			Allocation* current_arg = dynamic_cast<Allocation*>(func_def.get_args()[i].get());
 			Expression* arg = dynamic_cast<Expression*>(func_to_evaluate.get_arg(i).get());
 			std::tuple<Type, std::string> argv;
-			if (arg->getExpType() == "LValue") {
+			if (arg->get_expression_type() == LVALUE) {
 				argv = this->evaluateExpression(arg, parent_vars_table);	// if we pass a variable into a function, we need to be able to evaluate it
 			}
 			else {
 				argv = this->evaluateExpression(arg, &local_vars);	// if it's not a variable, we don't need the table
 			}
-			if (std::get<0>(argv) == current_arg->getVarType()) {
-				local_vars.push_back(std::make_tuple(current_arg->getVarType(), current_arg->getVarName(), std::get<1>(argv)));
+			if (std::get<0>(argv) == current_arg->get_var_type()) {
+				local_vars.push_back(std::make_tuple(current_arg->get_var_type(), current_arg->get_var_name(), std::get<1>(argv)));
 			}
 			else {
-				throw InterpreterException("Argument to function is of improper type, must be '" + get_string_from_type(current_arg->getVarType()) + "', not '" \
+				throw InterpreterException("Argument to function is of improper type, must be '" + get_string_from_type(current_arg->get_var_type()) + "', not '" \
 					+ get_string_from_type(std::get<0>(argv)) + "'!", 1141);
 			}
 		}
@@ -364,17 +364,17 @@ std::tuple<Type, std::string> Interpreter::evaluateValueReturningFunction(ValueR
 			Allocation* current_arg = dynamic_cast<Allocation*>(func_def.get_args()[i].get());
 			Expression* arg = dynamic_cast<Expression*>(func_to_evaluate.get_arg(i).get());
 			std::tuple<Type, std::string> argv;
-			if (arg->getExpType() == "LValue") {
+			if (arg->get_expression_type() == LVALUE) {
 				argv = this->evaluateExpression(arg, parent_vars_table);
 			}
 			else {
 				argv = this->evaluateExpression(arg, &local_vars);
 			}
-			if (std::get<0>(argv) == current_arg->getVarType()) {
-				local_vars.push_back(std::make_tuple(current_arg->getVarType(), current_arg->getVarName(), std::get<1>(argv)));
+			if (std::get<0>(argv) == current_arg->get_var_type()) {
+				local_vars.push_back(std::make_tuple(current_arg->get_var_type(), current_arg->get_var_name(), std::get<1>(argv)));
 			}
 			else {
-				throw InterpreterException("Argument to function is of improper type, must be '" + get_string_from_type(current_arg->getVarType()) + "', not '" \
+				throw InterpreterException("Argument to function is of improper type, must be '" + get_string_from_type(current_arg->get_var_type()) + "', not '" \
 					+ get_string_from_type(std::get<0>(argv)) + "'!", 1141);
 			}
 		}
@@ -388,7 +388,7 @@ std::tuple<Type, std::string> Interpreter::evaluateValueReturningFunction(ValueR
 	Expression* return_exp = new Expression();
 	while (i < procedure->statements_list.size()) {
 		Statement* statement = dynamic_cast<Statement*>(procedure->statements_list[i].get());
-		if (statement->get_type() != "return") {
+		if (statement->get_statement_type() != RETURN_STATEMENT) {
 			this->executeStatement(statement, &local_vars);
 		}
 		else {
@@ -405,12 +405,12 @@ std::tuple<Type, std::string> Interpreter::evaluateValueReturningFunction(ValueR
 // Expressions
 
 std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, std::list<std::tuple<Type, std::string, std::string>>* vars_table) {
-	if (expr->getExpType() == "literal") {
+	if (expr->get_expression_type() == LITERAL) {
 		// evaluate a literal
 		Literal* our_val = dynamic_cast<Literal*>(expr);
 		return std::make_tuple(our_val->get_type(), our_val->get_value());
 	}
-	else if (expr->getExpType() == "LValue") {
+	else if (expr->get_expression_type() == LVALUE) {
 		LValue* _var = dynamic_cast<LValue*>(expr);
 		for (std::list<std::tuple<Type, std::string, std::string>>::iterator var = vars_table->begin(); var != vars_table->end(); ++var) {
 			if (_var->getValue() == std::get<1>(*var)) {
@@ -418,7 +418,7 @@ std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, 
 			}
 		}
 	}
-	else if (expr->getExpType() == "address_of") {
+	else if (expr->get_expression_type() == ADDRESS_OF) {
 		// turn the expr object into a pointer to an AddressOf object
 		AddressOf* _addr = dynamic_cast<AddressOf*>(expr);
 
@@ -435,25 +435,25 @@ std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, 
 			}
 		}
 	}
-	else if (expr->getExpType() == "dereferenced") {
+	else if (expr->get_expression_type() == DEREFERENCED) {
 		// turn the expr object into a pointer to a Dereferenced object
 		Dereferenced* _deref = dynamic_cast<Dereferenced*>(expr);
-		// the object contained within our "dereferenced" object -- we need to test whether it is an LValue or something else
+		// the object contained within our DEREFERENCED object -- we need to test whether it is an LValue or something else
 		Expression* _deref_ptr = dynamic_cast<Expression*>(_deref->get_ptr_shared().get());
 		LValue ptr;
 
 		// first, check the type that _deref contains; it could contain another reference or an LValue
-		if (_deref_ptr->getExpType() == "LValue") {
+		if (_deref_ptr->get_expression_type() == LVALUE) {
 			// now, get the LValue in _deref
 			ptr = _deref->get_ptr();
 		}
 		// if it is another reference
-		else if (_deref_ptr->getExpType() == "dereferenced") {
-			while (_deref_ptr->getExpType() == "dereferenced") {
+		else if (_deref_ptr->get_expression_type() == DEREFERENCED) {
+			while (_deref_ptr->get_expression_type() == DEREFERENCED) {
 				_deref = dynamic_cast<Dereferenced*>(_deref_ptr);
 				_deref_ptr = dynamic_cast<Expression*>(_deref->get_ptr_shared().get());
 			}
-			if (_deref_ptr->getExpType() == "LValue") {
+			if (_deref_ptr->get_expression_type() == LVALUE) {
 				ptr = *dynamic_cast<LValue*>(_deref_ptr);
 
 				// "ptr" now holds "myPtrPtr"
@@ -507,7 +507,7 @@ std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, 
 		// TODO: what if we can't find the variable in the vector?
 
 	}
-	else if (expr->getExpType() == "binary") {
+	else if (expr->get_expression_type() == BINARY) {
 		// cast the expression to a binary so we have access to our functions
 		Binary* binary_exp = dynamic_cast<Binary*>(expr);
 
@@ -531,10 +531,80 @@ std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, 
 			throw InterpreterException("Expressions in a binary expression must have the same type.", 3101);
 		}
 	}
-	else if (expr->getExpType() == "unary") {
+	else if (expr->get_expression_type() == UNARY) {
 		// evaluate a unary expression
+		Unary* unary_expression = dynamic_cast<Unary*>(expr);
+		Expression* operand = unary_expression->get_operand().get();
+		exp_operator unary_operator = unary_expression->get_operator();
+		
+		// declare our operand value and its data type; initialize them to nothing so that we don't generate compiler warnings
+		std::string operand_value = "";
+		Type operand_type = NONE;
+
+		// get the value and type for the operand
+		if (operand->get_expression_type() == LITERAL) {
+			Literal* literal_expression = dynamic_cast<Literal*>(operand);
+			operand_value = literal_expression->get_value();
+			operand_type = literal_expression->get_type();
+		}
+		else if (operand->get_expression_type() == LVALUE) {
+			LValue* lvalue_expression = dynamic_cast<LValue*>(operand);
+			std::tuple<Type, std::string, std::string> var_to_evaluate = this->getVar(lvalue_expression->getValue(), vars_table);	// tuple = variable's type, variable's name, variable's value
+			// assign the type and value to our previously declared members
+			operand_type = std::get<0>(var_to_evaluate);
+			operand_value = std::get<2>(var_to_evaluate);
+		}
+		else {
+			// if it isn't a valid type, throw an exception
+			// TODO: get the invalid type error number in interpretation
+			throw InterpreterException("**** Cannot perform unary evaluation", 000);
+		}
+
+		if (unary_operator == PLUS){
+			// simply return the value -- unary plus does nothing
+			std::tuple<Type, std::string> value_to_return = std::make_tuple(operand_type, operand_value);
+			return value_to_return;
+		}
+		else if (unary_operator == MINUS) {
+			std::tuple<Type, std::string> value_to_return;
+			// make sure the data type is one that we can use minus with
+			if (operand_type == INT) {
+				// get the value, change its sign, and return it
+				int converted_operand_value = std::stoi(operand_value);
+				converted_operand_value = -converted_operand_value;
+				operand_value = std::to_string(converted_operand_value);
+				return std::make_tuple(operand_type, operand_value);
+			}
+			else if (operand_type == FLOAT) {
+				// get the value, change its sign, and return it
+				float converted_operand_value = std::stoi(operand_value);
+				converted_operand_value = -converted_operand_value;
+				operand_value = std::to_string(converted_operand_value);
+				return std::make_tuple(operand_type, operand_value);
+			}
+			else {
+				throw InterpreterException("**** Cannot perform 'MINUS' unary operation on expressions of type '" + get_string_from_type(operand_type) + "'; must be 'int' or 'float'", 000);
+			}
+		}
+		else if (unary_operator == NOT) {
+			// make sure the data type is one we can use "not" with (i.e., a bool)
+			if (operand_type == BOOL) {
+				if (operand_value == "True") {
+					return std::make_tuple(operand_type, "False");
+				}
+				else if (operand_value == "False") {
+					return std::make_tuple(operand_type, "True");
+				}
+				else {
+					throw InterpreterException("Type was bool, but received unexpected value.", 000);
+				}
+			}
+			else {
+				throw InterpreterException("**** Cannot perform 'NOT' unary operation on expressions of type '" + get_string_from_type(operand_type) + "'; type must be 'bool'", 000);
+			}
+		}
 	}
-	else if (expr->getExpType() == "value_returning") {
+	else if (expr->get_expression_type() == VALUE_RETURNING_CALL) {
 		ValueReturningFunctionCall* call = dynamic_cast<ValueReturningFunctionCall*>(expr);
 		// check to make sure it's not a predefined function
 		if (call->get_func_name() == "input") {
@@ -545,7 +615,7 @@ std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, 
 			}
 			else {
 				std::shared_ptr<Expression> _arg = call->get_arg(0);
-				if (_arg->getExpType() == "literal") {
+				if (_arg->get_expression_type() == LITERAL) {
 					Literal* literal_arg = dynamic_cast<Literal*>(_arg.get());
 					if (get_string_from_type(literal_arg->get_type()) == "string") {
 						std::cout << literal_arg->get_value() << std::endl;
@@ -556,10 +626,10 @@ std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, 
 						throw InterpreterException("Argument must be of type 'string'", 1141);
 					}
 				}
-				else if (_arg->getExpType() == "LValue") {
+				else if (_arg->get_expression_type() == LVALUE) {
 					LValue* lvalue_arg = dynamic_cast<LValue*>(_arg.get());
 				}
-				else if (_arg->getExpType() == "value_returning") {
+				else if (_arg->get_expression_type() == VALUE_RETURNING_CALL) {
 					ValueReturningFunctionCall* val_ret = dynamic_cast<ValueReturningFunctionCall*>(_arg.get());
 				}
 			}
@@ -572,7 +642,7 @@ std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, 
 			}
 			else {
 				std::shared_ptr<Expression> _arg = call->get_arg(0);
-				if (_arg->getExpType() == "literal") {
+				if (_arg->get_expression_type() == LITERAL) {
 					Literal* literal_arg = dynamic_cast<Literal*>(_arg.get());
 					if (get_string_from_type(literal_arg->get_type()) == "string") {
 						to_convert = literal_arg->get_value();
@@ -586,7 +656,7 @@ std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, 
 						}
 					}
 				}
-				else if (_arg->getExpType() == "LValue") {
+				else if (_arg->get_expression_type() == LVALUE) {
 					LValue* var = dynamic_cast<LValue*>(_arg.get());
 					std::tuple<Type, std::string> evaluated = this->evaluateExpression(var, vars_table);
 					if (std::get<0>(evaluated)) {
@@ -614,9 +684,6 @@ std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, 
 			std::tuple<Type, std::string> evaluated_return_expression = this->evaluateValueReturningFunction(*call, vars_table);
 			return evaluated_return_expression;
 		}
-	}
-	else if (expr->getExpType() == "var") {
-
 	}
 }
 

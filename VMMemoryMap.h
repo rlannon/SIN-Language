@@ -2,14 +2,19 @@
 
 /*
 
+For SIN VM version 1
+
 Contains the constants that define where our various blocks of memory in the VM begin
 
-Our addresses range from $0000 to $FFFF (16k):
-	- All variables will get stored from $0000 up to (but not including) $2000
-	- The stack lives from $2000 to (but not including) $2400
+Our addresses range from $0000 to $FFFF (65k):
+	- All variables will get stored from $0000 up to (but not including) $1400
+	- An input buffer lives from $1400 to $17FF
+	- The stack lives from $1800 to (but not including) $2400
 	- The call stack lives from $2400 to (but not including) $2600
 	- All included program data lives from $2600 to $f000
 	- The arguments and command line data take up the last few pages -- $f000 to $ffff
+
+Note that the stacks in the VM grow downward
 
 */
 
@@ -23,6 +28,9 @@ const size_t _MEMORY_MIN = 0x0000;
 
 // the data section gets addresses $0000 through $1FFF -- 32 pages
 const size_t _GLOBAL_DATA = 0x0000;	// our global data section will always start at $0000
+const size_t _BUFFER_START = 0x1400;	// a buffer for input data -- addresses from 1400 to 17ff will be untouched (meaning we can have 1,024 bytes of buffer by default)
+
+// TODO: delete _LOCAL_DATA ?
 const size_t _LOCAL_DATA = 0x1800;	// our local data section will start at $1800; this is the same as the stack bottom
 
 // the RS directive will allocate variables starting at 0x0100; the zero page remains untouched by @rs

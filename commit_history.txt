@@ -5,7 +5,29 @@ This file now contains a history of changes.
 
 
 --------------------------------------------------------------------------------------------
-1/5 committ to Compiler:
+
+1/14 commit to Compiler:
+
+- Renamed the namespace 'addressmode' to 'addressingmode' as it is more accurate/consistent
+- Refactored statement::type and expression::type to use enums instead of strings; this allows for code that makes much more sense to read, as well as a much more limited range of choices for the types of statements and expressions we can use (e.g., no more wondering if it is "lvalue" or "LValue", as it is LVALUE)
+- Began adding in support for a "builtins" library in the compiler (built-in functions will not be hard-coded in the compiler, but use assembly implementations in separate files that are included in projects)
+- Added a vector of already-included libraries so we can avoid duplicate dependencies, though it is not yet fully implemented or well-tested
+- Added more compilation routines, though they are nowhere close to finished and the compiler remains largely incomplete
+- Many more comments
+- Began work to make the functions more modular and maintainable
+- Fixed typos
+- Removed some unnecessary stuff
+- Changed comments from # to // in SIN
+- Added "asm<>" keyword for inline ASM; note this is NOT protected and the compiler essentially ignores what you do inside
+- Updated the included "BinaryIO" library to its latest version
+
+According to "cloc", the project now contains approximately:
+	- 5600 lines of code
+	- 1700 comment lines
+	- 1600 blank lines
+
+--------------------------------------------------------------------------------------------
+1/5 commit to Compiler:
 
 - Added constants for the addressing modes in assembler/SINVM. Now, address modes can be referenced by addressmode::___ instead of a number. This makes for less obfuscated and more maintainable code.
 

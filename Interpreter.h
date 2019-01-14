@@ -14,12 +14,12 @@
 #include "Expression.h"
 #include "Statement.h"
 
-
+// TODO: add line numbers to interpreter error messages
 
 class Interpreter
 {
 	// our symbol tables will be std::list<> because they can be safely pointed to
-	std::list<std::tuple<Type, std::string, std::string>> var_table;
+	std::list<std::tuple<Type, std::string, std::string>> var_table;	// variable's type, name, and value
 	std::list<Definition> function_table;
 
 	// convert to and from boolean type

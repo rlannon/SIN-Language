@@ -291,7 +291,7 @@ void SINVM::execute_instruction(int opcode) {
 				}
 			}
 			else {
-				throw std::exception("**** EXCEPTION: Stack overflow!");
+				throw std::exception("**** Runtime error: Stack overflow on call stack!");
 			}
 
 			this->PC = address_to_jump - 1;
@@ -377,35 +377,23 @@ void SINVM::execute_instruction(int opcode) {
 				std::getline(std::cin, input);
 				input.push_back('\0');	// add a null terminator
 
-				// if we can, convert the input into an integer
-				// otherwise, store them all as ascii characters
-				try {
-					// convert the data
-					int data = std::stoi(input);
-					// first, validate the memory address -- and make sure that both bytes of the word are valid
-					if (!address_is_valid(start_address) || !address_is_valid(start_address + 1)) {
-						// subtract memory_size at least one time
-						do {
-							start_address -= memory_size;
-						} while (!address_is_valid(start_address));
-					}
-					// store at the desired memory address
-					this->store_in_memory(start_address, data);
+				// input will always return a series of ASCII-encoded bytes
+				
+				// make a vector of uint8_t to hold our input data, always encoded as ASCII text
+				std::vector<uint8_t> input_bytes;
+
+				// iterate over the string and store the characters in 'input_bytes'
+				for (std::string::iterator string_character = input.begin(); string_character != input.end(); string_character++) {
+					input_bytes.push_back(*string_character);
 				}
-				catch (std::exception &e) {
-					// make a vector of uint16_t to hold our input data
-					// TODO: generalize more for variable word sizes in VM ?
-					std::vector<uint16_t> input_bytes;
-					// iterate over the string and store the characters in 'input_bytes'
-					for (std::string::iterator string_character = input.begin(); string_character != input.end(); string_character++) {
-						input_bytes.push_back(*string_character);
-					}
-					// store those bytes in memory
-					// use size() here because we want to index
-					for (int i = 0; i < input_bytes.size(); i++) {
-						this->memory[start_address + i] = input_bytes[i];
-					}
+				// store those bytes in memory
+				// use size() here because we want to index
+				for (int i = 0; i < input_bytes.size(); i++) {
+					this->memory[start_address + i] = input_bytes[i];
 				}
+
+				// finally, store the length of input_bytes (in bytes) in register A
+				this->REG_A = input_bytes.size();
 			}
 			else if (syscall_number == 0x14) {
 				// If we want to print something to the screen, we must specify the address where it starts
@@ -476,7 +464,7 @@ int SINVM::execute_load() {
 	this->PC++;
 	uint8_t addressing_mode = this->memory[this->PC];
 
-	if (addressing_mode == addressmode::reg_b) {
+	if (addressing_mode == addressingmode::reg_b) {
 		return REG_B;
 	}
 
@@ -486,16 +474,16 @@ int SINVM::execute_load() {
 	unsigned int data_to_load = this->get_data_of_wordsize();
 
 	// check our addressing mode and decide how to interpret our data
-	if ((addressing_mode == addressmode::absolute) || (addressing_mode == addressmode::x_index) || (addressing_mode == addressmode::y_index)) {
+	if ((addressing_mode == addressingmode::absolute) || (addressing_mode == addressingmode::x_index) || (addressing_mode == addressingmode::y_index)) {
 		// if we have absolute or x/y indexed-addressing, we will be reading from memory
 		int data_in_memory = 0;
 
 		// however, we need to make sure that if it is indexed, we add the register values to data_to_load, which contains the memory address, so we actually perform the indexing
-		if (addressing_mode == addressmode::x_index) {
+		if (addressing_mode == addressingmode::x_index) {
 			// x indexed -- add REG_X to data_to_load
 			data_to_load += REG_X;
 		}
-		else if (addressing_mode == addressmode::y_index) {
+		else if (addressing_mode == addressingmode::y_index) {
 			// y indexed
 			data_to_load += REG_Y;
 		}
@@ -514,7 +502,7 @@ int SINVM::execute_load() {
 		// load our target register with the data we fetched
 		return data_in_memory;
 	}
-	else if (addressing_mode == addressmode::immediate) {
+	else if (addressing_mode == addressingmode::immediate) {
 		// if we are using immediate addressing, data_to_load is the data we want to load
 		// simply assign it to our target register and return
 		return data_to_load;
@@ -526,10 +514,10 @@ int SINVM::execute_load() {
 
 	// TODO: implement indirect indexed addressing
 
-	else if (addressing_mode == addressmode::indirect_x) {
+	else if (addressing_mode == addressingmode::indirect_x) {
 		// indirect indexed addressing with the X register
 	}
-	else if (addressing_mode == addressmode::indirect_y) {
+	else if (addressing_mode == addressingmode::indirect_y) {
 		// indirect indexed addressing with the Y register
 	}
 }
@@ -555,12 +543,12 @@ void SINVM::execute_store(int reg_to_store) {
 	}
 
 	// act according to the addressing mode
-	if ((addressing_mode != addressmode::immediate) && (addressing_mode != addressmode::reg_a) && (addressing_mode != addressmode::reg_b)) {
+	if ((addressing_mode != addressingmode::immediate) && (addressing_mode != addressingmode::reg_a) && (addressing_mode != addressingmode::reg_b)) {
 		// add the appropriate register if it is an indexed addressing mode
-		if (addressing_mode == addressmode::x_index) {
+		if (addressing_mode == addressingmode::x_index) {
 			memory_address += this->REG_X;
 		}
-		else if (addressing_mode == addressmode::y_index) {
+		else if (addressing_mode == addressingmode::y_index) {
 			memory_address += this->REG_Y;
 		}
 
@@ -571,7 +559,7 @@ void SINVM::execute_store(int reg_to_store) {
 
 		return;
 	}
-	else if (addressing_mode == addressmode::immediate) {
+	else if (addressing_mode == addressingmode::immediate) {
 		// we cannot use immediate addressing with a store instruction, so throw an exception
 		throw std::exception("Invalid addressing mode for store instruction.");
 	}
@@ -628,7 +616,7 @@ void SINVM::execute_bitshift(int opcode)
 	this->PC++;
 	int addressing_mode = this->memory[this->PC];
 
-	if (addressing_mode != addressmode::reg_a) {
+	if (addressing_mode != addressingmode::reg_a) {
 		int value_at_address;
 		uint8_t high_byte_address;
 		bool carry_set_before_bitshift = false;
@@ -638,7 +626,7 @@ void SINVM::execute_bitshift(int opcode)
 		int address = this->get_data_of_wordsize();
 
 		// if we have absolute addressing
-		if (addressing_mode == addressmode::absolute) {
+		if (addressing_mode == addressingmode::absolute) {
 			high_byte_address = address >> 8;
 			value_at_address = this->get_data_from_memory(high_byte_address);
 
@@ -674,7 +662,7 @@ void SINVM::execute_bitshift(int opcode)
 			this->store_in_memory(high_byte_address, value_at_address);
 		}
 		// if we have x-indexed addressing
-		else if (addressing_mode == addressmode::x_index) {
+		else if (addressing_mode == addressingmode::x_index) {
 			address += REG_X;
 			high_byte_address = address >> 8;
 			value_at_address = this->get_data_from_memory(high_byte_address);
@@ -692,7 +680,7 @@ void SINVM::execute_bitshift(int opcode)
 			this->store_in_memory(high_byte_address, value_at_address);
 		}
 		// if we have y-indexed addressing
-		else if (addressing_mode == addressmode::y_index) {
+		else if (addressing_mode == addressingmode::y_index) {
 			address += REG_Y;
 			high_byte_address = address >> 8;
 			value_at_address = this->get_data_from_memory(high_byte_address);
@@ -711,13 +699,13 @@ void SINVM::execute_bitshift(int opcode)
 			this->store_in_memory(high_byte_address, value_at_address);
 		}
 		// if we have indirect addressing (x)
-		else if (addressing_mode == addressmode::indirect_x) {
+		else if (addressing_mode == addressingmode::indirect_x) {
 
 			// TODO: enable indirect addressing
 
 		}
 		// if we have indirect addressing (y)
-		else if (addressing_mode == addressmode::indirect_y) {
+		else if (addressing_mode == addressingmode::indirect_y) {
 
 			// TODO: enable indirect addressing
 
@@ -835,16 +823,16 @@ void SINVM::execute_jmp() {
 	int memory_address = this->get_data_of_wordsize();
 
 	// check our addressing mode to see how we need to handle the data we just received
-	if (addressing_mode == addressmode::absolute) {
+	if (addressing_mode == addressingmode::absolute) {
 		// if absolute, set it to memory address - 1 so when it gets incremented at the end of the instruction, it's at the proper address
 		this->PC = memory_address - 1;
 		return;
 	}
-	else if (addressing_mode == addressmode::x_index) {
+	else if (addressing_mode == addressingmode::x_index) {
 		memory_address += REG_X;
 		this->PC = memory_address - 1;
 	}
-	else if (addressing_mode == addressmode::y_index) {
+	else if (addressing_mode == addressingmode::y_index) {
 		memory_address += REG_Y;
 		this->PC = memory_address - 1;
 	}
@@ -1038,13 +1026,13 @@ void SINVM::_debug_values() {
 SINVM::SINVM(std::istream& file)
 {
 	// TODO: redo the SINVM constructor...
-	this->_WORDSIZE = readU8(file);
+	this->_WORDSIZE = BinaryIO::readU8(file);
 
-	size_t prg_size = (size_t)readU32(file);
+	size_t prg_size = (size_t)BinaryIO::readU32(file);
 	std::vector<uint8_t> prg_data;
 
 	for (size_t i = 0; i < prg_size; i++) {
-		uint8_t next_byte = readU8(file);
+		uint8_t next_byte = BinaryIO::readU8(file);
 		prg_data.push_back(next_byte);
 	}
 

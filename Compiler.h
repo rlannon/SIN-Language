@@ -25,6 +25,12 @@ Symbol Table:
 
 class Compiler
 {
+	// our asm type
+	const std::string asm_type = "sinasm16";
+
+	// a list of library names that are being included; if one is already on the list and included in another file, it is skipped (otherwise we would get a linker error saying we have duplicate definitions)
+	std::vector<std::string>* library_names;
+
 	// AST and functions for navigating it
 	StatementBlock AST;	// the whole AST; used for loading the AST from the file and our initial compiler call
 	size_t AST_index;
@@ -53,16 +59,22 @@ class Compiler
 	std::vector<std::string>* object_file_names;
 	void include_file(Include include_statement);	// add a file to the solution
 
-	std::stringstream allocate(Allocation allocation_statement, size_t* stack_offset = nullptr);	// add a variable to the symbol table (using an allocation statement)
+	std::stringstream fetch_value(std::shared_ptr<Expression> to_fetch, size_t* stack_offset = nullptr, size_t max_offset = 0);	// produces asm code to put the result of the specified expression in A
+
+	std::stringstream allocate(Allocation allocation_statement, size_t* stack_offset = nullptr, size_t* max_offset = nullptr);	// add a variable to the symbol table (using an allocation statement)
 	std::stringstream define(Definition definition_statement);	// add a function definition (using a definition statement)
 	std::stringstream assign(Assignment assignment_statement, size_t* stack_offset = nullptr);
-	std::stringstream call(Call call_statement);
+	std::stringstream call(Call call_statement, size_t* stack_offset = nullptr, size_t max_offset = 0);
+	std::stringstream ite(IfThenElse ite_statement, size_t* stack_offset = nullptr, size_t max_offset = 0);
 
-	std::stringstream compile_to_sinasm(StatementBlock AST, unsigned int local_scope_level, std::string local_scope_name = "global", size_t* stack_offset = nullptr);	// compiles SIN code and writes SINASM code to output_file; modifies the member's vector pointer to list the dependencies
+	std::stringstream compile_to_sinasm(StatementBlock AST, unsigned int local_scope_level, std::string local_scope_name = "global", size_t* stack_offset = nullptr, size_t* max_offset = 0);	// compiles SIN code and writes SINASM code to output_file; modifies the member's vector pointer to list the dependencies
 public:
-	void produce_sina_file(std::string sina_filename);	// opens a file and calls the actual compilation routine; in a separate function so that we can use recursion
-	std::stringstream compile_to_stringstream();
+	void produce_sina_file(std::string sina_filename, bool include_builtins = true);	// opens a file and calls the actual compilation routine; in a separate function so that we can use recursion
+	std::stringstream compile_to_stringstream(bool include_builtins = true);
 
-	Compiler(std::istream& sin_file, uint8_t _wordsize, std::vector<std::string>* object_file_names);	// the compiler is initialized using a file, and it will lex and parse it
+	//void operator=(const Compiler& to_compare);
+
+	Compiler(std::istream& sin_file, uint8_t _wordsize, std::vector<std::string>* object_file_names, std::vector<std::string>* included_libraries, bool include_builtins = true);	// the compiler is initialized using a file, and it will lex and parse it; the parameter 'include_builtins' will default to 'true', but we will be able to supress it
+	Compiler();
 	~Compiler();
 };

@@ -46,9 +46,6 @@ Quick guide to the assembly (see Doc/sinasm for more information):
 
 */
 
-// to maintain the .sinc file standard
-const uint8_t sinc_version = 2;
-
 // to test whether instructions are of particular "classes"
 const bool is_standalone(int opcode);	// tells us whether an opcode needs a value to follow
 const bool is_bitshift(int opcode);	// tests whether the opcode is a bitshift instruction
@@ -64,6 +61,7 @@ class Assembler
 {
 	// allow SINVM access to these functions
 	friend class SINVM;
+	friend class SinObjectFile;
 
 	// tell the assembler our wordsize
 	uint8_t _WORDSIZE;
@@ -134,7 +132,7 @@ class Assembler
 	// get the instructions of a SINASM file and returns them in a vector<int>
 	std::vector<uint8_t> assemble();
 public:
-	// take a SINASM file as input and creates a .sinc file to be used by the SINVM; one of the entry functions for the class
+	// take a SINASM file as input and creates a .sinc file to be used by the SINVM; one of the entry functions for the class; note that this can also be done by using a SinObjectFile instance and passing an initialized Assembler object to SinObjectFile's "write_sinc_file" member function
 	void create_sinc_file(std::string output_file_name);
 
 	// get the list of object files for the linker

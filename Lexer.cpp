@@ -9,6 +9,7 @@ bool lexeme::operator==(const lexeme& b) {
 }
 
 lexeme::lexeme() {
+	this->line_number = 0;	// initialize to 0 by default
 }
 
 lexeme::lexeme(std::string type, std::string value, int line_number) : type(type), value(value), line_number(line_number) {
@@ -17,11 +18,11 @@ lexeme::lexeme(std::string type, std::string value, int line_number) : type(type
 
 // keywords is an alphabetized list of the keywords in SIN
 // it must be alphabetized in order to use the find algorithm from the standard library
-const std::vector<std::string> Lexer::keywords{ "alloc", "and", "bool", "def", "else", "float", "if", "include", "int", "let", "or", "ptr", "raw", "return", "string", "void", "while", "xor"};
+const std::vector<std::string> Lexer::keywords{ "alloc", "and", "asm", "bool", "const", "def", "else", "float", "if", "include", "int", "let", "or", "ptr", "raw", "return", "string", "void", "while", "xor"};
 
 // Our regular expressions
-const std::string Lexer::punc_exp = "[\\.',;\\[\\]\\{\\}\\(\\)]";	// expression for punctuation
-const std::string Lexer::op_exp = "[\\+\\-\\*/%=\\&\\|\\^<>\\$\\?!@]";	// expression for operations
+const std::string Lexer::punc_exp = "[\\.',:;\\[\\]\\{\\}\\(\\)]";	// expression for punctuation
+const std::string Lexer::op_exp = "[\\+\\-\\*/%=\\&\\|\\^<>\\$\\?!@#]";	// expression for operations
 const std::string Lexer::id_exp = "[_0-9a-zA-Z]";	// expression for interior id letters
 const std::string Lexer::bool_exp = "[(True)|(False)]";
 
@@ -243,31 +244,54 @@ lexeme Lexer::read_next() {
 		return next_lexeme;
 	}
 
-	if (ch == '#') {	// if we have a comment, skip down to the next line
-		bool is_comment = true;
+	if (ch == '/') {	// if we have a slash, we may have a comment
+		ch = this->next();	// advance one character
 
-		while (is_comment) {
-			this->next();	// eat the comment character
-			this->read_while(&this->is_not_newline);	// skip characters until we hit a newline character
-			this->next();	// eat the newline character
+		if (this->peek() == '/') {	// if the next character is a slash, it's a line comment
+			bool is_comment = true;
 
-			// if we have whitespace (e.g., a tab), skip it
-			this->read_while(&this->is_whitespace);
+			while (is_comment) {
+				this->next();	// eat the comment character
+				this->read_while(&this->is_not_newline);	// skip characters until we hit a newline character
+				this->next();	// eat the newline character
 
-			// get the next character
+				// if we have whitespace (e.g., a tab), skip it
+				this->read_while(&this->is_whitespace);
+
+				// get the next character
+				ch = this->peek();
+
+				if (this->stream->eof() || this->eof()) {	// check to make sure we haven't gone past the end of the file
+					next_lexeme = lexeme("", "", NULL);	// if we are, set the exit flag return an empty tuple
+					this->exit_flag = true;	// set our exit flag
+					return next_lexeme;	// return the empty lexeme
+				}
+				else if (ch == '/') {	// if not, check to see if we have another comment
+					ch = this->next();	// eat the potential comment character
+
+					// check to see if the next character is a slash; if so, we have another comment
+					if (this->peek() == '/') {
+						is_comment = true;
+					}
+					// if it is not a comment
+					else {
+						// set is_comment to false to terminate the loop
+						is_comment = false;
+						// use "unget" so that the position is in the correct place and "peek" reveals a slash
+						this->stream->unget();
+						ch = this->peek();
+					}
+				}
+				else {
+					is_comment = false;
+				}
+			}
+		}
+		// if the next character is not '/', just treat it as an op_char
+		else {
+			// use "unget" to move back one place so "peek" reveals a slash
+			this->stream->unget();
 			ch = this->peek();
-
-			if (this->stream->eof() || this->eof()) {	// check to make sure we haven't gone past the end of the file
-				next_lexeme = lexeme("", "", NULL);	// if we are, set the exit flag return an empty tuple
-				this->exit_flag = true;	// set our exit flag
-				return next_lexeme;	// return the empty lexeme
-			}
-			else if (ch == '#') {	// if not, check to see if we have another comment
-				is_comment = true;
-			}
-			else {
-				is_comment = false;
-			}
 		}
 	}
 

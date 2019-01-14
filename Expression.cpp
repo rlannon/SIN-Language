@@ -129,15 +129,18 @@ const bool is_raw(Type _t) {
 	return (_t == RAW8 || _t == RAW16 || _t == RAW32);
 }
 
-std::string Expression::getExpType() {
-	return this->type;
+exp_type Expression::get_expression_type()
+{
+	return this->expression_type;
 }
 
-Expression::Expression(std::string type) : type(type) {
+
+Expression::Expression(exp_type expression_type) : expression_type(expression_type) {
 	// uses initializer list
 }
 
 Expression::Expression() {
+	Expression::expression_type = EXPRESSION_GENERAL;	// give it a default value so we don't try to use an uninitialized variable
 }
 
 Expression::~Expression() {
@@ -154,11 +157,12 @@ std::string Literal::get_value() {
 }
 
 Literal::Literal(Type data_type, std::string value) : data_type(data_type), value(value) {
-	Literal::type = "literal";
+	Literal::expression_type = LITERAL;
 }
 
 Literal::Literal() {
-	Literal::type = "literal";
+	Literal::data_type = NONE;	// give it a default value so we don't try to access an uninitialized value
+	Literal::expression_type = LITERAL;
 }
 
 
@@ -178,19 +182,18 @@ void LValue::setLValueType(std::string new_lvalue_type) {
 	this->LValue_Type = new_lvalue_type;
 }
 
-LValue::LValue(std::string value, std::string LValue_Type) {
-	LValue::value = value;
-	LValue::type = "LValue";
+LValue::LValue(std::string value, std::string LValue_Type) : value(value) {
+	LValue::expression_type = LVALUE;
 	LValue::LValue_Type = LValue_Type;
 }
 
 LValue::LValue(std::string value) : value(value) {
-	LValue::type = "LValue";
+	LValue::expression_type = LVALUE;
 	LValue::LValue_Type = "var";
 }
 
 LValue::LValue() {
-	LValue::type = "LValue";
+	LValue::expression_type = LVALUE;
 	LValue::value = "";
 	LValue::LValue_Type = "var";
 }
@@ -202,46 +205,36 @@ LValue AddressOf::get_target() {
 }
 
 AddressOf::AddressOf(LValue target) : target(target) {
-	AddressOf::type = "address_of";
+	AddressOf::expression_type = ADDRESS_OF;
 }
 
 AddressOf::AddressOf() {
-	AddressOf::type = "address_of";
+	AddressOf::expression_type = ADDRESS_OF;
 }
 
 
 
 LValue Dereferenced::get_ptr() {
-	if (this->ptr->getExpType() == "LValue") {
+	if (this->ptr->get_expression_type() == LVALUE) {
 		LValue* lvalue = dynamic_cast<LValue*>(this->ptr.get());
 		return *lvalue;
 	}
 	else {
-		std::string msg = "Cannot convert " + this->ptr->getExpType() + " to 'LValue'";
+		std::string msg = "Cannot convert type";
 		throw std::exception(msg.c_str());
 	}
 }
-
-//LValue Dereferenced::getReferencedLValue() {
-//	if (this->getExpType() == "LValue") {
-//		return this->get_ptr();
-//	}
-//	else if (this->getExpType() == "dereferenced") {
-//		Dereferenced* next_ptr = dynamic_cast<Dereferenced*>(this->ptr.get());
-//		return next_ptr->getReferencedLValue();
-//	}
-//}
 
 std::shared_ptr<Expression> Dereferenced::get_ptr_shared() {
 	return this->ptr;
 }
 
 Dereferenced::Dereferenced(std::shared_ptr<Expression> ptr) : ptr(ptr) {
-	this->type = "dereferenced";
+	this->expression_type = DEREFERENCED;
 }
 
 Dereferenced::Dereferenced() {
-	Dereferenced::type = "dereferenced";
+	Dereferenced::expression_type = DEREFERENCED;
 }
 
 
@@ -259,11 +252,12 @@ exp_operator Binary::get_operator() {
 }
 
 Binary::Binary(std::shared_ptr<Expression> left_exp, std::shared_ptr<Expression> right_exp, exp_operator op) : left_exp(left_exp), right_exp(right_exp), op(op) {
-	Binary::type = "binary";
+	Binary::expression_type = BINARY;
 }
 
 Binary::Binary() {
-	Binary::type = "binary";
+	Binary::op = NO_OP;	// initialized to no_op so we don't ever run into uninitialized variables
+	Binary::expression_type = BINARY;
 }
 
 
@@ -277,11 +271,12 @@ std::shared_ptr<Expression> Unary::get_operand() {
 }
 
 Unary::Unary(std::shared_ptr<Expression> operand, exp_operator op) : operand(operand), op(op) {
-	Unary::type = "unary";
+	Unary::expression_type = UNARY;
 }
 
 Unary::Unary() {
-	Unary::type = "unary";
+	Unary::op = NO_OP;	// initialize to no_op so we don't ever try to access uninitialized data
+	Unary::expression_type = UNARY;
 }
 
 
@@ -309,9 +304,9 @@ int ValueReturningFunctionCall::get_args_size() {
 }
 
 ValueReturningFunctionCall::ValueReturningFunctionCall(std::shared_ptr<LValue> name, std::vector<std::shared_ptr<Expression>> args) : name(name), args(args) {
-	ValueReturningFunctionCall::type = "value_returning";
+	ValueReturningFunctionCall::expression_type = VALUE_RETURNING_CALL;
 }
 
 ValueReturningFunctionCall::ValueReturningFunctionCall() {
-	ValueReturningFunctionCall::type = "value_returning";
+	ValueReturningFunctionCall::expression_type = VALUE_RETURNING_CALL;
 }

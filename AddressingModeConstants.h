@@ -8,7 +8,7 @@ This header serves the purpose of defining the addressing modes used in SINASM a
 
 */
 
-namespace addressmode {
+namespace addressingmode {
 	const uint8_t absolute = 0x00;
 	const uint8_t x_index = 0x01;
 	const uint8_t y_index = 0x02;

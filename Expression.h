@@ -45,6 +45,18 @@ enum Type {
 	NONE
 };
 
+enum exp_type {
+	// although we could continue to use strings for Expression::type, using an enum will ultimately be much easier
+	EXPRESSION_GENERAL,
+	LITERAL,
+	LVALUE,
+	ADDRESS_OF,
+	DEREFERENCED,
+	BINARY,
+	UNARY,
+	VALUE_RETURNING_CALL
+};
+
 const int num_types = 14;
 
 const bool is_literal(std::string candidate_type);
@@ -67,10 +79,11 @@ const bool is_raw(Type _t);
 class Expression
 {
 protected:
-	std::string type;
+	exp_type expression_type;	// replace "string type" with "exp_type expression_type"
 public:
-	std::string getExpType();
-	Expression(std::string type);
+	exp_type get_expression_type();	// tells us whether it's a literal, lvalue, binary...
+	//Expression(std::string type);
+	Expression(exp_type expression_type);
 	Expression();
 
 	virtual ~Expression();
@@ -92,8 +105,8 @@ public:
 // LValue -- a variable
 class LValue : public Expression
 {
-	std::string value;
-	std::string LValue_Type;
+	std::string value;	// the name of the variable
+	std::string LValue_Type;	// the type -- var, var_dereferenced, or var_address
 public:
 	std::string getValue();
 	std::string getLValueType();

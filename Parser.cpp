@@ -50,7 +50,6 @@ lexeme Parser::peek() {
 		return this->tokens[this->position + 1];
 	}
 	else {
-		//this->error("No more lexemes to parse!", 1);
 		throw ParserException("No more lexemes to parse!", 1);
 	}
 }
@@ -64,7 +63,7 @@ lexeme Parser::next() {
 	}
 	// if we have hit the end
 	else {
-		this->error("No more lexemes to parse!", 1);
+		throw ParserException("No more lexemes to parse!", 1);
 	}
 }
 
@@ -79,11 +78,6 @@ lexeme Parser::previous() {
 lexeme Parser::back() {
 	this->position -= 1;
 	return this->tokens[this->position];
-}
-
-void Parser::error(std::string message, int code) {
-	//throw ParserException(code, message);
-	throw ParserException(message, code);
 }
 
 // Skip a punctuation mark
@@ -177,7 +171,7 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 					return stmt;
 				}
 				else {
-					throw ParserException("Expected a filename in quotes in 'include' statement", 0);
+					throw ParserException("Expected a filename in quotes in 'include' statement", 0, current_lex.line_number);
 					// TODO: error numbers for includes
 				}
 			}
@@ -189,8 +183,68 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 			can_use_include_statement = false;
 		}
 
+		// parse inline assembly
+		if (current_lex.value == "asm") {
+			lexeme next = this->next();
+
+			if (next.value == "<") {
+				lexeme asm_type = this->next();
+				if (asm_type.type == "ident") {
+					std::string asm_architecture = asm_type.value;
+					
+					if (this->peek().value == ">") {
+						this->next();
+					}
+					else {
+						throw ParserException("Need closing angle bracket around asm type", 000, current_lex.line_number);
+					}
+
+					if (this->peek().value == "{") {
+						this->next();
+
+						// TODO: figure out how to implement line breaks in asm
+
+						// continue reading values into a stringstream until we hit another curly brace
+						bool end_asm = false;
+						std::stringstream asm_code;
+
+						lexeme asm_data = this->next();
+						int current_line = asm_data.line_number;
+						
+						while (!end_asm) {
+							// if we have advanced in line number, add a newline 
+							if (asm_data.line_number > current_line) {
+								asm_code << std::endl;
+								current_line = asm_data.line_number;	// update 'current_line' -- if we advance lines from here, we will add a newline at the top of the next loop
+							}
+
+							if (asm_data.value == "}") {
+								end_asm = true;
+							}
+							else {
+								asm_code << asm_data.value;
+									
+								// put a space after idents, but not if a colon follows; also put spaces before semicolons
+								if (((asm_data.type == "ident") && (this->peek().value != ":")) || (this->peek().value == ";")) {
+									asm_code << " ";
+								}
+								// advance to the next token, but ONLY if we haven't hit the closing curly brace
+								asm_data = this->next();
+							}
+						}
+
+						stmt = std::make_shared<InlineAssembly>(asm_architecture, asm_code.str());
+						stmt->set_line_number(current_lex.line_number);	// sets the line number for errors to the ASM block start; any ASM errors will be made known in the assembler
+						return stmt;
+					}
+				}
+				else {
+					throw ParserException("Inline Assembly must include the target architecture!", 000, current_lex.line_number);
+				}
+			}
+		}
 		// parse an ITE
-		if (current_lex.value == "if") {
+		else if (current_lex.value == "if") {
 			// Get the next lexeme
 			lexeme next = this->next();
 
@@ -230,7 +284,7 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 								return stmt;
 							}
 							else {
-								this->error("Expected '{' after 'else' in conditional", 331);
+								throw ParserException("Expected '{' after 'else' in conditional", 331, current_lex.line_number);
 							}
 						}
 					}
@@ -239,12 +293,12 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 				}
 				// If our condition is not followed by an opening curly
 				else {
-					this->error("Expected '{' after condition in conditional", 331);
+					throw ParserException("Expected '{' after condition in conditional", 331, current_lex.line_number);
 				}
 			}
 			// If condition is not enclosed in parens
 			else {
-				this->error("Condition must be enclosed in parens", 331);
+				throw ParserException("Condition must be enclosed in parens", 331, current_lex.line_number);
 			}
 
 		}
@@ -256,9 +310,24 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 			// check our next token; it must be a keyword
 			lexeme var_type = this->next();
 			if (var_type.type == "kwd") {
-				if (var_type.value == "int" || var_type.value == "float" || var_type.value == "bool" || var_type.value == "string" || var_type.value == "raw" || var_type.value == "ptr") {
-					// Note: pointers and RAWs must be treated a little bit differently than other fundamental types
-					// if we have a RAW,
+				if (var_type.value == "int" || var_type.value == "float" || var_type.value == "bool" || var_type.value == "string" || var_type.value == "raw" || var_type.value == "ptr" || var_type.value == "const") {
+					// Note: pointers, consts, and RAWs must be treated a little bit differently than other fundamental types
+
+					// in case we have a raw, we need to define these
+					std::string quality = "none";
+					bool initialized = false;
+					std::shared_ptr<Expression> initial_value = std::make_shared<Expression>();	// empty expression by default
+
+					// if we have a const
+					if (var_type.value == "const") {
+						// change the variable quality
+						quality = "const";
+
+						// get the actual variable type
+						var_type = this->next();
+					}
+
+					// if we have a RAW
 					if (var_type.value == "raw") {
 						// 'raw' must be followed by '<'
 						if (this->peek().value == "<") {
@@ -273,7 +342,7 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 								Type _raw_t = get_raw_type(_size);
 
 								if (_raw_t == NONE) {
-									throw ParserException("RAW size was invalid", 240);
+									throw ParserException("RAW size was invalid", 240, current_lex.line_number);
 								}
 								
 								// TODO: finishing parsing RAW statement
@@ -283,31 +352,19 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 									// skip closing angle bracket
 									this->next();
 
-									//// get the identifier
-									//lexeme var_name = this->next();
-									//if (std::get<0>(var_name) == "ident") {
-
-									//	// get the identifier
-									//	new_var_type = _raw_t;
-									//	new_var_name = std::get<1>(var_name);
-
-									//}
-									//else {
-									//	throw ParserException("Expected an idenfifier", 111);
-									//}
 									new_var_type = _raw_t;
 								}
 								else {
-									throw ParserException("'raw' size must be enclosed in angle brackets", 212);
+									throw ParserException("'raw' size must be enclosed in angle brackets", 212, current_lex.line_number);
 								}
 
 							}
 							else {
-								throw ParserException("'raw' must be followed by an integer size expression", 111);
+								throw ParserException("'raw' must be followed by an integer size expression", 111, current_lex.line_number);
 							}
 						}
 						else {
-							throw ParserException("'raw' size must be enclosed in angle brackets", 212);
+							throw ParserException("'raw' size must be enclosed in angle brackets", 212, current_lex.line_number);
 						}
 					}
 					// if we have a pointer,
@@ -329,13 +386,13 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 								}
 								// if it isn't, throw an exception
 								else if (this->peek().value != ">") {
-									throw ParserException("Pointer type must be enclosed in angle brackets", 212);
+									throw ParserException("Pointer type must be enclosed in angle brackets", 212, current_lex.line_number);
 								}
 							}
 						}
 						// if it's not, we have a syntax error
 						else {
-							throw ParserException("Proper syntax is 'alloc ptr<type>'", 212);
+							throw ParserException("Proper syntax is 'alloc ptr<type>'", 212, current_lex.line_number);
 						}
 					}
 					// otherwise, if it is not a pointer,
@@ -349,21 +406,45 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 					lexeme var_name = this->next();
 					if (var_name.type == "ident") {
 						new_var_name = var_name.value;
-						
-						// Finally, return our new variable
-						stmt = std::make_shared<Allocation>(new_var_type, new_var_name);
-						stmt->set_line_number(current_lex.line_number);
+
+						// we must check to see if we have the alloc-define syntax:
+						if (this->peek().value == ":") {
+							// the variable was initialized
+							initialized = true;
+
+							// assign the initial value
+							this->next();
+
+							// move ahead to the first lexeme of the expression and parse the expression
+							this->next();
+							initial_value = this->parseExpression();
+
+							// return the allocation
+							stmt = std::make_shared<Allocation>(new_var_type, new_var_name, initialized, initial_value, quality);
+							stmt->set_line_number(current_lex.line_number);
+						}
+						else {
+							// if it is NOT alloc-define syntax, we have to make sure the variable is not const before allocating it -- all const variables MUST be defined in the allocation
+							if (quality == "const") {
+								throw ParserException("Const variables must use alloc-define syntax (e.g., 'alloc const int a: 5').", 000, current_lex.line_number);
+							}
+							else {
+								// Otherwise, if it is not const, return our new variable
+								stmt = std::make_shared<Allocation>(new_var_type, new_var_name);
+								stmt->set_line_number(current_lex.line_number);
+							}
+						}
 					}
 					else {
-						throw ParserException("Expected an identifier", 111);
+						throw ParserException("Expected an identifier", 111, current_lex.line_number);
 					}
 				}
 				else {
-					this->error("Expected a variable type; must be int, float, bool, or string", 211);
+					throw ParserException("Expected a variable type; must be int, float, bool, or string", 211, current_lex.line_number);
 				}
 			}
 			else {
-				this->error("Expected a variable type; token type must be a keyword", 111);
+				throw ParserException("Expected a variable type; token type must be a keyword", 111, current_lex.line_number);
 			}
 		}
 		// Parse an assignment
@@ -399,7 +480,7 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 				}
 				// if it isn't $ or *, it's an invalid op_char before an LValue
 				else {
-					throw ParserException("Operator character not allowed in an LValue", 211);
+					throw ParserException("Operator character not allowed in an LValue", 211, current_lex.line_number);
 				}
 			}
 
@@ -414,7 +495,7 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 				}
 				// if it isn't a valid LValue, then we can't continue
 				else {
-					this->error("Expected an LValue", 111);
+					throw ParserException("Expected an LValue", 111, current_lex.line_number);
 				}
 			}
 
@@ -471,11 +552,11 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 					return stmt;
 				}
 				else {
-					this->error("Loop body must be enclosed in curly braces", 331);
+					throw ParserException("Loop body must be enclosed in curly braces", 331, current_lex.line_number);
 				}
 			}
 			else {
-				this->error("Expected a condition", 331);
+				throw ParserException("Expected a condition", 331, current_lex.line_number);
 			}
 		}
 		// Parse a function declaration
@@ -520,22 +601,22 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 							stmt->set_line_number(current_lex.line_number);
 						}
 						else {
-							this->error("Function definition requires use of curly braces after arguments", 331);
+							throw ParserException("Function definition requires use of curly braces after arguments", 331, current_lex.line_number);
 						}
 					}
 					else {
-						this->error("Function definition requires '(' and ')'", 331);
+						throw ParserException("Function definition requires '(' and ')'", 331, current_lex.line_number);
 					}
 				}
 				// if NOT "ident"
 				else {
-					this->error("Expected identifier", 330);
+					throw ParserException("Expected identifier", 330, current_lex.line_number);
 				}
 			}
 		}
 		// if none of the keywords were valid, throw an error
 		else {
-			this->error("Invalid keyword", 211);
+			throw ParserException("Invalid keyword", 211, current_lex.line_number);
 		}
 
 	}
@@ -562,7 +643,7 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 				return stmt;
 			}
 			else {
-				this->error("Expected an identifier", 111);
+				throw ParserException("Expected an identifier", 111, current_lex.line_number);
 			}
 
 		}
@@ -575,7 +656,7 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 
 	// otherwise, if the lexeme is not a valid beginning to a statement, abort
 	else {
-		this->error("Lexeme '" + current_lex.value + "' is not a valid beginning to a statement", 000);
+		throw ParserException("Lexeme '" + current_lex.value + "' is not a valid beginning to a statement", 000, current_lex.line_number);
 		std::exception my_ex;
 	}
 
@@ -616,9 +697,6 @@ std::shared_ptr<Expression> Parser::parseExpression(int prec) {
 	}
 	// if we have an op_char to begin an expression, parse it (could be a pointer or a function call)
 	else if (current_lex.type == "op_char") {
-
-		// TODO: Fix double ref pointer -- Lexer currently sees "**" as one lexeme, when it should be 2
-
 		// if we have a function call
 		if (current_lex.value == "@") {
 			current_lex = this->next();
@@ -636,7 +714,7 @@ std::shared_ptr<Expression> Parser::parseExpression(int prec) {
 			}
 			// the "@" character must be followed by an identifier
 			else {
-				this->error("Expected identifier in function call", 330);
+				throw ParserException("Expected identifier in function call", 330, current_lex.line_number);
 			}
 		}
 		// check to see if we have the address-of operator
@@ -658,13 +736,46 @@ std::shared_ptr<Expression> Parser::parseExpression(int prec) {
 			}
 			// if it's not, throw an exception
 			else {
-				throw ParserException("An address-of operator must be followed by an identifier; illegal to follow with '" + next_lexeme.value + "' (not an identifier)", 111);
+				throw ParserException("An address-of operator must be followed by an identifier; illegal to follow with '" + next_lexeme.value + "' (not an identifier)", 111, current_lex.line_number);
 			}
 
 		}
 		// check to see if we have a pointer dereference operator
 		else if (current_lex.value == "*") {
 			return this->createDereferenceObject();
+		}
+		// check to see if we have the unary plus operator
+		else if ((current_lex.value == "+") || (current_lex.value == "-")) {
+			// get the next leceme
+			lexeme next = this->next();
+			// declare our operand
+			std::shared_ptr<Expression> operand;
+
+			if (next.type == "ident") {
+				// make a shared pointer to our variable (lvalue, type will be "var")
+				operand = std::make_shared<LValue>(next.value);
+			}
+			else if (next.type == "int") {
+				// make our operand a literal
+				operand = std::make_shared<Literal>(INT, next.value);
+			}
+			else if (next.type == "float") {
+				// make our operand a literal
+				operand = std::make_shared<Literal>(FLOAT, next.value);
+			}
+			else {
+				// TODO: fix parser exception code for unary +
+				throw ParserException("Cannot use unary operators with this type", 000, current_lex.line_number);
+			}
+
+			// now, "operand" should have our operand (and if the type was invalid, it will have thrown an error)
+			// make a unary + or - depending on the type; we have already checked to make sure it's a valid unary operator
+			if (current_lex.value == "+") {
+				left = std::make_shared<Unary>(operand, PLUS);
+			}
+			else {
+				left = std::make_shared<Unary>(operand, MINUS);
+			}
 		}
 	}
 
@@ -704,14 +815,14 @@ std::shared_ptr<Expression> Parser::createDereferenceObject() {
 		this->next();
 		// dereference the pointer to get the address so we can dereference the other pointer
 		std::shared_ptr<Expression> deref = this->parseExpression();
-		if (deref->getExpType() == "dereferenced") {
+		if (deref->get_expression_type() == DEREFERENCED) {
 			// get the Dereferenced obj
 			return std::make_shared<Dereferenced>(deref);
 		}
 	}
 	// if it is not a literal or an ident and the next character is also not an ident or asterisk, we have an error
 	else {
-		throw ParserException("Expected an identifier in pointer dereference operation", 332);
+		throw ParserException("Expected an identifier in pointer dereference operation", 332, current_token().line_number);
 	}
 }
 
@@ -719,12 +830,12 @@ std::shared_ptr<Expression> Parser::createDereferenceObject() {
 // get the end LValue pointed to by a pointer recursively
 LValue Parser::getDereferencedLValue(Dereferenced to_eval) {
 	// if the type of the Expression within "to_eval" is an LValue, we are done
-	if (to_eval.get_ptr_shared()->getExpType() == "LValue") {
+	if (to_eval.get_ptr_shared()->get_expression_type() == LVALUE) {
 		return to_eval.get_ptr();
 	}
 	// otherwise, if it is another Dereferenced object, get the object stored within that
 	// the recutsion here will return the LValue pointed to by the last pointer
-	else if (to_eval.get_ptr_shared()->getExpType() == "dereferenced") {
+	else if (to_eval.get_ptr_shared()->get_expression_type() == DEREFERENCED) {
 		Dereferenced* _deref = dynamic_cast<Dereferenced*>(to_eval.get_ptr_shared().get());
 		return this->getDereferencedLValue(*_deref);
 	}
@@ -766,8 +877,7 @@ std::shared_ptr<Expression> Parser::maybeBinary(std::shared_ptr<Expression> left
 	}
 	// There shouldn't be anything besides a semicolon, closing paren, or an op_char immediately following "left"
 	else {
-		//this->error("Invalid character in expression", 312);
-		throw ParserException("Invalid character in expression", 312);
+		throw ParserException("Invalid character in expression", 312, current_token().line_number);
 	}
 }
 
@@ -782,7 +892,7 @@ void Parser::populateTokenList(std::ifstream* token_stream) {
 		std::string type;
 		std::string value;
 		std::string line_number_string;
-		int line_number;
+		int line_number = -1;	// initialize to -1
 
 		// get the type
 		if (token_stream->peek() != '\n') {
@@ -834,10 +944,12 @@ Parser::Parser(std::ifstream* token_stream) {
 	Parser::position = 0;
 	Parser::populateTokenList(token_stream);
 	Parser::num_tokens = Parser::tokens.size();
+	Parser::can_use_include_statement = false;	// initialize to false
 }
 
 Parser::Parser()
 {
+	// TODO: initialize all Parser members to some base value
 }
 
 
@@ -857,6 +969,6 @@ int ParserException::get_code() {
 	return ParserException::code_;
 }
 
-ParserException::ParserException(const std::string& err_message, const int& err_code) : message_(err_message), code_(err_code) {
-
+ParserException::ParserException(const std::string& err_message, const int& err_code, const int& line_number) : code_(err_code), line_number_(line_number) {
+	message_ = "Line " + std::to_string(line_number) + ": " + err_message;
 }

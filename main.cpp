@@ -78,6 +78,7 @@ int main (int argc, char** argv[]) {
 	}
 
 	// now, create booleans for our various flags and set them if necessary
+	bool interpret = false;
 	bool compile = false;
 	bool compile_only = false;
 	bool disassemble = false;
@@ -87,6 +88,7 @@ int main (int argc, char** argv[]) {
 	bool debug_values = false;	// if we want "SINVM::_debug_values()" after execution
 	bool parse = false;	// if we want to produce a .absn (Abstract-SIN) file
 	bool produce_asm_file = false;
+	bool include_builtins = true;
 
 	// if we wrote to a stringstream
 	bool saved_stringstream = false;
@@ -99,6 +101,9 @@ int main (int argc, char** argv[]) {
 	std::string filename = program_arguments[0];
 	std::string file_extension;
 	std::string filename_no_extension;
+
+	// a list of our dependencies
+	std::vector<std::string> library_names;
 
 	// get the file extension using "std::find"
 	size_t extension_position = filename.find(".");
@@ -126,6 +131,10 @@ int main (int argc, char** argv[]) {
 	for (std::vector<std::string>::iterator arg_iter = program_arguments.begin(); arg_iter != program_arguments.end(); arg_iter++) {
 		// only check for flags if the first character is '-'
 		if ((*arg_iter)[0] == '-') {
+
+			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*i.*")) || (*arg_iter == "--interpret")) {
+				interpret = true;
+			}
 
 			if (std::regex_match(*arg_iter, std::regex("-[a-zA-Z0-9]*c.*")) || (*arg_iter == "--compile")) {
 				compile = true;
@@ -182,6 +191,10 @@ int main (int argc, char** argv[]) {
 				debug_values = true;
 			}
 
+			if ((*arg_iter == "--suppress-builtins")) {
+				include_builtins = false;
+			}
+
 			// if we explicitly set word size
 			if (std::regex_match(*arg_iter, std::regex("--ws.+", std::regex_constants::icase))) {
 				std::string wordsize_string = arg_iter->substr(4);
@@ -189,7 +202,7 @@ int main (int argc, char** argv[]) {
 			}
 		}
 		// if we have a .sinc file as a parameter
-		else if (std::regex_match(*arg_iter, std::regex("[a-zA-Z0-9_]+\.sinc"))) {
+		else if (std::regex_match(*arg_iter, std::regex("[a-zA-Z0-9_-]+\.sinc"))) {
 			std::ifstream sinc_file;
 			sinc_file.open(*arg_iter, std::ios::in | std::ios::binary);
 			if (sinc_file.is_open()) {
@@ -214,6 +227,35 @@ int main (int argc, char** argv[]) {
 	// The functions are called in this order: compile, disassemble, assemble, link, execute
 
 	try {
+		// interpret a .sin file
+		if (interpret) {
+			// validate the file type
+			if (file_extension == ".sin") {
+				// open the file and check to make sure it opened correctly
+				std::ifstream sin_file;
+				sin_file.open(filename, std::ios::in);
+
+				if (sin_file.is_open()) {
+					// if we are interpreting, we must lex and parse the file
+					Lexer lexer(sin_file);
+					Parser parser(lexer);
+					Interpreter interpreter;
+
+					// run the AST produced by the parser
+					interpreter.interpretAST(parser.createAST());
+
+					sin_file.close();
+				}
+				else {
+					// if we couldn't open it, throw an error and quit
+					file_error(filename);
+					exit(1);
+				}
+			}
+			else {
+				throw std::exception("**** Only .sin files may be interpreted.");
+			}
+		}
 		// compile a .sin file
 		if (compile) {
 			// validate file type
@@ -226,7 +268,7 @@ int main (int argc, char** argv[]) {
 					// create a vector of file names
 					std::vector<std::string> object_file_names;
 					// compile the file
-					Compiler compiler(sin_file, wordsize, &object_file_names);
+					Compiler compiler(sin_file, wordsize, &object_file_names, &library_names, include_builtins);
 
 					// if we want to produce an asm file
 					if (produce_asm_file) {
@@ -260,6 +302,26 @@ int main (int argc, char** argv[]) {
 					else {
 						sina_code << compiler.compile_to_stringstream().str();
 						saved_stringstream = true;
+
+						// create object files for each object in object_file_names
+						for (std::vector<std::string>::iterator it = object_file_names.begin(); it != object_file_names.end(); it++) {
+							// open the file of the name stored in object_file_names at the iterator's current position
+							std::ifstream sinc_file;
+							sinc_file.open(*it, std::ios::in | std::ios::binary);
+
+							if (sinc_file.is_open()) {
+								// if we can find the file, then create an object from it and add it to the object vector
+								SinObjectFile obj(sinc_file);
+								objects_vector.push_back(obj);
+							}
+							else {
+								file_error(*it);
+								exit(1);
+							}
+
+							// close the file before the next iteration
+							sinc_file.close();
+						}
 					}
 
 					sin_file.close();
@@ -306,15 +368,14 @@ int main (int argc, char** argv[]) {
 						std::ifstream sina_file;
 						sina_file.open(filename, std::ios::in);
 						if (sina_file.is_open()) {
-							// assemble the file
+							// write an object file using an Assembler and SinObjectFile objects
 							Assembler assemble(sina_file, wordsize);
-							assemble.create_sinc_file(filename_no_extension);
+							SinObjectFile obj_file_from_assembler;
+							obj_file_from_assembler.write_sinc_file(filename_no_extension, &assemble);
 
 							// update our object files list
 							std::vector<std::string> obj_filenames = assemble.get_obj_files_to_link();	// so we don't need to execute a function in every iteration of the loop
 							for (std::vector<std::string>::iterator it = obj_filenames.begin(); it != obj_filenames.end(); it++) {
-								// create the SinObjectFile object as well as the file stream for the sinc file
-								SinObjectFile obj_file_from_assembler;
 								std::ifstream sinc_file;
 								sinc_file.open(*it, std::ios::in | std::ios::binary);
 
@@ -363,8 +424,8 @@ int main (int argc, char** argv[]) {
 							if (sinc_file.is_open()) {
 								// open the file
 								obj_file_from_assembler.load_sinc_file(sinc_file);
-								// add it to our objects vector
-								objects_vector.push_back(obj_file_from_assembler);
+								// add it to the front of our objects vector
+								objects_vector.insert(objects_vector.begin(), obj_file_from_assembler);
 								// close the file
 								sinc_file.close();
 							}

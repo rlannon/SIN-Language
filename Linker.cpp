@@ -272,13 +272,13 @@ void Linker::create_sml_file(std::string file_name) {
 	std::ofstream sml_file;
 	sml_file.open(file_name + ".sml", std::ios::out | std::ios::binary);	// TODO: get a final program name
 
-	writeU8(sml_file, this->object_files[0]._wordsize);	// TODO: get a better wordsize deciding algorithm
+	BinaryIO::writeU8(sml_file, this->object_files[0]._wordsize);	// TODO: get a better wordsize deciding algorithm
 
-	writeU32(sml_file, sml_data.size());
+	BinaryIO::writeU32(sml_file, sml_data.size());
 
 	// write the byte to the file
 	for (std::vector<uint8_t>::iterator it = sml_data.begin(); it != sml_data.end(); it++) {
-		writeU8(sml_file, *it);
+		BinaryIO::writeU8(sml_file, *it);
 	}
 
 	sml_file.close();

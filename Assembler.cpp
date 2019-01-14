@@ -89,6 +89,12 @@ void Assembler::read_while(bool(*predicate)(char)) {
 
 std::vector<std::string> Assembler::get_line_data(std::string line)
 {
+	/*
+	
+	Given a string, return the constituent parts of that string where the delimiter is a space
+
+	*/
+	
 	const std::string delimiter = " ";
 
 	std::vector<std::string> string_delimited;	// to hold the parts of our string
@@ -236,13 +242,17 @@ void Assembler::construct_symbol_table() {
 	// continue reading from the file as long as we have not reached the end
 	while (!this->end_of_file()) {
 		// continue reading through comments and whitespace
-		if (this->is_comment(this->asm_file->peek())) {
+		while (this->is_comment(this->asm_file->peek())) {
 			this->read_while(&this->is_not_newline);
 		}
 		this->read_while(&this->is_whitespace);
 
 		std::string line;
 		this->getline(*this->asm_file, &line);
+
+		if (line[0] == ';') {
+			continue;
+		}
 
 		std::vector<std::string> line_data_vector = this->get_line_data(line);
 
@@ -377,7 +387,22 @@ void Assembler::construct_symbol_table() {
 				// add the constant to the data table
 				// if it is a number, we will use stoi
 				try {
-					int value = std::stoi(constant_data);
+					int number_base = 10;
+
+					if (constant_data[0] == '#') {
+						constant_data.erase(0, 1);
+					}
+
+					if (constant_data[0] == '$') {
+						number_base = 16;
+						constant_data.erase(0, 1);
+					}
+					else if (constant_data[0] == '%') {
+						number_base = 2;
+						constant_data.erase(0, 1);
+					}
+
+					int value = std::stoi(constant_data, nullptr, number_base);
 					std::vector<uint8_t> data_array;
 					for (size_t i = (this->_WORDSIZE / 8); i > 0; i--) {
 						uint8_t to_add = value >> ((i - 1) * 8);
@@ -527,24 +552,24 @@ uint8_t Assembler::get_address_mode(std::string value, std::string offset) {
 
 	// immediate addressing
 	if (value[0] == '#') {
-		return addressmode::immediate;
+		return addressingmode::immediate;
 	}
 	// otherwise, we are accessing memory
 	else {
 		// if offset is an empty string, then we have absolute addressing
 		if (offset == "") {
-			return addressmode::absolute;
+			return addressingmode::absolute;
 		}
 		// if we have data in 'offset', check to see if there is a comma after 'value'
 		else if (value[value.size() - 1] == ',') {
 			// if so, check to see what the first character of 'offset' is
 			if (offset[0] == 'X') {
 				// we have X-indexed addressing
-				return addressmode::indirect_x;
+				return addressingmode::indirect_x;
 			}
 			else if (offset[0] == 'Y') {
 				// we have Y-indexed addressing
-				return addressmode::indirect_y;
+				return addressingmode::indirect_y;
 			}
 			// if it's not X or Y, it's not proper; throw exception
 			else {
@@ -639,7 +664,7 @@ std::vector<uint8_t> Assembler::assemble()
 						}
 
 						// if the addressing mode is x/y indexed, add 4 to it to get to the indirect/indexed (they are 4 apart)
-						if (addressing_mode == addressmode::x_index || addressing_mode == addressmode::y_index) {
+						if (addressing_mode == addressingmode::x_index || addressing_mode == addressingmode::y_index) {
 							addressing_mode += 4;
 						}
 						// if neither, it's improper syntax -- cannot use parens with any other mode
@@ -678,7 +703,7 @@ std::vector<uint8_t> Assembler::assemble()
 						this->relocation_table.push_back(std::make_tuple(value, this->current_byte));
 
 						// addressing mode must be absolute
-						addressing_mode = addressmode::absolute;
+						addressing_mode = addressingmode::absolute;
 
 						// push_back the addressing mode
 						program_data.push_back(addressing_mode);
@@ -700,7 +725,7 @@ std::vector<uint8_t> Assembler::assemble()
 					else if ((value.size() == 1) && (value == "A" || value == "a")) {
 						// check to make sure the opcode is a bitshift instruction
 						if (is_bitshift(opcode)) {
-							addressing_mode = addressmode::reg_a;
+							addressing_mode = addressingmode::reg_a;
 							program_data.push_back(addressing_mode);
 						}
 						// if it's not a bitshift instruction, throw an exception
@@ -712,7 +737,7 @@ std::vector<uint8_t> Assembler::assemble()
 					else if ((value.size() == 1) && (value == "B" || value == "b")) {
 						// make sure it is an addition or subtraction
 						if ((opcode == ADDCA) || (opcode == SUBCA)) {
-							addressing_mode = addressmode::reg_b;
+							addressing_mode = addressingmode::reg_b;
 							program_data.push_back(addressing_mode);
 						}
 						// if it's not, throw an exception
@@ -966,177 +991,25 @@ void Assembler::disassemble(std::istream& sinc_file, std::string output_file_nam
 
 
 /************************************************************************************************************************
-****************************************			.SINC FILE FORMAT			*****************************************
+****************************************				OBJECT FILES			*****************************************
 ************************************************************************************************************************/
 
 
 
 void Assembler::create_sinc_file(std::string output_file_name)
 {
-	// Create a .sinc (SIN object file) file for the current program
-	// The format specification can be found in "Doc/sinc_specification.txt"
-
-	// first, add the file name to our list of files we need linked
-	this->obj_files_to_link.push_back(output_file_name + ".sinc");
-
-	// create a binary file of the specified name (with the sinc extension)
-	std::ofstream sinc_file(output_file_name + ".sinc", std::ios::out | std::ios::binary);
-
-	// create a vector<int> to hold the binary program data; it will be initialized to our assembled file
-	std::vector<uint8_t> program_data = this->assemble();
-	// after assembly, "this->relocation_table" and "this->symbol_table" will contain the correct data
-
-
-
-	/************************************************************
-	********************	FILE HEADER		*********************
-	************************************************************/
-
-
-	// Write the magic number to the file header
-	char * header = ("sinC");
-	sinc_file.write(header, 4);
-
-	// write the word size
-	writeU8(sinc_file, this->_WORDSIZE);
-
-	// write the endianness
-	writeU8(sinc_file, 2);	// sinVM uses big endian for its byte order
-	writeU8(sinc_file, 1);	// BinaryIO uses little endian
-
-	// write the version information
-	writeU8(sinc_file, sinc_version);
-	writeU8(sinc_file, 1);	// target sinVM version is 1
-
-	// entry point
-	writeU16(sinc_file, 0x00);
-
+	/*
 	
+	This function writes an object file using the current assembler object and the SinObjectFile class. It is the entry point to the function, and all other assembly functions within end up being called by the object file class.
 
-	/************************************************************
-	********************	PROGRAM HEADER	*********************
-	************************************************************/
+	*/
 
+	// create an object to hold the data for our .sinc file, and pass it the assembler object we are in
+	SinObjectFile object_file;
+	object_file.write_sinc_file(output_file_name, this);
 
-
-	// write the size of the program
-	writeU32(sinc_file, program_data.size());
-
-
-	// Symbol table info:
-
-	// write the number of entries in our symbol table
-	int num_symbols = this->symbol_table.size();
-	writeU32(sinc_file, num_symbols);
-
-	// write data in for each symbol in the table
-	for (std::list<std::tuple<std::string, int, std::string>>::iterator symbol_iter = this->symbol_table.begin(); symbol_iter != this->symbol_table.end(); symbol_iter++) {
-		// get the various values so we don't need to use std::get<> every time
-		std::string symbol_name = std::get<0>(*symbol_iter);
-		int symbol_value = std::get<1>(*symbol_iter);
-		std::string symbol_class_string = std::get<2>(*symbol_iter);
-		uint8_t symbol_class;
-
-		// set the symbol class
-		if (symbol_class_string == "U") {
-			symbol_class = 1;
-		}
-		else if (symbol_class_string == "D") {
-			symbol_class = 2;
-		}
-		else if (symbol_class_string == "C") {
-			symbol_class = 3;
-		}
-		else if (symbol_class_string == "R") {
-			symbol_class = 4;
-		}
-		else if (symbol_class_string == "M") {
-			symbol_class = 5;
-		}
-		else {
-			throw std::exception(("Cannot understand classifier in symbol table. Expected 'D', 'C', 'R', 'U', or 'M', but found '" + std::get<2>(*symbol_iter) + "'").c_str());
-		}
-
-		// write the symbol value and class
-		writeU16(sinc_file, symbol_value);
-		writeU8(sinc_file, symbol_class);
-
-		// and use writeString to write the symbol's name
-		writeString(sinc_file, symbol_name);
-	}
-
-
-	// Relocation table info:
-
-	// write the number of entries in the relocation table
-	int num_relocation_entries = this->relocation_table.size();
-	writeU32(sinc_file, num_relocation_entries);
-
-	// write the data for each symbol in the relocation table
-	for (std::list<std::tuple<std::string, int>>::iterator relocation_iter = this->relocation_table.begin(); relocation_iter != this->relocation_table.end(); relocation_iter++) {
-		// like before, get the various values so we don't need to use std::get<> every time
-		std::string relocation_name = std::get<0>(*relocation_iter);
-		uint16_t relocation_pointer = std::get<1>(*relocation_iter);
-
-		// write the address it points to in the program
-		writeU16(sinc_file, relocation_pointer);
-
-		// write the name of the symbol
-		writeString(sinc_file, relocation_name);
-	}
-
-
-
-	/************************************************************
-	********************	.TEXT SECTION	*********************
-	************************************************************/
-
-	// write each byte of data in sequentually by using a vector iterator
-	for (std::vector<uint8_t>::iterator data_iter = program_data.begin(); data_iter != program_data.end(); data_iter++) {
-		// write the value to the file
-		writeU8(sinc_file, *data_iter);
-	}
-
-
-
-	/************************************************************
-	********************	.DATA SECTION	*********************
-	************************************************************/
-
-	// Data header
-
-	// write in the number of entries
-	writeU32(sinc_file, this->data_table.size());
-
-	// write in all of the constants
-	// iterate through the data_table and write data accordingly
-	for (std::list<std::tuple<std::string, std::vector<uint8_t>>>::iterator it = this->data_table.begin(); it != this->data_table.end(); it++) {
-		// 0x00 - 0x01	->	number of bytes in the constant
-		writeU16(sinc_file, std::get<1>(*it).size());
-
-		// symbol name
-		writeString(sinc_file, std::get<0>(*it));
-
-		// the data
-		for (std::vector<uint8_t>::iterator data_iter = std::get<1>(*it).begin(); data_iter != std::get<1>(*it).end(); data_iter++) {
-			writeU8(sinc_file, *data_iter);
-		}
-	}
-
-
-	/************************************************************
-	********************	.BSS SECTION	*********************
-	************************************************************/
-
-	// .BSS header
-
-	// number of macros in .bss
-	// TODO: fully implement rs directive
-	// write in all of the non-constant macro names
-	// TODO: complete .BSS
-
-
-	sinc_file.close();
+	// return to caller
+	return;
 }
 
 std::vector<std::string> Assembler::get_obj_files_to_link()

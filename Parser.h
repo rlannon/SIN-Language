@@ -36,7 +36,6 @@ class Parser
 	lexeme current_token();	// get token at current position
 	lexeme previous();	// similar to peek; get previous token without moving back
 	lexeme back();	// move backward one
-	void error(std::string message, int code);
 
 	void skipPunc(char punc);	// skips the specified punctuation mark
 
@@ -62,8 +61,9 @@ public:
 class ParserException : public std::exception {
 	std::string message_;
 	int code_;
+	int line_number_;
 public:
-	explicit ParserException(const std::string& err_message, const int& err_code);
+	explicit ParserException(const std::string& err_message, const int& err_code, const int& line_number = 0);
 	virtual const char* what() const;
 	int get_code();
 };
