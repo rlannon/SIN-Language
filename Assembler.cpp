@@ -191,8 +191,7 @@ int Assembler::get_integer_value(std::string value) {
 			}
 			// if it's not $ or %, it's not a valid operator; throw an exception
 			else {
-				std::string err_msg = ("The character '", value[0], "' is not a valid value operator. Options are $ (hex) or % (binary).");
-				throw std::exception(err_msg.c_str());
+				throw std::runtime_error(("The character '" + std::to_string(value[0]) + "' is not a valid value operator. Options are $ (hex) or % (binary).").c_str());
 			}
 		}
 		// if it is a digit, then just use stoi and return the value
@@ -201,7 +200,7 @@ int Assembler::get_integer_value(std::string value) {
 		}
 	}
 	else {
-		throw std::exception("Cannot get the value of an empty string.");
+		throw std::runtime_error("Cannot get the value of an empty string.");
 	}
 }
 
@@ -338,7 +337,7 @@ void Assembler::construct_symbol_table() {
 						included_sina.close();
 					}
 					else {
-						throw std::exception(("**** Cannot locate included file '" + filename + "'").c_str());
+						throw std::runtime_error("**** Cannot locate included file '" + filename + "'");
 					}
 
 				}
@@ -350,7 +349,7 @@ void Assembler::construct_symbol_table() {
 				}
 				// all other formats are unsupported at this time
 				else {
-					throw std::exception(("**** Format for included file '" + filename + "' is not supported by the assembler.").c_str());
+					throw std::runtime_error("**** Format for included file '" + filename + "' is not supported by the assembler.");
 				}
 			}
 			// if we have an assembler directive
@@ -492,7 +491,7 @@ int Assembler::get_opcode(std::string mnemonic) {
 	}
 	// otherwise, throw an exception; the instruction they want was not recognized
 	else {
-		throw std::exception(("Unrecognized instruction '" + mnemonic + "'").c_str());
+		throw std::runtime_error("Unrecognized instruction '" + mnemonic + "'");
 	}
 }
 
@@ -525,7 +524,7 @@ std::string Assembler::get_mnemonic(int opcode)
 	else {
 		std::stringstream hex_number;
 		hex_number << std::hex << opcode;	// format the decimal number as hex
-		throw std::exception(("Unrecognized instruction opcode '$" + hex_number.str() + "'").c_str());
+		throw std::runtime_error("Unrecognized instruction opcode '$" + hex_number.str() + "'");
 	}
 }
 
@@ -559,7 +558,7 @@ uint8_t Assembler::get_addressing_mode(std::string value, std::string offset) {
 			}
 			// if it's not X or Y, it's not proper; throw exception
 			else {
-				throw std::exception("Must use register X or Y when using indirect addressing modes.");
+				throw std::runtime_error("Must use register X or Y when using indirect addressing modes.");
 			}
 		}
 	}
@@ -666,7 +665,7 @@ std::vector<uint8_t> Assembler::assemble()
 								to_add_to_addressing_mode = 4;
 							}
 							else {
-								throw std::exception(("Invalid character in value expression (line " + std::to_string(line_counter) + ")").c_str());
+								throw std::runtime_error("Invalid character in value expression (line " + std::to_string(line_counter) + ")");
 							}
 
 							addressing_mode = get_addressing_mode(value.substr(1), string_delimited[2]);	// get the substring of 'value' starting at position 1 (ignoring paren)
@@ -676,7 +675,7 @@ std::vector<uint8_t> Assembler::assemble()
 						}
 						else {
 							// there MUST be another string in string_delimited if we have indirect addressing
-							throw std::exception(("Indirect addressing requires a second string; however, one was not found (line " + std::to_string(this->line_counter) + ")").c_str());
+							throw std::runtime_error("Indirect addressing requires a second string; however, one was not found (line " + std::to_string(this->line_counter) + ")");
 						}
 
 						// if the addressing mode is x/y indexed, add 4 to it to get to the indirect/indexed (they are 4 apart)
@@ -685,7 +684,7 @@ std::vector<uint8_t> Assembler::assemble()
 						}
 						// if neither, it's improper syntax -- cannot use parens with any other mode
 						else {
-							throw std::exception(("Unrecognized addressing mode (line " + std::to_string(this->line_counter) + ")").c_str());
+							throw std::runtime_error("Unrecognized addressing mode (line " + std::to_string(this->line_counter) + ")");
 						}
 
 						// now that we have the addressing mode, push it to program data
@@ -707,7 +706,7 @@ std::vector<uint8_t> Assembler::assemble()
 					else if ((isalpha(value[0])) || (value[0] == '.') || (value[0] == '_') && !std::regex_match(value, std::regex("[ab]", std::regex_constants::icase))) {
 						// first, make sure that the label does not end with a colon; throw an error if it does
 						if (value[value.size() - 1] == ':') {
-							throw std::exception(("Labels must not be followed by colons when referenced (line " + std::to_string(this->line_counter) + ")").c_str());
+							throw std::runtime_error("Labels must not be followed by colons when referenced (line " + std::to_string(this->line_counter) + ")");
 						}
 
 						// next, check to see if it is a sublabel or not
@@ -746,7 +745,7 @@ std::vector<uint8_t> Assembler::assemble()
 						}
 						// if it's not a bitshift instruction, throw an exception
 						else {
-							throw std::exception(("Cannot use 'A' as an operand unless with a bitshift instruction (line " + std::to_string(this->line_counter) + ")").c_str());
+							throw std::runtime_error("Cannot use 'A' as an operand unless with a bitshift instruction (line " + std::to_string(this->line_counter) + ")");
 						}
 					}
 					// if the value is 'B'
@@ -758,7 +757,7 @@ std::vector<uint8_t> Assembler::assemble()
 						}
 						// if it's not, throw an exception
 						else {
-							throw std::exception(("May only use 'B' as an operand with addition and subtraction instructions (line " + std::to_string(this->line_counter) + ")").c_str());
+							throw std::runtime_error("May only use 'B' as an operand with addition and subtraction instructions (line " + std::to_string(this->line_counter) + ")");
 						}
 					}
 					// otherwise, carry on normally
@@ -767,7 +766,7 @@ std::vector<uint8_t> Assembler::assemble()
 						// check to see if the last character in the second operand is a comma; if so, and there is no third operand or the third operand begins with a semicolon, throw an exception
 						if (string_delimited[1][string_delimited[1].size() - 1] == ',') {
 							if ((string_delimited.size() < 3) || (string_delimited[2][0] == ';')) {
-								throw std::exception(("Expected register for index but found nothing (line " + std::to_string(this->line_counter) + ")").c_str());
+								throw std::runtime_error("Expected register for index but found nothing (line " + std::to_string(this->line_counter) + ")");
 							}
 						}
 
@@ -780,7 +779,7 @@ std::vector<uint8_t> Assembler::assemble()
 						}
 
 						if (addressing_mode == 3 && !can_use_immediate_addressing(opcode)) {
-							throw std::exception(("Cannot use this addressing mode on an instruction of this type (line " + std::to_string(this->line_counter) + ")").c_str());
+							throw std::runtime_error("Cannot use this addressing mode on an instruction of this type (line " + std::to_string(this->line_counter) + ")");
 						}
 
 						// push_back the addressing mode and turn 'value' into a series of big_endian bytes
@@ -829,7 +828,7 @@ std::vector<uint8_t> Assembler::assemble()
 				}
 				// otherwise, we must throw an exception
 				else {
-					throw std::exception(("Expected a value following instruction mnemonic (line " + std::to_string(this->line_counter) + ")").c_str());
+					throw std::runtime_error("Expected a value following instruction mnemonic (line " + std::to_string(this->line_counter) + ")");
 				}
 			}
 			// if we have an assembler directive, skip it; these were assessed in the first pass
@@ -887,11 +886,11 @@ std::vector<uint8_t> Assembler::assemble()
 						}
 					}
 					else {
-						throw std::exception(("Leading macros must be followed by an equals sign. (line " + std::to_string(this->line_counter) + ")").c_str());
+						throw std::runtime_error("Leading macros must be followed by an equals sign. (line " + std::to_string(this->line_counter) + ")");
 					}
 				}
 				else {
-					throw std::exception(("Non-opcode identifiers must be labels, macros, or assembler directive instructions (line " + std::to_string(this->line_counter) + ")").c_str());
+					throw std::runtime_error("Non-opcode identifiers must be labels, macros, or assembler directive instructions (line " + std::to_string(this->line_counter) + ")");
 				}
 			}
 			else if (is_comment(opcode_or_symbol[0])) {
@@ -899,7 +898,7 @@ std::vector<uint8_t> Assembler::assemble()
 				continue;
 			}
 			else {
-				throw std::exception(("Unknown symbol in file (line " + std::to_string(this->line_counter) + ")").c_str());
+				throw std::runtime_error("Unknown symbol in file (line " + std::to_string(this->line_counter) + ")");
 			}
 		}
 		// we have an empty string
@@ -995,7 +994,7 @@ void Assembler::disassemble(std::istream& sinc_file, std::string output_file_nam
 		else {
 			std::stringstream hex_number;
 			hex_number << std::hex << *program_iterator;	// format the decimal number as hex
-			throw std::exception(("Unrecognized instruction opcode '$" + hex_number.str() + "'").c_str());
+			throw std::runtime_error("Unrecognized instruction opcode '$" + hex_number.str() + "'");
 		}
 	}
 
@@ -1051,7 +1050,7 @@ Assembler::Assembler(std::istream& asm_file, uint8_t _WORDSIZE) : asm_file(&asm_
 
 	// ensure it was actually a valid size
 	if (_WORDSIZE != 16 && _WORDSIZE != 32 && _WORDSIZE != 64) {
-		throw std::exception(("Cannot initialize machine word size to a value of " + std::to_string(_WORDSIZE) + "; must be 16, 32, or 64").c_str());
+		throw std::runtime_error("Cannot initialize machine word size to a value of " + std::to_string(_WORDSIZE) + "; must be 16, 32, or 64");
 	}
 }
 

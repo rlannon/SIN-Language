@@ -181,8 +181,7 @@ LValue Dereferenced::get_ptr() {
 		return *lvalue;
 	}
 	else {
-		std::string msg = "Cannot convert type";
-		throw std::exception(msg.c_str());
+		throw std::runtime_error("Cannot convert type");
 	}
 }
 

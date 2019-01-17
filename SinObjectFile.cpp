@@ -65,7 +65,7 @@ void SinObjectFile::load_sinc_file(std::istream & file)
 					symbol_class = "M";
 				}
 				else {
-					throw std::exception("**** Error: bad number in symbol class specifier.");
+					throw std::runtime_error("**** Error: bad number in symbol class specifier.");
 				}
 
 				// create the tuple and push it onto "symbol_table"
@@ -126,11 +126,11 @@ void SinObjectFile::load_sinc_file(std::istream & file)
 		}
 		// cannot handle any other versions right now because they don't exist yet
 		else {
-			throw std::exception("Other .sinc file versions not supported at this time.");
+			throw std::runtime_error("Other .sinc file versions not supported at this time.");
 		}
 	}
 	else {
-		throw std::exception("Invalid magic number in file header.");
+		throw std::runtime_error("Invalid magic number in file header.");
 	}
 }
 
@@ -220,7 +220,7 @@ void SinObjectFile::write_sinc_file(std::string output_file_name, Assembler* ass
 			symbol_class = 5;
 		}
 		else {
-			throw std::exception(("Cannot understand classifier in symbol table. Expected 'D', 'C', 'R', 'U', or 'M', but found '" + std::get<2>(*symbol_iter) + "'").c_str());
+			throw std::runtime_error(("Cannot understand classifier in symbol table. Expected 'D', 'C', 'R', 'U', or 'M', but found '" + std::get<2>(*symbol_iter) + "'").c_str());
 		}
 
 		// write the symbol value and class

@@ -182,7 +182,7 @@ void SINVM::execute_instruction(int opcode) {
 				this->SP += (this->_WORDSIZE / 8);
 			}
 			else {
-				throw std::exception("**** Runtime error: Stack underflow!");
+				throw std::runtime_error("**** Runtime error: Stack underflow!");
 			}
 			break;
 		case DECSP:
@@ -191,7 +191,7 @@ void SINVM::execute_instruction(int opcode) {
 				this->SP -= (this->_WORDSIZE / 8);
 			}
 			else {
-				throw std::exception("**** Runtime error: Stack overflow!");
+				throw std::runtime_error("**** Runtime error: Stack overflow!");
 			}
 			break;
 
@@ -291,7 +291,7 @@ void SINVM::execute_instruction(int opcode) {
 				}
 			}
 			else {
-				throw std::exception("**** Runtime error: Stack overflow on call stack!");
+				throw std::runtime_error("**** Runtime error: Stack overflow on call stack!");
 			}
 
 			this->PC = address_to_jump - 1;
@@ -430,7 +430,7 @@ void SINVM::execute_instruction(int opcode) {
 			// TODO: check for more syscall numbers...
 			// if it is not a valid syscall number,
 			else {
-				throw std::exception("Unknown syscall number; halting execution.");
+				throw std::runtime_error("Unknown syscall number; halting execution.");
 			}
 
 			break;
@@ -439,7 +439,7 @@ void SINVM::execute_instruction(int opcode) {
 		// if we encounter an unknown opcode
 		default:
 		{
-			throw std::exception("Unknown opcode; halting execution.");
+			throw std::runtime_error("Unknown opcode; halting execution.");
 			break;
 		}
 	}
@@ -593,7 +593,7 @@ void SINVM::execute_store(int reg_to_store) {
 	}
 	else if (addressing_mode == addressingmode::immediate) {
 		// we cannot use immediate addressing with a store instruction, so throw an exception
-		throw std::exception("Invalid addressing mode for store instruction.");
+		throw std::runtime_error("Invalid addressing mode for store instruction.");
 	}
 }
 
@@ -745,7 +745,7 @@ void SINVM::execute_bitshift(int opcode)
 		// if we have an invalid addressing mode
 		// TODO: validate addressing mode in assembler for bitshifting instructions
 		else {
-			throw std::exception("Cannot use that addressing mode with bitshifting instructions.");
+			throw std::runtime_error("Cannot use that addressing mode with bitshifting instructions.");
 		}
 
 		if (opcode == LSR || opcode == ROR) {
@@ -872,7 +872,7 @@ void SINVM::execute_jmp() {
 	// TODO: Indirect indexed ?
 
 	else {
-		throw std::exception("Invalid addressing mode for JMP instruction.");
+		throw std::runtime_error("Invalid addressing mode for JMP instruction.");
 	}
 
 	return;
@@ -885,7 +885,7 @@ void SINVM::push_stack(int reg_to_push) {
 
 	// first, make sure the stack hasn't hit its bottom
 	if (this->SP < _STACK_BOTTOM) {
-		throw std::exception("**** ERROR: Stack overflow.");
+		throw std::runtime_error("**** ERROR: Stack overflow.");
 	}
 
 	for (int i = (this->_WORDSIZE / 8); i > 0; i--) {
@@ -901,7 +901,7 @@ int SINVM::pop_stack() {
 
 	// first, make sure we aren't going beyond the bounds of the stack
 	if (this->SP > _STACK) {
-		throw std::exception("**** ERROR: Stack underflow.");
+		throw std::runtime_error("**** ERROR: Stack underflow.");
 	}
 
 	// for each byte in a word, we must increment the stack pointer by one byte (increments BEFORE reading, as the SP points to the next AVAILABLE byte), get the data, shifted over according to what byte number we are on--remember we are reading the data back in little-endian byte order, not big, so we shift BEFORE we add
@@ -1073,7 +1073,7 @@ SINVM::SINVM(std::istream& file)
 
 	// if the size of the program is greater than 0xF000 - 0x2600, it's too big
 	if (prg_data.size() > (_PRG_TOP - _PRG_BOTTOM)) {
-		throw std::exception("Program too large for conventional memory map!");
+		throw std::runtime_error("Program too large for conventional memory map!");
 
 		// remap memory instead?
 
@@ -1102,7 +1102,7 @@ SINVM::SINVM(std::istream& file)
 	}
 	else {
 		// throw an exception; the VM cannot execute an empty program
-		throw std::exception("Cannot execute an empty program; program size must be > 0");
+		throw std::runtime_error("Cannot execute an empty program; program size must be > 0");
 	}
 }
 

@@ -5,6 +5,12 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+1/17 commit to Compiler:
+
+- Because gcc/g++ does not support 'std::exception' initialized with a string or char*, all instances of "throw std::exception(" ... ")" were changed to "throw std::runtime_error("...")" for cross-compiler support.
+
+--------------------------------------------------------------------------------------------
+
 1/16 commit to Compiler:
 
 - Added support in assembler for indexed indirect addressing modes alongside indirect indexed; syntax is the same as in 6502 assembly

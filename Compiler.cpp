@@ -82,7 +82,7 @@ void Compiler::include_file(Include include_statement)
 			}
 			// if we cannot open the .sina file
 			else {
-				throw std::exception(("**** Compiled the include file '" + filename_no_extension + ".sina" + "', but could not open the compiled version for assembly.").c_str());
+				throw std::runtime_error(("**** Compiled the include file '" + filename_no_extension + ".sina" + "', but could not open the compiled version for assembly.").c_str());
 			}
 		}
 		// if the have another SIN file, we need to compile it and then push it back
@@ -123,7 +123,7 @@ void Compiler::include_file(Include include_statement)
 				}
 				// if we cannot open the .sina file to read
 				else {
-					throw std::exception(("**** Compiled the include file '" + filename_no_extension + ".sina" + "', but could not open the compiled version for assembly.").c_str());
+					throw std::runtime_error(("**** Compiled the include file '" + filename_no_extension + ".sina" + "', but could not open the compiled version for assembly.").c_str());
 				}
 
 				included_sin_file.close();
@@ -133,7 +133,7 @@ void Compiler::include_file(Include include_statement)
 			}
 			// if we cannot open the .sin file
 			else {
-				throw std::exception(("**** Could not open included file '" + to_include + "'!").c_str());
+				throw std::runtime_error(("**** Could not open included file '" + to_include + "'!").c_str());
 			}
 		}
 
@@ -177,7 +177,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 			}
 			else {
 				// if it isn't "True" or "False", throw an error
-				throw std::exception(("Expected 'True' or 'False' as boolean literal value (case matter!) (line " + literal_expression->get_value() + ")").c_str());
+				throw std::runtime_error(("Expected 'True' or 'False' as boolean literal value (case matter!) (line " + literal_expression->get_value() + ")").c_str());
 			}
 
 			fetch_ss << "\t" << "loada #$" << std::hex << bool_expression_as_int << std::endl;
@@ -230,7 +230,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 			}
 		}
 		else {
-			throw std::exception(("Variable '" + variable_symbol->name + "' referenced before assignment (line " + std::to_string(line_number) + ")").c_str());
+			throw std::runtime_error(("Variable '" + variable_symbol->name + "' referenced before assignment (line " + std::to_string(line_number) + ")").c_str());
 		}
 	}
 
@@ -280,7 +280,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 					allocation_ss << "@db " << symbol_name << " (" << const_value << ")" << std::endl;
 				}
 				else {
-					throw std::exception(("Types do not match (line " + std::to_string(allocation_statement.get_line_number()) + ")").c_str());
+					throw std::runtime_error(("Types do not match (line " + std::to_string(allocation_statement.get_line_number()) + ")").c_str());
 				}
 			}
 			else if (initial_value->get_expression_type() == UNARY) {
@@ -302,7 +302,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 		}
 		else {
 			// this error should have been caught by the parser, but just to be safe...
-			throw std::exception(("**** Const-qualified variables must be initialized in allocation (error occurred on line " + std::to_string(allocation_statement.get_line_number()) + ")").c_str());
+			throw std::runtime_error(("**** Const-qualified variables must be initialized in allocation (error occurred on line " + std::to_string(allocation_statement.get_line_number()) + ")").c_str());
 		}
 	}
 	// if the current scope is 0, we can use a "@rs" directive
@@ -341,7 +341,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 		}
 		else {
 			// if we forgot to supply the address of our counter, it will throw an exception
-			throw std::exception("**** Cannot allocate memory for variable; expected pointer to stack offset counter, but found 'nullptr' instead.");
+			throw std::runtime_error("**** Cannot allocate memory for variable; expected pointer to stack offset counter, but found 'nullptr' instead.");
 		}
 	}
 
@@ -402,7 +402,7 @@ std::stringstream Compiler::define(Definition definition_statement) {
 			}
 			else {
 				// currently, only alloc statements are allowed in function definitions
-				throw std::exception(("**** Semantic error: only allocation statements are allowed in function parameter definitions (error occurred on line " + std::to_string(definition_statement.get_line_number()) + ").").c_str());
+				throw std::runtime_error(("**** Semantic error: only allocation statements are allowed in function parameter definitions (error occurred on line " + std::to_string(definition_statement.get_line_number()) + ").").c_str());
 			}
 		}
 		
@@ -424,7 +424,7 @@ std::stringstream Compiler::define(Definition definition_statement) {
 		return function_asm;
 	}
 	else {
-		throw std::exception(("**** Compiler Error: Function definitions must be in the global scope (error occurred on line " + std::to_string(definition_statement.get_line_number()) + ").").c_str());
+		throw std::runtime_error(("**** Compiler Error: Function definitions must be in the global scope (error occurred on line " + std::to_string(definition_statement.get_line_number()) + ").").c_str());
 	}
 }
 
@@ -443,7 +443,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 
 		// if the quality is "const" throw an error; we cannot make assignments to const-qualified variables
 		if (fetched->quality == "const") {
-			throw std::exception(("**** Cannot make an assignment to a const-qualified variable! (error occurred on line " + std::to_string(assignment_statement.get_line_number()) + ")").c_str());
+			throw std::runtime_error(("**** Cannot make an assignment to a const-qualified variable! (error occurred on line " + std::to_string(assignment_statement.get_line_number()) + ")").c_str());
 		}
 		else {
 			// make the assignment based on the type
@@ -468,7 +468,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 					// make sure our vector of variable names isn't empty and that our offset is not 0
 					// these parameters can be left blank IF we are making an assignment to a global variable, but here, we are not
 					if (*stack_offset == 0) {
-						throw std::exception("**** Tried to make assignment in function definition, but was passed empty vector of variables and/or no stack offset.");
+						throw std::runtime_error("**** Tried to make assignment in function definition, but was passed empty vector of variables and/or no stack offset.");
 					}
 					else {
 
@@ -609,13 +609,13 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 						}
 						else {
 							// if we could not locate the variable, throw an exception
-							throw std::exception(("**** Error: Could not locate local variable '" + fetched->name + "' for stack address (error occurred on line " + std::to_string(assignment_statement.get_line_number()) + ").").c_str());
+							throw std::runtime_error(("**** Error: Could not locate local variable '" + fetched->name + "' for stack address (error occurred on line " + std::to_string(assignment_statement.get_line_number()) + ").").c_str());
 						}
 					}
 				}
 				// if they do not match, throw an exception
 				else {
-					throw std::exception(("**** Type Error: Cannot make assignment of '" + literal_arg->get_value() + "' to '" + fetched->name + "' because the types are incompatible (cannot pair '" + get_string_from_type(literal_arg->get_type()) + "' with '" + get_string_from_type(fetched->type) + "'). Error occurred on line " + std::to_string(assignment_statement.get_line_number()) + ".").c_str());
+					throw std::runtime_error(("**** Type Error: Cannot make assignment of '" + literal_arg->get_value() + "' to '" + fetched->name + "' because the types are incompatible (cannot pair '" + get_string_from_type(literal_arg->get_type()) + "' with '" + get_string_from_type(fetched->type) + "'). Error occurred on line " + std::to_string(assignment_statement.get_line_number()) + ".").c_str());
 				}
 			}
 			// we can also have a variable as our rvalue
@@ -628,7 +628,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 					// TODO: compile for lvalue
 				}
 				else {
-					throw std::exception(("**** Could not find '" + variable_to_get.getValue() + "' in symbol table (at least, not in an appropriate scope). Error occurred on line " + std::to_string(assignment_statement.get_line_number())).c_str());
+					throw std::runtime_error(("**** Could not find '" + variable_to_get.getValue() + "' in symbol table (at least, not in an appropriate scope). Error occurred on line " + std::to_string(assignment_statement.get_line_number())).c_str());
 				}
 			}
 			else if (RValueType == UNARY) {
@@ -637,7 +637,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 		}
 	}
 	else {
-		throw std::exception(("**** Error: Could not find '" + var_name + "' in symbol table").c_str());
+		throw std::runtime_error(("**** Error: Could not find '" + var_name + "' in symbol table").c_str());
 	}
 
 	// return the assignment statement
@@ -665,7 +665,7 @@ std::stringstream Compiler::call(Call call_statement, size_t* stack_offset, size
 		func_to_call_symbol = *(this->symbol_table.lookup(call_statement.get_func_name(), "global"));
 	}
 	else {
-		throw std::exception(("Cannot locate function in symbol table (perhaps you didn't include the right file?) (line " + std::to_string(call_statement.get_line_number()) + ")").c_str());
+		throw std::runtime_error(("Cannot locate function in symbol table (perhaps you didn't include the right file?) (line " + std::to_string(call_statement.get_line_number()) + ")").c_str());
 	}
 
 	std::vector<std::shared_ptr<Statement>> formal_parameters = func_to_call_symbol.formal_parameters;
@@ -734,7 +734,7 @@ std::stringstream Compiler::call(Call call_statement, size_t* stack_offset, size
 						}
 						else {
 							// if the boolean value is not 'True' or 'False', throw an exception
-							throw std::exception(("**** Expected a value of 'True' or 'False' in boolean literal; instead got '" + literal_argument->get_value() + "' (error occurred on line " + std::to_string(call_statement.get_line_number()) + ")").c_str());
+							throw std::runtime_error(("**** Expected a value of 'True' or 'False' in boolean literal; instead got '" + literal_argument->get_value() + "' (error occurred on line " + std::to_string(call_statement.get_line_number()) + ")").c_str());
 						}
 					}
 					else if (argument_type == FLOAT) {
@@ -743,7 +743,7 @@ std::stringstream Compiler::call(Call call_statement, size_t* stack_offset, size
 				}
 				// otherwise, throw an exception
 				else {
-					throw std::exception(("Type error: expected argument of type '" + get_string_from_type(formal_type) + "', but got '" +  get_string_from_type(argument_type) + "' instead (error occurred on line " + std::to_string(call_statement.get_line_number()) + ")").c_str());
+					throw std::runtime_error(("Type error: expected argument of type '" + get_string_from_type(formal_type) + "', but got '" +  get_string_from_type(argument_type) + "' instead (error occurred on line " + std::to_string(call_statement.get_line_number()) + ")").c_str());
 				}
 			}
 			else if (argument->get_expression_type() == LVALUE) {
@@ -796,22 +796,22 @@ std::stringstream Compiler::call(Call call_statement, size_t* stack_offset, size
 									// now, we must decrement the stack pointer to the end of the scope's local memory so we don't overwrite current local variables with data for the next scope
 								}
 								else {
-									throw std::exception("**** Mismatched stack offsets");	// we should never reach this, but just to be safe...
+									throw std::runtime_error("**** Mismatched stack offsets");	// we should never reach this, but just to be safe...
 								}
 							}
 							else {
 								// if our stack_offset is nullptr, but we needed a value, throw an exception; this will happen if the function is not called properly
-								throw std::exception("**** Required 'stack_offset', but it was 'nullptr'");
+								throw std::runtime_error("**** Required 'stack_offset', but it was 'nullptr'");
 							}
 						}
 					}
 					else {
 						// if the variable is not found, throw an exception
-						throw std::exception(("**** The variable you wish to pass into the function is either undefined or inaccessible (error occurred on line " + std::to_string(call_statement.get_line_number()) + ")").c_str());
+						throw std::runtime_error(("**** The variable you wish to pass into the function is either undefined or inaccessible (error occurred on line " + std::to_string(call_statement.get_line_number()) + ")").c_str());
 					}
 				}
 				else {
-					throw std::exception(("**** Could not find '" + var_arg_exp->getValue() + "' in symbol table (error occurred on line " + std::to_string(call_statement.get_line_number()) + ")").c_str());
+					throw std::runtime_error(("**** Could not find '" + var_arg_exp->getValue() + "' in symbol table (error occurred on line " + std::to_string(call_statement.get_line_number()) + ")").c_str());
 				}
 			}
 			else if (argument->get_expression_type() == UNARY) {
@@ -929,7 +929,7 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 			}
 			else {
 				// if the types do not match, throw an exception
-				throw std::exception(("**** Inline ASM in file does not match compiler's ASM version (line " + std::to_string(asm_statement->get_line_number()) + ")").c_str());
+				throw std::runtime_error(("**** Inline ASM in file does not match compiler's ASM version (line " + std::to_string(asm_statement->get_line_number()) + ")").c_str());
 			}
 		}
 		else if (statement_type == ALLOCATION) {
@@ -1025,7 +1025,7 @@ void Compiler::produce_sina_file(std::string sina_filename, bool include_builtin
 	}
 	// otherwise, throw an exception
 	else {
-		throw std::exception("**** Fatal Error: Compiler could not open the target .sina file.");
+		throw std::runtime_error("**** Fatal Error: Compiler could not open the target .sina file.");
 	}
 }
 

@@ -14,11 +14,11 @@ void Linker::get_metadata() {
 	// if they match, continue; if they don't, throw an error and die
 	for (std::vector<SinObjectFile>::iterator file_iter = this->object_files.begin(); file_iter != this->object_files.end(); file_iter++) {
 		if (file_iter->_wordsize != wordsize_compare) {
-			throw std::exception("**** Word sizes in all object files must match.");
+			throw std::runtime_error("**** Word sizes in all object files must match.");
 		}
 
 		if (file_iter->_sinvm_version != version_compare) {
-			throw std::exception("**** SINVM Version must be the same between all object files.");
+			throw std::runtime_error("**** SINVM Version must be the same between all object files.");
 		}
 	}
 
@@ -31,7 +31,7 @@ void Linker::get_metadata() {
 		this->_rs_start = _RS_START;
 	}
 	else {
-		throw std::exception("**** Specified SIN VM version is not currently supported by this toolchain");
+		throw std::runtime_error("**** Specified SIN VM version is not currently supported by this toolchain");
 	}
 }
 
@@ -84,7 +84,7 @@ void Linker::create_sml_file(std::string file_name) {
 					std::get<1>(*symbol_iter) += offset_from_text_end;
 				}
 				else {
-					throw std::exception("Could not find the constant specified in the constants table!");
+					throw std::runtime_error("Could not find the constant specified in the constants table!");
 				}
 			}
 
@@ -92,7 +92,7 @@ void Linker::create_sml_file(std::string file_name) {
 			if (std::get<2>(*symbol_iter) == "R") {
 				// first, make sure "current_rs_address" is not beyond the memory we are allowed to use; it cannot move beyond the heap
 				if (current_rs_address >= _LOCAL_DATA) {
-					throw std::exception("**** Memory Exception: Global variable limit exceeded.");
+					throw std::runtime_error("**** Memory Exception: Global variable limit exceeded.");
 				}
 				// if we are still within our bounds
 				else {
@@ -169,7 +169,7 @@ void Linker::create_sml_file(std::string file_name) {
 
 				// if the symbol was NOT found in the table
 				if (!found) {
-					throw std::exception(("**** Symbol table error: Could not find '" + std::get<0>(*symbol_iter) + "' in symbol table!").c_str());
+					throw std::runtime_error(("**** Symbol table error: Could not find '" + std::get<0>(*symbol_iter) + "' in symbol table!").c_str());
 				}
 			}
 			else {
@@ -221,7 +221,7 @@ void Linker::create_sml_file(std::string file_name) {
 
 					// if we didn't find it, throw an error
 					if (!found) {
-						throw std::exception(("**** Relocation error: Could not find '" + std::get<0>(*relocation_iter) + "' in symbol table!").c_str());
+						throw std::runtime_error(("**** Relocation error: Could not find '" + std::get<0>(*relocation_iter) + "' in symbol table!").c_str());
 					}
 
 					// finally, write "value" to the relocation table

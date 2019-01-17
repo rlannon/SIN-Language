@@ -26,7 +26,7 @@ Symbol::~Symbol() {
 void SymbolTable::insert(std::string name, Type type, std::string scope_name, int scope_level, std::string quality, bool initialized, std::vector<std::shared_ptr<Statement>> formal_parameters)
 {	
 	if (this-> is_in_symbol_table(name, scope_name)) {
-		throw std::exception(("**** Symbol Table Error: '" + name + "'already in symbol table.").c_str());
+		throw std::runtime_error(("**** Symbol Table Error: '" + name + "'already in symbol table.").c_str());
 	}
 	else {
 		this->symbols.push_back(Symbol(name, type, scope_name, scope_level, quality, initialized, formal_parameters));	// an allocation is NOT a definition
@@ -38,7 +38,7 @@ void SymbolTable::define(std::string symbol_name, std::string scope_name)
 	if (is_in_symbol_table(symbol_name, scope_name)) {
 
 	} else {
-		throw std::exception(("**** Symbol Table Error: cannot find allocation for " + symbol_name).c_str());
+		throw std::runtime_error(("**** Symbol Table Error: cannot find allocation for " + symbol_name).c_str());
 	}
 }
 
