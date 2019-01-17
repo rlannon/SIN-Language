@@ -142,7 +142,7 @@ void Compiler::include_file(Include include_statement)
 	}
 }
 
-std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, size_t * stack_offset, size_t max_offset)
+std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, unsigned int line_number, size_t * stack_offset, size_t max_offset)
 {
 	/*
 	
@@ -151,7 +151,90 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, si
 	we can use this function to fetch the contents of 'anotherVar', producing assembly that will load its value in the A register; we can then finish compiling the statement, in our respective function. This method simply allows us to hide away the details of how this is done, as well as removing code from functions and making the compiler more maintainable.
 	
 	*/
-	return std::stringstream();
+
+	// the stringstream that will contain our assembly code
+	std::stringstream fetch_ss;
+
+	// test the expression type to determine how to write the assembly for fetching it
+
+	// the simplest one is a literal
+	if (to_fetch->get_expression_type() == LITERAL) {
+		Literal* literal_expression = dynamic_cast<Literal*>(to_fetch.get());
+
+		// different data types will require slightly different methods for loading
+		if (literal_expression->get_type() == INT) {
+			// int types just need to write a loada instruction
+			fetch_ss << "\t" << "loada #$" << literal_expression->get_value() << std::endl;
+		}
+		else if (literal_expression->get_type() == BOOL) {
+			// bool types are also easy to write; any nonzero integer is true
+			int bool_expression_as_int;
+			if (literal_expression->get_value() == "True") {
+				bool_expression_as_int = 1;
+			}
+			else if (literal_expression->get_value() == "False") {
+				bool_expression_as_int = 0;
+			}
+			else {
+				// if it isn't "True" or "False", throw an error
+				throw std::exception(("Expected 'True' or 'False' as boolean literal value (case matter!) (line " + literal_expression->get_value() + ")").c_str());
+			}
+
+			fetch_ss << "\t" << "loada #$" << std::hex << bool_expression_as_int << std::endl;
+		}
+		else if (literal_expression->get_expression_type() == FLOAT) {
+			// copy the bits of the float value into an integer
+			float literal_value = std::stof(literal_expression->get_value());
+			int converted_value;
+			memcpy(&converted_value, &literal_value, sizeof(int));
+
+			// write the integer value (in hex notation) into a
+			fetch_ss << "\t" << "loada #$" << std::hex << converted_value << std::endl;
+		}
+		else if (literal_expression->get_expression_type() == STRING) {
+			// first, define a constant for the string using our naming convention
+			std::string string_constant_name;
+			string_constant_name = "__STRC__NUM_" + std::to_string(this->strc_number);	// define the constant name
+			this->strc_number++;	// increment the strc number by one
+
+			// define the constant
+			fetch_ss << "@db " << string_constant_name << " (" << literal_expression->get_value() << ")" << std::endl;
+
+			// load the A and B registers appropriately
+			fetch_ss << "\t" << "loadb #" << string_constant_name << std::endl;
+			fetch_ss << "\t" << "loada #$" << std::hex << literal_expression->get_value().length() << std::endl;
+		}
+	}
+	// TODO: fetch other types like lvalues, dereferenced values, etc.
+	else if (to_fetch->get_expression_type() == LVALUE) {
+		// get the lvalue's symbol data
+		LValue* variable_to_get = dynamic_cast<LValue*>(to_fetch.get());
+		Symbol* variable_symbol = this->symbol_table.lookup(variable_to_get->getValue(), this->current_scope_name);
+
+		// only fetch the value if it has been defined
+		if (variable_symbol->defined) {
+			// check the scope; we need to do different things for global and local scopes
+			if ((variable_symbol->scope_name == "global") && (variable_symbol->scope_level == 0)) {
+				// TODO: fetch variable from global scope
+				// all we need to do is use the variable name for globals; however, we need to know the type
+				if ((variable_symbol->type == INT) || (variable_symbol->type == BOOL) || (variable_symbol->type == FLOAT)) {
+					fetch_ss << "\t" << "loada " << variable_symbol->name << std::endl;
+				}
+				else if (variable_symbol->type == STRING) {
+					// TODO: what do we load into A when we are loading a global string?
+					// TODO: add support for data types with variable lengths (like strings)
+				}
+			}
+			else {
+				// TODO: fetch variable from local scope
+			}
+		}
+		else {
+			throw std::exception(("Variable '" + variable_symbol->name + "' referenced before assignment (line " + std::to_string(line_number) + ")").c_str());
+		}
+	}
+
+	return fetch_ss;
 }
 
 
@@ -224,8 +307,14 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 	}
 	// if the current scope is 0, we can use a "@rs" directive
 	else if (current_scope_name == "global") {
-		// TODO: add support for constants in the Lexer/Parser so they can be added here; this will allow us to declare constants using @db instead of @rs
-		allocation_ss << "@rs " << symbol_name << std::endl;	// syntax is "@rs macro_name"
+		// if the variable type is anything with a variable length, we need a different mechanism for handling them
+		if (symbol_type == STRING) {
+			// TODO: add support for global strings, arrays, etc.
+		}
+		else {
+			// reserve the variable itself
+			allocation_ss << "@rs " << symbol_name << std::endl;	// syntax is "@rs macro_name"
+		}
 	}
 	// otherwise, we must use the next available memory address in the current scope
 	else {
@@ -985,6 +1074,8 @@ Compiler::Compiler(std::istream& sin_file, uint8_t _wordsize, std::vector<std::s
 
 	this->next_available_addr = 0;	// start our next available address at 0
 
+	this->strc_number = 0;
+
 	this->_DATA_PTR = 0;	// our first address for variables is $00
 	this->AST_index = -1;	// we use "get_next_statement()" every time, which increments before returning; as such, start at -1 so we fetch the 0th item, not the 1st, when we first call the compilation function
 	symbol_table = SymbolTable();
@@ -999,7 +1090,7 @@ Compiler::Compiler(std::istream& sin_file, uint8_t _wordsize, std::vector<std::s
 }
 
 Compiler::Compiler() {
-
+	// TODO: give default values for compiler initialization
 }
 
 Compiler::~Compiler()

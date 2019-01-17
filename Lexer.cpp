@@ -59,12 +59,6 @@ char Lexer::next() {
 	}
 }
 
-void Lexer::croak(char token, int position) {
-	// executes if there is a tokenizer error
-	std::cout << "Could not understand character/token \"" << token << "\" at position " << this->stream->tellg() << "!" << std::endl;
-	std::cout << "Aborting lexer." << std::endl;
-}
-
 
 
 /*
@@ -79,7 +73,7 @@ bool Lexer::match_character(char ch, std::string expression) {
 		return (std::regex_match(&ch, std::regex(expression)));
 	}
 	catch (const std::regex_error &e) {
-		std::cout << "REGEX ERROR:" << std::endl << e.what() << std::endl;
+		std::cerr << "REGEX ERROR:" << std::endl << e.what() << std::endl;	// because these functions are all static, we cannot use current_line to display the error unless it is added as a parameter for all of the static functions; do they really need to be static?
 	}
 }
 
@@ -208,7 +202,7 @@ std::string Lexer::read_while(bool (*predicate)(char)) {
 
 	this->peek();
 	if (this->stream->eof()) {
-		std::cout << "EOF reached in 'read while'" << std::endl;
+		std::cout << "Note from Lexer: end of file reached" << std::endl;
 		return msg;
 	}
 
@@ -352,7 +346,6 @@ lexeme Lexer::read_next() {
 			}
 		}
 		else {	// if the character in the file is not recognized, print an error message and quit lexing
-			//this->croak(ch, position);
 			throw LexerException("Unrecognized character!", position, ch);
 			this->exit_flag = true;
 		}

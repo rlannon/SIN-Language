@@ -33,12 +33,7 @@ enum Type {
 	STRING,
 	BOOL,
 	VOID,
-	INTPTR,
-	FLOATPTR,
-	STRINGPTR,
-	BOOLPTR,
-	VOIDPTR,
-	PTRPTR,
+	PTR,
 	RAW8,
 	RAW16,
 	RAW32,
@@ -57,19 +52,13 @@ enum exp_type {
 	VALUE_RETURNING_CALL
 };
 
-const int num_types = 14;
+const int num_types = 11;
 
 const bool is_literal(std::string candidate_type);
 
 const Type get_type_from_string(std::string candidate);
 
 const std::string get_string_from_type(Type candidate);
-
-const Type get_ptr_type(Type candidate);	// returns the appropriate pointer type for a given type (e.g., INT returns INTPTR, FLOAT -> FLOATPTR)
-
-const bool is_ptr_type(Type candidate);	// returns true if the type is a pointer type
-
-const bool match_ptr_types(Type ptr_type, Type pointed_type);
 
 const Type get_raw_type(int _size);
 
@@ -94,11 +83,12 @@ public:
 class Literal : public Expression
 {
 	Type data_type;
+	Type subtype;
 	std::string value;
 public:
 	Type get_type();
 	std::string get_value();
-	Literal(Type data_type, std::string value);
+	Literal(Type data_type, std::string value, Type subtype = NONE);
 	Literal();
 };
 

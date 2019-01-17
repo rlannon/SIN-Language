@@ -76,12 +76,16 @@ Type Allocation::get_var_type() {
 	return this->type;
 }
 
-std::string Allocation::get_var_type_as_string() {
+Type Allocation::get_var_subtype() {
+	return this->subtype;
+}
+
+std::string Allocation::get_var_type_as_string(Type to_convert) {
 	std::string types_list[4] = { "int", "float", "string", "bool" };
 	Type _types[4] = { INT, FLOAT, STRING, BOOL };
 
 	for (int i = 0; i < 4; i++) {
-		if (this->type == _types[i]) {
+		if (to_convert == _types[i]) {
 			return types_list[i];
 		}
 		else {
@@ -112,12 +116,13 @@ std::shared_ptr<Expression> Allocation::get_initial_value()
 	return this->initial_value;
 }
 
-Allocation::Allocation(Type type, std::string value, bool initialized, std::shared_ptr<Expression> initial_value, std::string quality) : type(type), value(value), initialized(initialized), initial_value(initial_value), quality(quality) {
+Allocation::Allocation(Type type, std::string value, Type subtype, bool initialized, std::shared_ptr<Expression> initial_value, std::string quality) : type(type), value(value), subtype(subtype), initialized(initialized), initial_value(initial_value), quality(quality) {
 	Allocation::statement_type = ALLOCATION;
 }
 
 Allocation::Allocation() {
 	Allocation::type = NONE;
+	Allocation::subtype = NONE;	// will remain 'NONE' unless 'type' is a ptr or array
 	Allocation::initialized = false;
 	Allocation::statement_type = ALLOCATION;
 }

@@ -530,25 +530,11 @@ std::string Assembler::get_mnemonic(int opcode)
 }
 
 
-uint8_t Assembler::get_address_mode(std::string value, std::string offset) {
+uint8_t Assembler::get_addressing_mode(std::string value, std::string offset) {
 	// given a vector of strings, this function will return the correct addressing mode to use for the instruction
 	// note: does not return indirect indexed addressing; only handles two strings at maximum; in order to get the indirect indexed mode, parse the address mode within the parens and add 4 to the result
 
-	/*
-
-	OUR ADDRESSING MODES:
-
-	$00	-	Absolute	(e.g., 'LOADA $1234')
-	$01	-	X-indexed	(e.g., 'LOADA $1234, X')
-	$02	-	Y-indexed	(e.g., 'LOADA $1234, Y')
-	$03	-	Immediate	(e.g., 'LOADA #$1234')
-	??	$04	-	8-bit		(e.g., 'STOREA $12')
-	$05	-	Indirect indexed with X	(e.g., 'LOADA ($1234, X)')
-	$06	-	Indirect indexed with Y	(e.g., 'LOADA ($1234, Y)')
-	$07	-	Register A	(e.g., 'LSR A')	-	Can only be used with bitshift operations
-	$08	-	Register B	-	can only be used with ALU instructions to add in to the A register
-
-	*/
+	// See "AddressingModeConstants" for more information about the addressing modes in SINASM
 
 	// immediate addressing
 	if (value[0] == '#') {
@@ -563,13 +549,13 @@ uint8_t Assembler::get_address_mode(std::string value, std::string offset) {
 		// if we have data in 'offset', check to see if there is a comma after 'value'
 		else if (value[value.size() - 1] == ',') {
 			// if so, check to see what the first character of 'offset' is
-			if (offset[0] == 'X') {
+			if (offset[0] == 'X' || offset[0] == 'x') {
 				// we have X-indexed addressing
-				return addressingmode::indirect_x;
+				return addressingmode::x_index;
 			}
-			else if (offset[0] == 'Y') {
+			else if (offset[0] == 'Y' || offset[0] == 'y') {
 				// we have Y-indexed addressing
-				return addressingmode::indirect_y;
+				return addressingmode::y_index;
 			}
 			// if it's not X or Y, it's not proper; throw exception
 			else {
@@ -652,11 +638,41 @@ std::vector<uint8_t> Assembler::assemble()
 
 					// first, check to see if we have parens -- if so, we will adjust accordingly
 					if (value[0] == '(') {
+						uint8_t to_add_to_addressing_mode;	// the number we will add to our addressing mode based on whether it's indexed indirect or indirect indexed
 						if (string_delimited.size() >= 3) {
-							addressing_mode = get_address_mode(value.substr(1), string_delimited[2]);	// get the substring of 'value' starting at position 1 (ignoring paren)
+							/*
+							
+							At this point, we know we have one of the indirect modes -- however, we don't know which one yet.
+							The way to determine is that indexed indirect addressing will leave strings like this:
+								($00,
+								x)
+							whereas indirect indexed will look like this:
+								($00),
+								x
+							As such, we just have to the last character of the second string; if it is a letter, we have indirect indexed; if not, but it is a paren, then we have indexed indirect
+							
+							This will only change the number we add to the addressing mode after we use get_addressing_mode()
+
+							*/
+
+							// get the value we need to add to the addressing mode (assuming we get x indexed or y indexed and not an error); this is +4 for indirect indexed ( ($00), y ) and +6 for indexed indirect ( ($00, y) )
+							char last_value_char = string_delimited[2][string_delimited[2].length() - 1];	// get the last character of the second string in string_delimited
+							if (last_value_char == ')') {
+								// if the last character is ')', we have indexed indirect, so we need +6
+								to_add_to_addressing_mode = 6;
+							}
+							else if (last_value_char == 'x' || last_value_char == 'X' || last_value_char == 'y' || last_value_char == 'Y') {
+								// if the last character is a register name, we have indirect indexed, so we need +4
+								to_add_to_addressing_mode = 4;
+							}
+							else {
+								throw std::exception(("Invalid character in value expression (line " + std::to_string(line_counter) + ")").c_str());
+							}
+
+							addressing_mode = get_addressing_mode(value.substr(1), string_delimited[2]);	// get the substring of 'value' starting at position 1 (ignoring paren)
 
 							// just to make our lives easier, erase the paren right now
-							value.erase(0);
+							value.erase(0, 1);
 						}
 						else {
 							// there MUST be another string in string_delimited if we have indirect addressing
@@ -665,7 +681,7 @@ std::vector<uint8_t> Assembler::assemble()
 
 						// if the addressing mode is x/y indexed, add 4 to it to get to the indirect/indexed (they are 4 apart)
 						if (addressing_mode == addressingmode::x_index || addressing_mode == addressingmode::y_index) {
-							addressing_mode += 4;
+							addressing_mode += to_add_to_addressing_mode;
 						}
 						// if neither, it's improper syntax -- cannot use parens with any other mode
 						else {
@@ -757,10 +773,10 @@ std::vector<uint8_t> Assembler::assemble()
 
 						// further, if we made it this far without an exception, make sure that if we find a third string that the first character is NOT a semicolon; if so, the program should behave as if there were only two strings
 						if (string_delimited.size() >= 3 && (string_delimited[2][0] != ';')) {
-							addressing_mode = get_address_mode(value, string_delimited[2]);
+							addressing_mode = get_addressing_mode(value, string_delimited[2]);
 						}
 						else {
-							addressing_mode = get_address_mode(value);
+							addressing_mode = get_addressing_mode(value);
 						}
 
 						if (addressing_mode == 3 && !can_use_immediate_addressing(opcode)) {

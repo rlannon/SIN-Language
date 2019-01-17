@@ -39,8 +39,6 @@ class Lexer
 	int position;
 	bool exit_flag;
 
-	int stream_length;	// the length of ifstream* stream, without the ultimate \n character (if present)
-
 	lexeme current_lexeme;
 	unsigned int current_line;	// track what line we are on in the file
 
@@ -55,7 +53,6 @@ class Lexer
 	// character access functions
 	char peek();
 	char next();
-	void croak(char token, int position);	// something went wrong; print an error message quit the lexer
 
 	static bool match_character(char ch, std::string expression);	// match a single character with regex (including an exception handler)
 

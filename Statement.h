@@ -89,6 +89,7 @@ class Allocation : public Statement
 	*/
 	
 	Type type;	// the variable's type
+	Type subtype;	// the subtype
 	std::string value;
 
 	std::string quality;	// the "quality" of the variable (defaults to "none", but can be const, etc)
@@ -99,7 +100,8 @@ class Allocation : public Statement
 	std::shared_ptr<Expression> initial_value;
 public:
 	Type get_var_type();
-	std::string get_var_type_as_string();
+	Type get_var_subtype();
+	static std::string get_var_type_as_string(Type to_convert);
 	std::string get_var_name();
 
 	std::string get_quality();
@@ -107,7 +109,7 @@ public:
 	bool was_initialized();
 	std::shared_ptr<Expression> get_initial_value();
 
-	Allocation(Type type, std::string value, bool was_initialized = false, std::shared_ptr<Expression> initial_value = std::make_shared<Expression>(), std::string quality = "none");	// use default parameters to allow us to use alloc-define syntax, but we don't have to
+	Allocation(Type type, std::string value, Type subtype = NONE, bool was_initialized = false, std::shared_ptr<Expression> initial_value = std::make_shared<Expression>(), std::string quality = "none");	// use default parameters to allow us to use alloc-define syntax, but we don't have to
 	Allocation();
 };
 

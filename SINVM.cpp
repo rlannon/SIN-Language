@@ -42,7 +42,7 @@ int SINVM::get_data_of_wordsize() {
 
 std::vector<uint8_t> SINVM::get_properly_ordered_bytes(int value) {
 	std::vector<uint8_t> ordered_bytes;
-	for (int i = (this->_WORDSIZE / 8); i > 0; i++) {
+	for (int i = (this->_WORDSIZE / 8); i > 0; i--) {
 		ordered_bytes.push_back(value >> ((i - 1) * 8));
 	}
 	return ordered_bytes;
@@ -509,16 +509,48 @@ int SINVM::execute_load() {
 	}
 
 	/*
-	Our indirect indexed modes are a little more complicated; they get the value at the address and use that as a memory location to access, finally indexing with the Y register. Essentially, this acts as a pointer.
+
+	For these examples, let's say we have this memory map to work with:
+			$0000	-	#$00
+			$0000	-	#$00
+			$0002	-	#$23
+			$0003	-	#$C0
+			...
+			$23C0	-	#$AB
+			$23C1	-	#$CD
+			$23C2	-	#$12
+			$23C3	-	#$34
+
+	Indexed indirect modes go to some address, index it with X or Y, go to the address equal to that value, and fetch that. This acts as a pointer to a pointer, essentially. For example:
+			loadx #$02
+			loada ($00, x)
+	will cause A to look at address $00, x, which contains the word $23C0; it then fetches the address at location $23C0, which is #$ABCD
+
+	Our indirect indexed modes are like indexed indirect, but less insane; they get the value at the address and use that as a memory location to access, finally indexing with the X or Y registers. Essentially, this acts as a pointer. For example:
+			loady #$02
+			loada ($02), y
+	will cause A to look at address $02, which contains the word $23C0; it then goes to that address and indexes it with the y register, so it points to address $23C2, which contains the word #$1234
+
+	Both addressing modes can be used with the X and Y registers
+
 	*/
 
-	// TODO: implement indirect indexed addressing
+	// TODO: implement indirect indexed and indexed indirect addressing
 
-	else if (addressing_mode == addressingmode::indirect_x) {
+	// indirect indexed
+	else if (addressing_mode == addressingmode::indirect_indexed_x) {
 		// indirect indexed addressing with the X register
 	}
-	else if (addressing_mode == addressingmode::indirect_y) {
+	else if (addressing_mode == addressingmode::indirect_indexed_y) {
 		// indirect indexed addressing with the Y register
+	}
+
+	// indexed indirect
+	else if (addressing_mode == addressingmode::indexed_indirect_x) {
+
+	}
+	else if (addressing_mode == addressingmode::indexed_indirect_y) {
+
 	}
 }
 
@@ -699,13 +731,13 @@ void SINVM::execute_bitshift(int opcode)
 			this->store_in_memory(high_byte_address, value_at_address);
 		}
 		// if we have indirect addressing (x)
-		else if (addressing_mode == addressingmode::indirect_x) {
+		else if (addressing_mode == addressingmode::indirect_indexed_x) {
 
 			// TODO: enable indirect addressing
 
 		}
 		// if we have indirect addressing (y)
-		else if (addressing_mode == addressingmode::indirect_y) {
+		else if (addressing_mode == addressingmode::indirect_indexed_y) {
 
 			// TODO: enable indirect addressing
 

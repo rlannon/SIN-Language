@@ -32,8 +32,8 @@ const bool is_literal(std::string candidate_type) {
 const Type get_type_from_string(std::string candidate) {
 	// if it can, this function gets the proper type of an input string
 	// an array of the valid types as strings
-	std::string string_types[] = { "int", "float", "string", "bool", "void", "intptr", "floatptr", "stringptr", "boolptr", "voidptr", "ptrptr", "raw8", "raw16", "raw32" };
-	Type _types[] = { INT, FLOAT, STRING, BOOL, VOID, INTPTR, FLOATPTR, STRINGPTR, BOOLPTR, VOIDPTR, PTRPTR, RAW8, RAW16, RAW32 };
+	std::string string_types[] = { "int", "float", "string", "bool", "void", "ptr", "raw8", "raw16", "raw32" };
+	Type _types[] = { INT, FLOAT, STRING, BOOL, VOID, PTR, RAW8, RAW16, RAW32 };
 
 	// for test our candidate against each item in the array of string_types; if we have a match, return the Type at the same position
 	for (int i = 0; i < num_types; i++) {
@@ -52,8 +52,8 @@ const Type get_type_from_string(std::string candidate) {
 
 const std::string get_string_from_type(Type candidate) {
 	// reverse of the above function
-	std::string string_types[] = { "int", "float", "string", "bool", "void", "intptr", "floatptr", "stringptr", "boolptr", "voidptr", "ptrptr", "raw8", "raw16", "raw32" };
-	Type _types[] = { INT, FLOAT, STRING, BOOL, VOID, INTPTR, FLOATPTR, STRINGPTR, BOOLPTR, VOIDPTR, PTRPTR, RAW8, RAW16, RAW32 };
+	std::string string_types[] = { "int", "float", "string", "bool", "void", "ptr", "raw8", "raw16", "raw32" };
+	Type _types[] = { INT, FLOAT, STRING, BOOL, VOID, PTR, RAW8, RAW16, RAW32 };
 
 	// for test our candidate against each item in the array of string_types; if we have a match, return the string at the same position
 	for (int i = 0; i < num_types; i++) {
@@ -68,46 +68,6 @@ const std::string get_string_from_type(Type candidate) {
 
 	// if we arrive here, we have not found the type we are looking for
 	return "none (error occurred)";
-}
-
-const Type get_ptr_type(Type candidate) {
-	if (candidate == INT) {
-		return INTPTR;
-	}
-	else if (candidate == FLOAT) {
-		return FLOATPTR;
-	}
-	else if (candidate == STRING) {
-		return STRINGPTR;
-	}
-	else if (candidate == BOOL) {
-		return BOOLPTR;
-	}
-	else if (candidate == VOID) {
-		return VOIDPTR;
-	}
-	else if (candidate == INTPTR || candidate == FLOATPTR || candidate == STRINGPTR || candidate == BOOLPTR || candidate == VOIDPTR || candidate == PTRPTR) {
-		return PTRPTR;
-	}
-}
-
-const bool is_ptr_type(Type candidate) {
-	return (candidate == INTPTR || candidate == FLOATPTR || candidate == STRINGPTR || candidate == BOOLPTR || candidate == VOIDPTR || candidate == PTRPTR);
-}
-
-const bool match_ptr_types(Type ptr_type, Type pointed_type) {
-	// returns true if the types are compatible
-	if (ptr_type == get_ptr_type(pointed_type)) {
-		return true;
-	}
-	else {
-		if (ptr_type == PTRPTR && is_ptr_type(pointed_type)) {
-			return true;
-		}
-		else {
-			return false;
-		}
-	}
 }
 
 const Type get_raw_type(int _size) {
@@ -156,12 +116,13 @@ std::string Literal::get_value() {
 	return this->value;
 }
 
-Literal::Literal(Type data_type, std::string value) : data_type(data_type), value(value) {
+Literal::Literal(Type data_type, std::string value, Type subtype) : value(value), data_type(data_type), subtype(subtype) {
 	Literal::expression_type = LITERAL;
 }
 
 Literal::Literal() {
 	Literal::data_type = NONE;	// give it a default value so we don't try to access an uninitialized value
+	Literal::subtype = NONE;	// will remain 'NONE' unless our data_type is ptr or array
 	Literal::expression_type = LITERAL;
 }
 

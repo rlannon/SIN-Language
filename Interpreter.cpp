@@ -29,11 +29,8 @@ const std::string Interpreter::boolString(bool val) {
 	}
 }
 
-const bool Interpreter::areCompatibleTypes(Type a, Type b) {
+const bool Interpreter::are_compatible_types(Type a, Type b) {
 	if (a == b) {
-		return true;
-	}
-	else if (match_ptr_types(a, b)) {
 		return true;
 	}
 	else if (is_raw(a) || is_raw(b)) {
@@ -53,9 +50,9 @@ const bool Interpreter::areCompatibleTypes(Type a, Type b) {
 *************************************************************************/
 
 
-std::tuple<Type, std::string, std::string> Interpreter::getVar(std::string var_to_find, std::list<std::tuple<Type, std::string, std::string>>* vars_table) {
-	for (std::list<std::tuple<Type, std::string, std::string>>::iterator var_iter = vars_table->begin(); var_iter != vars_table->end(); var_iter++) {
-		if (std::get<1>(*var_iter) == var_to_find) {
+InterpreterSymbol Interpreter::getVar(std::string var_to_find, std::list<InterpreterSymbol>* vars_table) {
+	for (std::list<InterpreterSymbol>::iterator var_iter = vars_table->begin(); var_iter != vars_table->end(); var_iter++) {
+		if (var_iter->name == var_to_find) {
 			return *var_iter;
 		}
 	}
@@ -66,27 +63,27 @@ std::tuple<Type, std::string, std::string> Interpreter::getVar(std::string var_t
 }
 
 
-std::string Interpreter::getVarValue(LValue variable, std::list<std::tuple<Type, std::string, std::string>>* vars_table) {
+std::string Interpreter::getVarValue(LValue variable, std::list<InterpreterSymbol>* vars_table) {
 	// find the variable in the symbol table
 	try {
-		std::tuple<Type, std::string, std::string> var_in_table = this->getVar(variable.getValue(), vars_table);
+		InterpreterSymbol var_in_table = this->getVar(variable.getValue(), vars_table);
 
 		// now, check the type
 		if (variable.getLValueType() == "var" || variable.getLValueType() == "var_address") {
-			return std::get<2>(var_in_table);
+			return var_in_table.value;
 		}
 		else if (variable.getLValueType() == "var_dereferenced") {
 			// our address is in position 2 in the tuple at *var_iter
 			// convert it into an actual pointer int
-			intptr_t address = (intptr_t)std::stoi(std::get<2>(var_in_table));
+			intptr_t address = (intptr_t)std::stoi(var_in_table.value);
 
 			// now that we have the address, get the variable at that address
-			std::tuple<Type, std::string, std::string>* dereferenced = (std::tuple<Type, std::string, std::string>*)address;
+			InterpreterSymbol* dereferenced = (InterpreterSymbol*)address;
 
 			// make sure the pointer and the value it is referecing are compatible types
-			if (match_ptr_types(std::get<0>(var_in_table), std::get<0>(*dereferenced))) {
+			if (are_compatible_types(var_in_table.data_type, dereferenced->data_type)) {
 				// return the dereferenced value
-				return std::get<2>(*dereferenced);
+				return dereferenced->value;
 			}
 			else {
 				// if they are not compatible, throw an error
@@ -99,51 +96,49 @@ std::string Interpreter::getVarValue(LValue variable, std::list<std::tuple<Type,
 	}
 }
 
-void Interpreter::setVarValue(LValue variable, std::tuple<Type, std::string> new_value, std::list<std::tuple<Type, std::string, std::string>>* vars_table) {
+void Interpreter::setVarValue(LValue variable, std::tuple<Type, std::string> new_value, std::list<InterpreterSymbol>* vars_table) {
 	// find the variable in the symbol table
-	for (std::list<std::tuple<Type, std::string, std::string>>::iterator var_iter = vars_table->begin(); var_iter != vars_table->end(); var_iter++) {
-		if (std::get<1>(*var_iter) == variable.getValue()) {
+	for (std::list<InterpreterSymbol>::iterator var_iter = vars_table->begin(); var_iter != vars_table->end(); var_iter++) {
+		if (var_iter->name == variable.getValue()) {
 			// now, check the type
 			if (variable.getLValueType() == "var" || variable.getLValueType() == "var_address") {
 				// check for compatible types
-				if (this->areCompatibleTypes(std::get<0>(*var_iter), std::get<0>(new_value))) {
+				if (this->are_compatible_types(var_iter->data_type, std::get<0>(new_value)) || this->are_compatible_types(var_iter->subtype, std::get<0>(new_value))) {
 					// update the value
 					
 					// currently, RAW is not supported in Interpreted SIN
-					if (is_raw(std::get<0>(*var_iter)) || is_raw(std::get<0>(new_value))) {
+					if (is_raw(var_iter->data_type) || is_raw(std::get<0>(new_value))) {
 						throw InterpreterException("Interpreted SIN does not support the use of the RAW type", 1234);
 					}
-					std::get<2>(*var_iter) = std::get<1>(new_value);
+					var_iter->value = std::get<1>(new_value);
 					return;
 				}
 				else {
-					throw TypeMatchError(std::get<0>(*var_iter), std::get<0>(new_value));
+					throw TypeMatchError(var_iter->data_type, std::get<0>(new_value));
 				}
 			}
 			else if (variable.getLValueType() == "var_dereferenced") {
 				// get the value stored in the pointer, which is an address
-				intptr_t address = (intptr_t)std::stoi(std::get<2>(*var_iter));
+				intptr_t address = (intptr_t)std::stoi(var_iter->value);
 				// get the value at that address
-				std::tuple<Type, std::string, std::string>* dereferenced = (std::tuple<Type, std::string, std::string>*)address;
+				InterpreterSymbol* dereferenced = (InterpreterSymbol*)address;
 
 				// continue updating the address as long as we have a pointer type
-				while (is_ptr_type(std::get<0>(*dereferenced))) {
+				while (dereferenced->data_type == PTR) {
 					// get the address stored in the current variable 'dereferenced'
-					address = (intptr_t)std::stoi(std::get<2>(*dereferenced));
+					address = (intptr_t)std::stoi(dereferenced->value);
 					// put the tuple at that address in DEREFERENCED
-					dereferenced = (std::tuple<Type, std::string, std::string>*)address;
+					dereferenced = (InterpreterSymbol*)address;
 				}
 
 				// check for type compatibility
-				if (this->areCompatibleTypes(std::get<0>(*dereferenced), std::get<0>(new_value))) {
+				if (this->are_compatible_types(dereferenced->data_type, std::get<0>(new_value))) {
 					// update the value at that address
-					std::get<2>(*dereferenced) = std::get<1>(new_value);
+					dereferenced->value = std::get<1>(new_value);
 					return;
 				}
 				else {
-					//std::string err_msg = "Types not compatible in assignment! (cannot match '" + get_string_from_type(std::get<0>(new_value)) + "' with '" + get_string_from_type(std::get<0>(*dereferenced)) + "')";
-					//throw InterpreterException(err_msg.c_str(), 000);
-					throw TypeMatchError(std::get<0>(new_value), std::get<0>(*dereferenced));
+					throw TypeMatchError(std::get<0>(new_value), dereferenced->data_type);
 				}
 			}
 			else {
@@ -157,9 +152,9 @@ void Interpreter::setVarValue(LValue variable, std::tuple<Type, std::string> new
 
 
 // allocate a variable
-void Interpreter::allocateVar(Allocation allocation, std::list<std::tuple<Type, std::string, std::string>>* vars_table) {
+void Interpreter::allocateVar(Allocation allocation, std::list<InterpreterSymbol>* vars_table) {
 	// Initialize the variable with its type, name, and no value / NULL value
-	std::tuple<Type, std::string, std::string> var = std::make_tuple<Type, std::string, std::string>(allocation.get_var_type(), allocation.get_var_name(), "");
+	InterpreterSymbol var = InterpreterSymbol(allocation.get_var_type(), allocation.get_var_name(), "", allocation.get_var_subtype());
 
 	// Push our newly-allocated variable to our variables vector
 	vars_table->push_back(var);
@@ -171,7 +166,7 @@ void Interpreter::defineFunction(Definition definition) {
 }
 
 // execute a single statement
-void Interpreter::executeStatement(Statement* statement, std::list<std::tuple<Type, std::string, std::string>>* vars_table) {
+void Interpreter::executeStatement(Statement* statement, std::list<InterpreterSymbol>* vars_table) {
 	if (statement == NULL) {
 		throw InterpreterException("Expected a statement", 3411);
 	}
@@ -253,7 +248,7 @@ void Interpreter::executeStatement(Statement* statement, std::list<std::tuple<Ty
 							AddressOf* addr_of = dynamic_cast<AddressOf*>(_arg.get());
 							arg = addr_of->get_target();
 							// get the variable at the address we want
-							std::tuple<Type, std::string, std::string> ptd_val = this->getVar(arg.getValue(), vars_table);
+							InterpreterSymbol ptd_val = this->getVar(arg.getValue(), vars_table);
 							// print its address and return
 							std::cout << &ptd_val << std::endl;
 							return;
@@ -288,11 +283,11 @@ void Interpreter::executeStatement(Statement* statement, std::list<std::tuple<Ty
 }
 
 // evaluate an assignment statement
-void Interpreter::evaluateAssignment(Assignment assign, std::list<std::tuple<Type, std::string, std::string>>* vars_table) {
+void Interpreter::evaluateAssignment(Assignment assign, std::list<InterpreterSymbol>* vars_table) {
 	LValue lvalue = assign.get_lvalue();
 	Expression* RValue = dynamic_cast<Expression*>(assign.get_rvalue().get());
 
-	Type lvalue_type = std::get<0>(this->getVar(lvalue.getValue(), vars_table));
+	Type lvalue_type = this->getVar(lvalue.getValue(), vars_table).data_type;
 
 	std::tuple<Type, std::string> evaluated_rvalue = this->evaluateExpression(RValue, vars_table);
 	Type rvalue_type = std::get<0>(evaluated_rvalue);
@@ -303,7 +298,7 @@ void Interpreter::evaluateAssignment(Assignment assign, std::list<std::tuple<Typ
 }
 
 // Execute a block of statements
-void Interpreter::executeBranch(StatementBlock prog, std::list<std::tuple<Type, std::string, std::string>>* vars_table) {
+void Interpreter::executeBranch(StatementBlock prog, std::list<InterpreterSymbol>* vars_table) {
 	// iterate through the statement list supplied
 	for (std::vector<std::shared_ptr<Statement>>::iterator statement_iter = prog.statements_list.begin(); statement_iter != prog.statements_list.end(); statement_iter++) {
 		// get the statement to execute by using dynamic_cast on the statement
@@ -316,11 +311,11 @@ void Interpreter::executeBranch(StatementBlock prog, std::list<std::tuple<Type, 
 
 // Functions
 
-void Interpreter::evaluateVoidFunction(Call func_to_evaluate, std::list<std::tuple<Type, std::string, std::string>>* parent_vars_table) {
+void Interpreter::evaluateVoidFunction(Call func_to_evaluate, std::list<InterpreterSymbol>* parent_vars_table) {
 	// get the definition for the function we want to evaluate
 	Definition func_def = this->getDefinition(func_to_evaluate.get_func_name());
 
-	std::list<std::tuple<Type, std::string, std::string>> local_vars;
+	std::list<InterpreterSymbol> local_vars;
 
 	// create instances of all our local function variables
 	if (func_to_evaluate.get_args_size() == func_def.get_args().size()) {
@@ -335,7 +330,7 @@ void Interpreter::evaluateVoidFunction(Call func_to_evaluate, std::list<std::tup
 				argv = this->evaluateExpression(arg, &local_vars);	// if it's not a variable, we don't need the table
 			}
 			if (std::get<0>(argv) == current_arg->get_var_type()) {
-				local_vars.push_back(std::make_tuple(current_arg->get_var_type(), current_arg->get_var_name(), std::get<1>(argv)));
+				local_vars.push_back(InterpreterSymbol(current_arg->get_var_type(), current_arg->get_var_name(), std::get<1>(argv)));
 			}
 			else {
 				throw InterpreterException("Argument to function is of improper type, must be '" + get_string_from_type(current_arg->get_var_type()) + "', not '" \
@@ -352,11 +347,11 @@ void Interpreter::evaluateVoidFunction(Call func_to_evaluate, std::list<std::tup
 	return;
 }
 
-std::tuple<Type, std::string> Interpreter::evaluateValueReturningFunction(ValueReturningFunctionCall func_to_evaluate, std::list<std::tuple<Type, std::string, std::string>>* parent_vars_table) {
+std::tuple<Type, std::string> Interpreter::evaluateValueReturningFunction(ValueReturningFunctionCall func_to_evaluate, std::list<InterpreterSymbol>* parent_vars_table) {
 	// Get the definition for the function we want to evaluate
 	Definition func_def = this->getDefinition(func_to_evaluate.get_func_name());
 
-	std::list<std::tuple<Type, std::string, std::string>> local_vars;
+	std::list<InterpreterSymbol> local_vars;
 
 	// create instances of all our local function variables
 	if (func_to_evaluate.get_args_size() == func_def.get_args().size()) {
@@ -371,7 +366,7 @@ std::tuple<Type, std::string> Interpreter::evaluateValueReturningFunction(ValueR
 				argv = this->evaluateExpression(arg, &local_vars);
 			}
 			if (std::get<0>(argv) == current_arg->get_var_type()) {
-				local_vars.push_back(std::make_tuple(current_arg->get_var_type(), current_arg->get_var_name(), std::get<1>(argv)));
+				local_vars.push_back(InterpreterSymbol(current_arg->get_var_type(), current_arg->get_var_name(), std::get<1>(argv)));
 			}
 			else {
 				throw InterpreterException("Argument to function is of improper type, must be '" + get_string_from_type(current_arg->get_var_type()) + "', not '" \
@@ -404,7 +399,7 @@ std::tuple<Type, std::string> Interpreter::evaluateValueReturningFunction(ValueR
 
 // Expressions
 
-std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, std::list<std::tuple<Type, std::string, std::string>>* vars_table) {
+std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, std::list<InterpreterSymbol>* vars_table) {
 	if (expr->get_expression_type() == LITERAL) {
 		// evaluate a literal
 		Literal* our_val = dynamic_cast<Literal*>(expr);
@@ -412,9 +407,9 @@ std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, 
 	}
 	else if (expr->get_expression_type() == LVALUE) {
 		LValue* _var = dynamic_cast<LValue*>(expr);
-		for (std::list<std::tuple<Type, std::string, std::string>>::iterator var = vars_table->begin(); var != vars_table->end(); ++var) {
-			if (_var->getValue() == std::get<1>(*var)) {
-				return std::make_tuple(std::get<0>(*var), std::get<2>(*var));
+		for (std::list<InterpreterSymbol>::iterator var = vars_table->begin(); var != vars_table->end(); ++var) {
+			if (_var->getValue() == var->name) {
+				return std::make_tuple(var->data_type, var->value);
 			}
 		}
 	}
@@ -423,13 +418,13 @@ std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, 
 		AddressOf* _addr = dynamic_cast<AddressOf*>(expr);
 
 		// look for "var" with the same name as our _addr object
-		for (std::list<std::tuple<Type, std::string, std::string>>::iterator var = vars_table->begin(); var != vars_table->end(); ++var) {
+		for (std::list<InterpreterSymbol>::iterator var = vars_table->begin(); var != vars_table->end(); ++var) {
 			// if the name of the LValue in _addr is in the variable table
-			if (_addr->get_target().getValue() == std::get<1>(*var)) {
+			if (_addr->get_target().getValue() == var->name) {
 				// store the address of var in a intptr_t
 				intptr_t address = reinterpret_cast<intptr_t>(&*var);
 				std::string addr_string = std::to_string(address);
-				Type ptr_addr_type = get_ptr_type(std::get<0>(*var));
+				Type ptr_addr_type = var->data_type;	// TODO: overhaul Interpreter pointer types
 
 				return std::make_tuple(ptr_addr_type, addr_string);
 			}
@@ -447,7 +442,7 @@ std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, 
 			// now, get the LValue in _deref
 			ptr = _deref->get_ptr();
 		}
-		// if it is another reference
+		// if the pointer contains another reference
 		else if (_deref_ptr->get_expression_type() == DEREFERENCED) {
 			while (_deref_ptr->get_expression_type() == DEREFERENCED) {
 				_deref = dynamic_cast<Dereferenced*>(_deref_ptr);
@@ -459,22 +454,25 @@ std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, 
 				// "ptr" now holds "myPtrPtr"
 				// now we must get the variable at that address
 				Type current_type;
+				Type current_subtype;
 
 				std::tuple<Type, std::string> _ptr_data = this->evaluateExpression(&ptr, vars_table);
 
 				intptr_t address = (intptr_t)std::stoi(std::get<1>(_ptr_data));
-				std::tuple<Type, std::string, std::string>* _next = (std::tuple<Type, std::string, std::string>*)address;
-				current_type = std::get<0>(*_next);
+				InterpreterSymbol* _next = (InterpreterSymbol*)address;
+				current_type = _next->data_type;
+				current_subtype = _next->subtype;
 
-				while (current_type == PTRPTR) {
-					address = (intptr_t)std::stoi(std::get<2>(*_next));
-					_next = (std::tuple<Type, std::string, std::string>*)address;
-					current_type = std::get<0>(*_next);
+				while (current_type == PTR && current_subtype == PTR) {
+					address = (intptr_t)std::stoi(_next->value);
+					_next = (InterpreterSymbol*)address;
+					current_type = _next->data_type;
+					current_subtype = _next->subtype;
 				}
 
-				address = (intptr_t)std::stoi(std::get<2>(*_next));
-				std::tuple<Type, std::string, std::string> to_return = *(std::tuple<Type, std::string, std::string>*)address;
-				return std::make_tuple(std::get<0>(to_return), std::get<2>(to_return));
+				address = (intptr_t)std::stoi(_next->value);
+				InterpreterSymbol to_return = *(InterpreterSymbol*)address;
+				return std::make_tuple(to_return.data_type, to_return.value);
 			}
 			else {
 				throw InterpreterException("Unexpected exception in pointer dereferencing", 000);
@@ -483,20 +481,19 @@ std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, 
 
 		// now that we have the LValue "ptr"
 		// get the value in that variable
-		for (std::list<std::tuple<Type, std::string, std::string>>::iterator var = vars_table->begin(); var != vars_table->end(); ++var) {
+		for (std::list<InterpreterSymbol>::iterator var = vars_table->begin(); var != vars_table->end(); ++var) {
 			// if the names match
-			if (ptr.getValue() == std::get<1>(*var)) {
+			if (ptr.getValue() == var->name) {
 				// get the address of the variable by getting the address of our the variable pointed to by the iterator
-				std::string addr_string = (std::get<2>(*var));
+				std::string addr_string = var->value;
 				intptr_t address = (intptr_t)std::stoi(addr_string);
 
-				// now that we have the correct address, create a pointer to the tuple containing the proper information
-				std::tuple<Type, std::string, std::string>* _dereferenced = (std::tuple<Type, std::string, std::string>*)address;
+				// now that we have the correct address, create a pointer to the symbol containing the proper information
+				InterpreterSymbol* _dereferenced = (InterpreterSymbol*)address;
 
-				// make sure the ptr type of var is equal to the pointer type that should point to _dereferenced
-				// OR, one of them must be of type "ptrptr"
-				if (match_ptr_types(std::get<0>(*var), std::get<0>(*_dereferenced))) {
-					return std::make_tuple(std::get<0>(*_dereferenced), std::get<2>(*_dereferenced));
+				// make sure type of var is equal to the subtype of _dereferenced
+				if (are_compatible_types(var->data_type, _dereferenced->subtype)) {
+					return std::make_tuple(_dereferenced->subtype, _dereferenced->value);
 				}
 				else {
 					throw InterpreterException("Pointer types do not match (error encountered in dereference)", 000);
@@ -549,10 +546,10 @@ std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, 
 		}
 		else if (operand->get_expression_type() == LVALUE) {
 			LValue* lvalue_expression = dynamic_cast<LValue*>(operand);
-			std::tuple<Type, std::string, std::string> var_to_evaluate = this->getVar(lvalue_expression->getValue(), vars_table);	// tuple = variable's type, variable's name, variable's value
+			InterpreterSymbol var_to_evaluate = this->getVar(lvalue_expression->getValue(), vars_table);	// tuple = variable's type, variable's name, variable's value
 			// assign the type and value to our previously declared members
-			operand_type = std::get<0>(var_to_evaluate);
-			operand_value = std::get<2>(var_to_evaluate);
+			operand_type = var_to_evaluate.data_type;
+			operand_value = var_to_evaluate.value;
 		}
 		else {
 			// if it isn't a valid type, throw an exception
@@ -888,6 +885,7 @@ void Interpreter::interpretAST(StatementBlock AST) {
 	catch (InterpreterException &i_e) {
 		std::cerr << "Interpreter Exception: \n\t" << i_e.what() << "\n\tCode: " << i_e.get_code() << std::endl;
 	}
+	std::cout << "Done" << std::endl;
 	return;
 }
 
@@ -932,4 +930,16 @@ const char* TypeMatchError::what() const {
 TypeMatchError::TypeMatchError(const Type& a, const Type& b) : a_(a), b_(b) {
 	TypeMatchError::message_ = "Cannot match '" + get_string_from_type(a_) + "' and '" + get_string_from_type(b_) + "'!";
 	TypeMatchError::code_ = 450;
+}
+
+InterpreterSymbol::InterpreterSymbol(Type data_type, std::string name, std::string value, Type subtype) : data_type(data_type), name(name), value(value), subtype(subtype)
+{
+}
+
+InterpreterSymbol::InterpreterSymbol()
+{
+	this->data_type = NONE;
+	this->subtype = NONE;
+	this->name = "";
+	this->value = "";
 }

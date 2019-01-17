@@ -27,14 +27,16 @@ const size_t memory_size = 0x10000;	// 16k available to the VM
 const size_t _MEMORY_MIN = 0x0000;
 
 // the data section gets addresses $0000 through $1FFF -- 32 pages
-const size_t _GLOBAL_DATA = 0x0000;	// our global data section will always start at $0000
+const size_t _HEAP = 0x0000;	// our global data section will always start at $0000
 const size_t _BUFFER_START = 0x1400;	// a buffer for input data -- addresses from 1400 to 17ff will be untouched (meaning we can have 1,024 bytes of buffer by default)
 
 // TODO: delete _LOCAL_DATA ?
 const size_t _LOCAL_DATA = 0x1800;	// our local data section will start at $1800; this is the same as the stack bottom
 
-// the RS directive will allocate variables starting at 0x0100; the zero page remains untouched by @rs
+// the RS directive, which creates global variables, will allocate variables starting at 0x0100 and have 3 pages; the zero page remains untouched by @rs and will be used for pointer tables
 const size_t _RS_START = 0x0100;
+// any variables allocated on the heap will be allocated starting at 0x0400 up to the stack; this is where all dynamic memory will be stored
+const size_t _DYNAMIC_START = 0x0400;
 
 // the stack -- this is used for all of our scope data, and so it gets quite a bit of memory
 const size_t _STACK = 0x23FF;	// our stack grows downwards

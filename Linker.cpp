@@ -31,10 +31,8 @@ void Linker::get_metadata() {
 		this->_rs_start = _RS_START;
 	}
 	else {
-		throw std::exception("**** Currently, only SINVM version 1 is supported (it is the highest version!).");
+		throw std::exception("**** Specified SIN VM version is not currently supported by this toolchain");
 	}
-
-	// TODO: devise better algorithm for object file validation
 }
 
 
@@ -286,12 +284,19 @@ void Linker::create_sml_file(std::string file_name) {
 
 
 Linker::Linker() {
+	this->_start_offset = 0;	// default to 0
+	this->_wordsize = 16;	// default to 16 bit words
+	this->_rs_start = _RS_START;	// default to "_RS_START" as defined in "VMMemoryMap.h" 
 }
 
 
 Linker::Linker(std::vector<SinObjectFile> object_files) : object_files(object_files)
 {
-	this->get_metadata();	// get our metadata so we can form the sml file
+	this->_start_offset = 0;	// default to 0
+	this->_wordsize = 16;	// default to 16 bit words
+	this->_rs_start = _RS_START;	// default to "_RS_START" as defined in "VMMemoryMap.h" 
+
+	this->get_metadata();	// get our metadata so we can form the sml file; this may overwrite the initial values established above
 }
 
 

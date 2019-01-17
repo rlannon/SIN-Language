@@ -49,6 +49,7 @@ class Compiler
 	unsigned int current_scope;	// tells us what scope level we are currently in
 	std::string current_scope_name;
 	unsigned int next_available_addr;	// the next available address in the local page
+	size_t strc_number;	// the next available number for a string constant
 
 	int _DATA_PTR;	// holds the next memory address to use for a variable in the _DATA section
 
@@ -59,7 +60,7 @@ class Compiler
 	std::vector<std::string>* object_file_names;
 	void include_file(Include include_statement);	// add a file to the solution
 
-	std::stringstream fetch_value(std::shared_ptr<Expression> to_fetch, size_t* stack_offset = nullptr, size_t max_offset = 0);	// produces asm code to put the result of the specified expression in A
+	std::stringstream fetch_value(std::shared_ptr<Expression> to_fetch, unsigned int line_number, size_t* stack_offset = nullptr, size_t max_offset = 0);	// produces asm code to put the result of the specified expression in A
 
 	std::stringstream allocate(Allocation allocation_statement, size_t* stack_offset = nullptr, size_t* max_offset = nullptr);	// add a variable to the symbol table (using an allocation statement)
 	std::stringstream define(Definition definition_statement);	// add a function definition (using a definition statement)

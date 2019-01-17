@@ -3,6 +3,15 @@ COMMIT_HISTORY.TXT
 A list of changes made since last git commit. This file will go into more detail about the changes than the commit text will.
 This file now contains a history of changes.
 
+--------------------------------------------------------------------------------------------
+
+1/16 commit to Compiler:
+
+- Added support in assembler for indexed indirect addressing modes alongside indirect indexed; syntax is the same as in 6502 assembly
+- Refactored the data type system to support primary- and sub- types alike; this included major changes to the Interpreter as well as some changes in the Expression and Statement classes
+- Changed Interpreter's symbol table system to use a 'typedef struct' for symbols instead of 'std::tuple'
+- Made some changes to begin the project of dynamic memory management in the compiler/assembler/etc.; non-const-qualified strings will require dynamic memory on the heap, whereas the current system supports only static/const memory
+- Removed some old and unnecessary code
 
 --------------------------------------------------------------------------------------------
 

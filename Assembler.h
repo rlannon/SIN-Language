@@ -34,15 +34,7 @@ Quick guide to the assembly (see Doc/sinasm for more information):
 	
 	When decoded, the instructions will take up at least 2 bytes -- one for the instruction opcode, one for the addressing mode, and optional bytes for data. The _WORDSIZE variable will determine how many bytes are allocated for values, and defaults to 16 bits if it is not specified. _WORDSIZE can be 16, 32, or 64 bits.
 
-	The following addressing modes are available
-		Absolute	-	e.g., LOADA $1234		-	Gets the value at the address specified
-		Indexed		-	e.g., LOADA $1234, X	-	Gets the value at the address specified, indexed with x (so here, if x were $02, it would get the value at the address of $1236)
-		Immediate	-	e.g., LOADA #$1234		-	The literal value written; no memory access; 16-bit value
-		8-bit		-	e.g., LOADA $12			-	Like absolute, but only addresses a single byte
-		Indirect	-	e.g., LOADA ($1234, Y)	-	
-		Register	-	e.g., LSR A				-	Can only be used with the A register and the bitshift instructions; operates on the given register
-
-		// TODO: add support for 8-bit addressing (so only write to the single byte specified; not 2 bytes)
+	For the available addressing modes, see "AddressingModeConstants.h"
 
 */
 
@@ -122,7 +114,7 @@ class Assembler
 	// get the opcode/mnemonic
 	static int get_opcode(std::string mnemonic);
 	static std::string get_mnemonic(int opcode);
-	static uint8_t get_address_mode(std::string value, std::string offset="");
+	static uint8_t get_addressing_mode(std::string value, std::string offset="");
 
 	// TODO: write more assembler-related functions as needed
 

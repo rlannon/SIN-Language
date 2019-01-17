@@ -305,6 +305,8 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 		else if (current_lex.value == "alloc") {
 			// Create objects for our variable's type and name
 			Type new_var_type;
+			Type new_var_subtype = NONE;	// if we have a type that requires a subtype, this will be modified
+
 			std::string new_var_name = "";
 
 			// check our next token; it must be a keyword
@@ -368,16 +370,18 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 						}
 					}
 					// if we have a pointer,
+
 					else if (var_type.value == "ptr") {
+						// set the type
+						new_var_type = PTR;
+
 						// 'ptr' must be followed by '<'
 						if (this->peek().value == "<") {
 							this->next();
 							// a keyword must be in the angle brackets following 'ptr'
 							if (this->peek().type == "kwd") {
-								var_type = this->next();
-								// append "ptr" to the type, so we have, for example, "intptr" or "stringptr"
-								var_type.value += "ptr";
-								new_var_type = get_type_from_string(var_type.value);	// note: Type get_type_from_string() is found in "Expression" (.h and .cpp)
+								lexeme subtype = this->next();
+								new_var_subtype = get_type_from_string(subtype.value);
 
 								// the next character must be ">"
 								if (this->peek().value == ">") {
@@ -420,7 +424,7 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 							initial_value = this->parseExpression();
 
 							// return the allocation
-							stmt = std::make_shared<Allocation>(new_var_type, new_var_name, initialized, initial_value, quality);
+							stmt = std::make_shared<Allocation>(new_var_type, new_var_name, new_var_subtype, initialized, initial_value, quality);
 							stmt->set_line_number(current_lex.line_number);
 						}
 						else {
@@ -430,7 +434,7 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 							}
 							else {
 								// Otherwise, if it is not const, return our new variable
-								stmt = std::make_shared<Allocation>(new_var_type, new_var_name);
+								stmt = std::make_shared<Allocation>(new_var_type, new_var_name, new_var_subtype);
 								stmt->set_line_number(current_lex.line_number);
 							}
 						}
