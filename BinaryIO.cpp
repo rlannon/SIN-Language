@@ -36,7 +36,7 @@ uint16_t BinaryIO::readU16(std::istream& file, std::string byteorder) {
 	}
 	// if it is not little and it is not "big" , throw an exception
 	else {
-		throw std::exception(("Invalid byte order specifier '" + byteorder + "'; must be 'big' or 'little' (or none specified).").c_str());
+		throw std::runtime_error(("Invalid byte order specifier '" + byteorder + "'; must be 'big' or 'little' (or none specified).").c_str());
 	}
 
 	return val;
@@ -55,7 +55,7 @@ void BinaryIO::writeU16(std::ostream& file, uint16_t val, std::string byteorder)
 		bytes[1] = (val) & 0xFF;	// low byte
 	}
 	else {
-		throw std::exception(("Invalid byte order specifier '" + byteorder + "'; must be 'big' or 'little' (or none specified).").c_str());
+		throw std::runtime_error(("Invalid byte order specifier '" + byteorder + "'; must be 'big' or 'little' (or none specified).").c_str());
 	}
 
 	file.write((char*)bytes, 2);
@@ -75,7 +75,7 @@ uint32_t BinaryIO::readU32(std::istream& file, std::string byteorder) {
 		val = (bytes[3] << 24) | (bytes[2] << 16) | (bytes[1] << 8) | bytes[0];
 	}
 	else {
-		throw std::exception(("Invalid byte order specifier '" + byteorder + "'; must be 'big' or 'little' (or none specified).").c_str());
+		throw std::runtime_error(("Invalid byte order specifier '" + byteorder + "'; must be 'big' or 'little' (or none specified).").c_str());
 	}
 
 	return val;
@@ -97,7 +97,7 @@ void BinaryIO::writeU32(std::ostream& file, uint32_t val, std::string byteorder)
 		bytes[3] = (val) & 0xFF;
 	}
 	else {
-		throw std::exception(("Invalid byte order specifier '" + byteorder + "'; must be 'big' or 'little' (or none specified).").c_str());
+		throw std::runtime_error(("Invalid byte order specifier '" + byteorder + "'; must be 'big' or 'little' (or none specified).").c_str());
 	}
 
 	file.write((char*)bytes, 4);
@@ -128,7 +128,7 @@ std::string BinaryIO::readString(std::istream& file, std::string byteorder) {
 void BinaryIO::writeString(std::ostream& file, std::string str, std::string byteorder) {
 	// check to make sure the string length does not exceed our maximum allowed size
 	if (str.length() > 0xFFFF) {
-		throw std::exception("String length too large; length must be able to be expressed as a 16-bit integer (i.e. it must be between 0 and 65,535 bytes long)");
+		throw std::runtime_error("String length too large; length must be able to be expressed as a 16-bit integer (i.e. it must be between 0 and 65,535 bytes long)");
 	}
 	else {
 		uint16_t len = (uint16_t)str.length(); // note this means our max string length (for /one single/ string) is 65K; this should be okay

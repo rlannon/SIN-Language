@@ -86,7 +86,7 @@ protected:
 public:
 	explicit InterpreterException();
 	explicit InterpreterException(const std::string& err_message, const int& err_code);
-	virtual const char* what() const;
+	virtual const char* what() const noexcept;
 	int get_code();
 };
 
@@ -94,6 +94,6 @@ class TypeMatchError : public InterpreterException {
 	Type a_;
 	Type b_;
 public:
-	virtual const char* what() const;
+	virtual const char* what() const noexcept;
 	explicit TypeMatchError(const Type& a, const Type& b);
 };

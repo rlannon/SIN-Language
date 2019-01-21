@@ -5,7 +5,7 @@
 // Define our symbols and their precedences as a vector of tuples
 const std::vector<std::tuple<std::string, int>> Parser::precedence{ std::make_tuple("&", 2), std::make_tuple("|", 3), \
 	std::make_tuple("<", 4), std::make_tuple(">", 7), std::make_tuple("<", 7), std::make_tuple(">=", 7), std::make_tuple("<=", 7), std::make_tuple("=", 7),\
-	std::make_tuple("!=", 7), std::make_tuple("+", 10), std::make_tuple("-", 10), std::make_tuple("*", 20), std::make_tuple("/", 20), std::make_tuple("%", 20) };
+	std::make_tuple("!=", 7), std::make_tuple("+", 10), std::make_tuple("-", 10), std::make_tuple("$", 15), std::make_tuple("*", 20), std::make_tuple("/", 20), std::make_tuple("%", 20) };
 
 // Iterate through the vector and find the tuple that matches our symbol; if found, return its precedence; if not, return -1
 const int Parser::getPrecedence(std::string symbol) {
@@ -176,7 +176,7 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 				}
 			}
 			else {
-				throw std::exception("Include statements must come at the top of the file.");
+				throw ParserException("Include statements must come at the top of the file.", 0, current_lex.line_number);
 			}
 		}
 		else {
@@ -320,12 +320,20 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 					bool initialized = false;
 					std::shared_ptr<Expression> initial_value = std::make_shared<Expression>();	// empty expression by default
 
-					// if we have a const
+					// check our quality, if any
 					if (var_type.value == "const") {
 						// change the variable quality
 						quality = "const";
 
 						// get the actual variable type
+						var_type = this->next();
+					}
+					else if (var_type.value == "dynamic") {
+						quality = "dynamic";
+						var_type = this->next();
+					}
+					else if (var_type.value == "static") {
+						quality = "static";
 						var_type = this->next();
 					}
 
@@ -653,15 +661,14 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 		}
 	}
 
-	// if it is a punctuation character, specifically a curly brace, advance the character
-	else if (current_lex.type == "punc" && current_lex.value == "}") {
+	// if it is a curly brace, advance the character
+	else if (current_lex.value == "}") {
 		this->next();
 	}
 
 	// otherwise, if the lexeme is not a valid beginning to a statement, abort
 	else {
 		throw ParserException("Lexeme '" + current_lex.value + "' is not a valid beginning to a statement", 000, current_lex.line_number);
-		std::exception my_ex;
 	}
 
 	// return the statement - TODO: evaluate -- do we need this?
@@ -723,9 +730,6 @@ std::shared_ptr<Expression> Parser::parseExpression(int prec) {
 		}
 		// check to see if we have the address-of operator
 		else if (current_lex.value == "$") {
-
-			// TODO: parse address-of operator
-
 			// if we have a $ character, it HAS TO be the address-of operator
 			// current lexeme is the $, so get the variable for which we need the address
 			lexeme next_lexeme = this->next();
@@ -746,7 +750,7 @@ std::shared_ptr<Expression> Parser::parseExpression(int prec) {
 		}
 		// check to see if we have a pointer dereference operator
 		else if (current_lex.value == "*") {
-			return this->createDereferenceObject();
+			left = this->createDereferenceObject();
 		}
 		// check to see if we have the unary plus operator
 		else if ((current_lex.value == "+") || (current_lex.value == "-")) {
@@ -795,8 +799,7 @@ std::shared_ptr<Expression> Parser::createDereferenceObject() {
 	// if we have an asterisk, it could be a pointer dereference OR a part of a binary expression
 	// in order to check, we have to make sure that the previous character is neither a literal nor an identifier
 	// the current lexeme is the asterisk, so get the previous lexeme
-	lexeme previous_lex = this->previous();
-	// note that previous() does not update the current position
+	lexeme previous_lex = this->previous();	// note that previous() does not update the current position
 
 	// if it is an int, float, string, or bool literal; or an identifier, then continue
 	if (previous_lex.type == "int" || previous_lex.type == "float" || previous_lex.type == "string" || previous_lex.type == "bool" || previous_lex.type == "ident") {
@@ -864,12 +867,13 @@ std::shared_ptr<Expression> Parser::maybeBinary(std::shared_ptr<Expression> left
 		// If the next operator is of a higher precedence than ours, we may need to parse a second binary expression first
 		if (his_prec > my_prec) {
 			this->next();	// go to the next character in our stream (the op_char)
-			this->next();
+			this->next();	// go to the character after the op char
+
 			// Parse out the next expression
 			std::shared_ptr<Expression> right = this->maybeBinary(this->parseExpression(his_prec), his_prec);	// make sure his_prec gets passed into parse_expression so that it is actually passed into maybe_binary
 
 			// Create the binary expression
-			std::shared_ptr<Binary> binary = std::make_shared<Binary>(left, right, translate_operator(next.value));
+			std::shared_ptr<Binary> binary = std::make_shared<Binary>(left, right, translate_operator(next.value));	// "next" still contains the op_char; we haven't updated it yet
 
 			// call maybe_binary again at the old prec level in case this expression is followed by one of a higher precedence
 			return this->maybeBinary(binary, my_prec);
@@ -965,7 +969,7 @@ Parser::~Parser()
 
 // Define our exceptions
 
-const char* ParserException::what() const {
+const char* ParserException::what() const noexcept {
 	return ParserException::message_.c_str();
 }
 

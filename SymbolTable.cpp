@@ -2,7 +2,7 @@
 
 // Our Symbol object
 
-Symbol::Symbol(std::string name, Type type, std::string scope_name, int scope_level, std::string quality, bool defined, std::vector<std::shared_ptr<Statement>> formal_parameters) : name(name), type(type), scope_name(scope_name), scope_level(scope_level), quality(quality), defined(defined), formal_parameters(formal_parameters) {
+Symbol::Symbol(std::string name, Type type, std::string scope_name, int scope_level, Type sub_type, std::string quality, bool defined, std::vector<std::shared_ptr<Statement>> formal_parameters) : name(name), type(type), scope_name(scope_name), scope_level(scope_level), sub_type(sub_type), quality(quality), defined(defined), formal_parameters(formal_parameters) {
 	this->stack_offset = 0;
 }
 
@@ -23,13 +23,13 @@ Symbol::~Symbol() {
 
 // Our SymbolTable object
 
-void SymbolTable::insert(std::string name, Type type, std::string scope_name, int scope_level, std::string quality, bool initialized, std::vector<std::shared_ptr<Statement>> formal_parameters)
+void SymbolTable::insert(std::string name, Type type, std::string scope_name, int scope_level, Type sub_type, std::string quality, bool initialized, std::vector<std::shared_ptr<Statement>> formal_parameters)
 {	
 	if (this-> is_in_symbol_table(name, scope_name)) {
 		throw std::runtime_error(("**** Symbol Table Error: '" + name + "'already in symbol table.").c_str());
 	}
 	else {
-		this->symbols.push_back(Symbol(name, type, scope_name, scope_level, quality, initialized, formal_parameters));	// an allocation is NOT a definition
+		this->symbols.push_back(Symbol(name, type, scope_name, scope_level, sub_type, quality, initialized, formal_parameters));	// an allocation is NOT a definition
 	}
 }
 

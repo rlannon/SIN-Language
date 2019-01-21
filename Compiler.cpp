@@ -15,6 +15,64 @@ std::shared_ptr<Statement> Compiler::get_current_statement(StatementBlock AST)
 }
 
 
+Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate)
+{
+	/*
+	
+	This function takes an expression and returns its expected data type were it to be evaluated. For example, passing it an int literal would return INT, while a variable (string) 'myStr' will be looked up in the symbol table and evaluated before returning STRING.
+
+	Note that this function does not evaluate binary trees or unary expressions; rather, it looks at the first literal or lvalue it can find and returns that value. It evaluates the type that the tree is /expected/ to return if it was constructed correctly; type match errors will be discovered once the compiler actually attempts to produce the tree in assembly.
+
+	The function works by checking the expression type of to_evaluate and returning the value, and operates recursively if it sees another shared_ptr as an operand.
+
+	*/
+
+	// start with the two that we can do without recursion
+	if (to_evaluate->get_expression_type() == LITERAL) {
+		Literal* literal_exp = dynamic_cast<Literal*>(to_evaluate.get());
+
+		return literal_exp->get_type();
+	}
+	else if (to_evaluate->get_expression_type() == LVALUE) {
+		LValue* lvalue_exp = dynamic_cast<LValue*>(to_evaluate.get());
+
+		// make sure it's in the symbol table
+		if (this->symbol_table.is_in_symbol_table(lvalue_exp->getValue(), this->current_scope_name)) {
+			// get the variable's symbol and return the type
+			Symbol* lvalue_symbol = this->symbol_table.lookup(lvalue_exp->getValue(), this->current_scope_name);
+			return lvalue_symbol->type;
+		}
+		else {
+			throw std::runtime_error("Cannot find '" + lvalue_exp->getValue() + "' in symbol table (perhaps it is out of scope?)");
+		}
+	}
+
+	// the next ones will require recursion, as they have a shared_ptr as a class member
+	else if (to_evaluate->get_expression_type() == ADDRESS_OF) {
+		AddressOf* address_of_exp = dynamic_cast<AddressOf*>(to_evaluate.get());
+
+		// The routine for an address_of expression is the same as for an lvalue one...so we can just use recursion
+		return this->get_expression_data_type(std::make_shared<LValue>(address_of_exp->get_target()));
+	}
+	else if (to_evaluate->get_expression_type() == UNARY) {
+		Unary* unary_exp = dynamic_cast<Unary*>(to_evaluate.get());
+
+		return this->get_expression_data_type(unary_exp->get_operand());
+	}
+	else if (to_evaluate->get_expression_type() == BINARY) {
+		Binary* binary_exp = dynamic_cast<Binary*>(to_evaluate.get());
+
+		return this->get_expression_data_type(binary_exp->get_left());
+	}
+	else if (to_evaluate->get_expression_type() == DEREFERENCED) {
+		Dereferenced* dereferenced_exp = dynamic_cast<Dereferenced*>(to_evaluate.get());
+
+		// we technically don't NEED recursion here, but we can use it
+		return this->get_expression_data_type(dereferenced_exp->get_ptr_shared());
+	}
+	
+	return Type();
+}
 
 void Compiler::produce_binary_tree(Binary bin_exp) {
 	Binary current_tree = bin_exp;
@@ -23,7 +81,6 @@ void Compiler::produce_binary_tree(Binary bin_exp) {
 
 	// TODO: devise binary tree algorithm
 }
-
 
 
 void Compiler::include_file(Include include_statement)
@@ -107,7 +164,7 @@ void Compiler::include_file(Include include_statement)
 
 				// iterate through the symbols in that file and add them to our symbol table
 				for (std::vector<Symbol>::iterator it = include_compiler->symbol_table.symbols.begin(); it != include_compiler->symbol_table.symbols.end(); it++) {
-					this->symbol_table.insert(it->name, it->type, it->scope_name, it->scope_level, it->quality, it->defined, it->formal_parameters);
+					this->symbol_table.insert(it->name, it->type, it->scope_name, it->scope_level, it->sub_type, it->quality, it->defined, it->formal_parameters);
 				}
 
 				// now, open the compiled include file as an istream object
@@ -164,7 +221,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		// different data types will require slightly different methods for loading
 		if (literal_expression->get_type() == INT) {
 			// int types just need to write a loada instruction
-			fetch_ss << "\t" << "loada #$" << literal_expression->get_value() << std::endl;
+			fetch_ss << "\t" << "loada #$" << std::hex << std::stoi(literal_expression->get_value()) << std::endl;
 		}
 		else if (literal_expression->get_type() == BOOL) {
 			// bool types are also easy to write; any nonzero integer is true
@@ -217,16 +274,88 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 			if ((variable_symbol->scope_name == "global") && (variable_symbol->scope_level == 0)) {
 				// TODO: fetch variable from global scope
 				// all we need to do is use the variable name for globals; however, we need to know the type
-				if ((variable_symbol->type == INT) || (variable_symbol->type == BOOL) || (variable_symbol->type == FLOAT)) {
-					fetch_ss << "\t" << "loada " << variable_symbol->name << std::endl;
-				}
-				else if (variable_symbol->type == STRING) {
-					// TODO: what do we load into A when we are loading a global string?
+				
+				if (variable_symbol->quality == "dynamic") {
 					// TODO: add support for data types with variable lengths (like strings)
+				}
+				else {
+					fetch_ss << "\t" << "loada " << variable_symbol->name << std::endl;
 				}
 			}
 			else {
 				// TODO: fetch variable from local scope
+				// first, move the SP to the address of the variable; we don't need if statements because the while loops won't run if the condition is not met
+
+				// if our current offset is higher than the offset of the variable, decrement the stack offset (to go backward in the downward-growing stack)
+				while (*stack_offset > variable_symbol->stack_offset + 1) {
+					fetch_ss << "\t" << "incsp" << std::endl;
+					(*stack_offset) -= 1;
+				}
+				// if the curent offset is lower than the variable's offset, decrement the current stack offset (to go further into the downward-growing stack)
+				while (*stack_offset < variable_symbol->stack_offset + 1) {
+					fetch_ss << "\t" << "decsp" << std::endl;
+					(*stack_offset) += 1;
+				}
+
+				// now, the offsets are the same; get the variable's value
+				if (variable_symbol->quality == "dynamic") {
+					// dynamic variables must use pointer dereferencing
+					// TODO: implement dynamic memory
+				}
+				else {
+					// pull the value into the A register
+					fetch_ss << "\t" << "pla" << std::endl;
+				}
+			}
+		}
+		else {
+			throw std::runtime_error(("Variable '" + variable_symbol->name + "' referenced before assignment (line " + std::to_string(line_number) + ")").c_str());
+		}
+	}
+	else if (to_fetch->get_expression_type() == DEREFERENCED) {
+		// TODO: get the value of a dereferenced variable
+		Dereferenced* dereferenced_exp = dynamic_cast<Dereferenced*>(to_fetch.get());
+
+		// check to make sure the variable is in the symbol table
+		if (this->symbol_table.is_in_symbol_table(dereferenced_exp->get_ptr().getValue(), this->current_scope_name)) {
+			// use recursion to get the lvalue
+			return this->fetch_value(dereferenced_exp->get_ptr_shared(), line_number, stack_offset, max_offset);
+		}
+		else {
+			throw std::runtime_error("Could not find '" + dereferenced_exp->get_ptr().getValue() + "' in symbol table; perhaps it is out of scope? (line " + std::to_string(line_number) + ")");
+		}
+	}
+	else if (to_fetch->get_expression_type() == ADDRESS_OF) {
+		// TODO: get the address of a variable
+		// dynamic cast to AddressOf and get the variable's symbol from the symbol table
+		AddressOf* address_of_exp = dynamic_cast<AddressOf*>(to_fetch.get());	// the AddressOf expression
+		LValue address_to_get = address_of_exp->get_target();	// the actual LValue of the address we want
+		Symbol* variable_symbol = this->symbol_table.lookup(address_to_get.getValue(), this->current_scope_name);
+
+		// make sure the variable was defined
+		if (variable_symbol->defined) {
+			if (variable_symbol->quality == "dynamic") {
+				// TODO: implement address_of for dynamic memory
+			}
+			else {
+				if (variable_symbol->scope_name == "global") {
+					fetch_ss << "\t" << "loada #" << variable_symbol->name << std::endl;	// using  "loada var" would mean "load the A register with the value at address 'var' " while "loada #var" means "load the A register with the address of 'var' "
+				}
+				else {
+					while (*stack_offset > variable_symbol->stack_offset + 1) {
+						fetch_ss << "\t" << "incsp" << std::endl;	// stack grows downwards, remember, so incrementing the SP decrements the stack offset -- counter-intuitive at first, but logical when you think about how the stack works
+						(*stack_offset) -= 1;
+					}
+					while (*stack_offset < variable_symbol->stack_offset + 1) {
+						fetch_ss << "\t" << "decsp" << std::endl;
+						(*stack_offset) += 1;
+					}
+
+					// now that the stack pointer is in the proper place to pull the variable from, increment it by one place and transfer the pointer value to A; that is the address where the variable we want lives
+					(*stack_offset) -= 1;
+					fetch_ss << "\t" << "incsp" << std::endl;
+					fetch_ss << "\t" << "tspa" << std::endl;
+				}
 			}
 		}
 		else {
@@ -236,7 +365,6 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 
 	return fetch_ss;
 }
-
 
 
 // allocate a variable
@@ -251,6 +379,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 
 	std::string symbol_name = allocation_statement.get_var_name();
 	Type symbol_type = allocation_statement.get_var_type();
+	Type symbol_subtype = allocation_statement.get_var_subtype();
 	std::string symbol_quality = allocation_statement.get_quality();
 	bool initialized = allocation_statement.was_initialized();
 	std::shared_ptr<Expression> initial_value = allocation_statement.get_initial_value();
@@ -258,7 +387,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 	// the 'insert' function will throw an error if the given symbol is already in the table in the same scope
 	// this allows two variables in separate scopes to have different names, but also allows local variables to shadow global ones
 	// local variable names are ALWAYS used over global ones
-	this->symbol_table.insert(symbol_name, symbol_type, current_scope_name, current_scope, symbol_quality, initialized);
+	this->symbol_table.insert(symbol_name, symbol_type, current_scope_name, current_scope, symbol_subtype, symbol_quality, initialized);
 
 	// if we have a const, we can use the "@db" directive
 	if (symbol_quality == "const") {
@@ -305,18 +434,21 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 			throw std::runtime_error(("**** Const-qualified variables must be initialized in allocation (error occurred on line " + std::to_string(allocation_statement.get_line_number()) + ")").c_str());
 		}
 	}
-	// if the current scope is 0, we can use a "@rs" directive
+
+	// handle all non-const global variables
 	else if (current_scope_name == "global") {
 		// if the variable type is anything with a variable length, we need a different mechanism for handling them
 		if (symbol_type == STRING) {
-			// TODO: add support for global strings, arrays, etc.
+			// TODO: add support for global strings, arrays, etc.. Strings must always be allocated on the heap unless they are constants. The allocation will return a ptr<string> which will lead to a memory location in the heap that has all the string information
+			// TODO: set the quality to "dynamic"
 		}
 		else {
 			// reserve the variable itself
 			allocation_ss << "@rs " << symbol_name << std::endl;	// syntax is "@rs macro_name"
 		}
 	}
-	// otherwise, we must use the next available memory address in the current scope
+
+	// handle all non-const local variables
 	else {
 		// our local variables will use the stack; they will directly modify the list of variable names and the stack offset
 
@@ -327,13 +459,12 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 			// update the stack offset
 			if (symbol_type == STRING) {
 				// strings will increment the stack offset by two words; allocate the space for it on the stack by decrementing the stack pointer and also increment the stack_offset variable by two words
-				allocation_ss << "\t" << "decsp" << std::endl;
-				allocation_ss << "\t" << "decsp" << std::endl;
-				(*stack_offset) += 2;
-				(*max_offset) += 2;
+				
+				// TODO: add support for local strings (allocates the same way -- i.e. it uses the heap -- , it just adds to the local variable table)
+				// TODO: set the quality to "dynamic"
 			}
 			else {
-				// all other types will increment the stack offset by one word; allocate space in the stack and increment the offset counter by one word
+				// all other types will increment the stack offset by one word; allocate space in the stack and decrement the offset counter by one word (increments the stack offset)
 				allocation_ss << "\t" << "decsp" << std::endl;
 				(*stack_offset) += 1;
 				(*max_offset) += 1;
@@ -366,7 +497,7 @@ std::stringstream Compiler::define(Definition definition_statement) {
 
 	// function definitions have to be in the global scope
 	if (current_scope_name == "global" && current_scope == 0) {
-		this->symbol_table.insert(func_name, return_type, "global", 0, "none", true, definition_statement.get_args());
+		this->symbol_table.insert(func_name, return_type, "global", 0, NONE, "none", true, definition_statement.get_args());
 		// next, we will make sure that all of the function code gets written to a stringstream; once we have gone all the way through the AST, we will write our functions as subroutines to the end of the file
 
 		// create a label for the function name
@@ -383,7 +514,7 @@ std::stringstream Compiler::define(Definition definition_statement) {
 				Allocation* arg_alloc = dynamic_cast<Allocation*>(arg_iter->get());
 				
 				// add the variable to the symbol table, giving it the function's scope name at scope level 1
-				this->symbol_table.insert(arg_alloc->get_var_name(), arg_alloc->get_var_type(), func_name, 1, arg_alloc->get_quality(), arg_alloc->was_initialized());	// this variable is only accessible inside this function's scope
+				this->symbol_table.insert(arg_alloc->get_var_name(), arg_alloc->get_var_type(), func_name, 1, arg_alloc->get_var_subtype(), arg_alloc->get_quality(), arg_alloc->was_initialized());	// this variable is only accessible inside this function's scope
 
 				// TODO: add default parameters
 
@@ -393,7 +524,7 @@ std::stringstream Compiler::define(Definition definition_statement) {
 				// however, we do need to increment the position in the stack according to what was pushed so we know how to navigate through our local variables, which will be on the stack for the function's lifetime; note we are not actually incrementing the pointer, we are just incrementing the variable that the compiler itself uses to track where we are in the stack
 				if (arg_alloc->get_var_type() == STRING) {
 					// strings take two words; one for the length, one for the start address
-					current_stack_offset += 2;
+					// TODO: refactor strings in function definitions
 				}
 				else {
 					// all other types are one word
@@ -445,194 +576,38 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 		if (fetched->quality == "const") {
 			throw std::runtime_error(("**** Cannot make an assignment to a const-qualified variable! (error occurred on line " + std::to_string(assignment_statement.get_line_number()) + ")").c_str());
 		}
+		// otherwise, make the assignment
 		else {
-			// make the assignment based on the type
-			exp_type RValueType = assignment_statement.get_rvalue_expression_type();
+			// get the anticipated type of the rvalue
+			Type rvalue_data_type = this->get_expression_data_type(assignment_statement.get_rvalue());
 
-			// we can have a binary expression
-			if (RValueType == BINARY) {
-				// cast to binary object
-				Binary* bin_exp = dynamic_cast<Binary*>(assignment_statement.get_rvalue().get());
+			// if the types match, continue with the assignment
+			if ((fetched->type == rvalue_data_type) || (fetched->sub_type == rvalue_data_type)) {
 
-				// TODO: make sure types match before writing out a binary tree...
-
-				// write out the binary tree information
-				this->produce_binary_tree(*bin_exp);
-
-				// the result of the binary expression will now be in the A register
-				// now, if the variable is global, we will simply use the macro for it; if not, we have to manipulate the stack
-				if (fetched->scope_name == "global") {
-					assignment_ss << "storea " << var_name << std::endl;
+				// dynamic memory must be handled a little differently than automatic memory because under the hood, it is implemented through pointers
+				if (fetched->quality == "dynamic") {
+					// TODO: implement dynamic memory
 				}
+				// automatic memory is easier to handle than dynamic and static
 				else {
-					// make sure our vector of variable names isn't empty and that our offset is not 0
-					// these parameters can be left blank IF we are making an assignment to a global variable, but here, we are not
-					if (*stack_offset == 0) {
-						throw std::runtime_error("**** Tried to make assignment in function definition, but was passed empty vector of variables and/or no stack offset.");
-					}
-					else {
+					/*
+					
+					first, evaluate the right-hand statement
+					fetch_value will write assembly such the value currently in A (the value we fetched) is the evaluated rvalue;
 
-						// TODO: make assignment in stack variable appropriately
+					*/
 
-					}
-				}
+					assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset).str() << std::endl;	// TODO: add max_offset in the fetch in assignment?
 
-				// if the symbol is not marked as defined, define it
-				if (!this->symbol_table.lookup(var_name, this->current_scope_name)->defined) {
-					this->symbol_table.define(var_name, this->current_scope_name);
+					assignment_ss << "\t" << "storea " << var_name << std::endl;
+
+					// update the symbol's "defined" status
+					fetched->defined = true;
 				}
 			}
-			// we can have a literal as an rvalue
-			else if (RValueType == LITERAL) {
-				// create an object for the literal rvalue
-				Literal* literal_arg = dynamic_cast<Literal*>(assignment_statement.get_rvalue().get());
-
-				// we must first make sure the lvalue and rvalue types match
-				if (fetched->type == literal_arg->get_type()) {
-					// now, the compiler must write different code depending on whether we have a global variable or a local one
-					if (fetched->scope_name == "global") {
-						assignment_ss << "\t" << "loada #$" << std::hex << literal_arg->get_value() << std::endl;
-						assignment_ss << "\t" << "storea " << fetched->name << std::endl;
-					}
-					else {
-						// first, we must get the placement of the variable in the stack so we know where to write
-						// we will do this by iterating through the symbol table, stopping at the symbols in our scope and adding to our target offset if we haven't hit our target symbol
-						size_t target_offset = 0;
-						std::vector<Symbol>::iterator symbol_iter = this->symbol_table.symbols.begin();
-						bool found = false;
-						while ((symbol_iter != this->symbol_table.symbols.end()) && !found) {
-
-							/*
-
-							TODO: devise more effective scope checks; consider a situation like this:
-
-								def int myFunc(alloc int a){
-									if (a < 10) {
-										alloc int b;
-									}
-									else {
-										alloc int c;
-										let b = 5;
-									}
-									return 1;
-								}
-
-							In the above situation, given the algorithm we have now, the function name is the scope and the scope level is given by the indentation level; both b and c are then considered to be in the same scope according to this algorithm.
-							While the assignment statement is bogus for a number of reasons, the compiler may not catch it correctly using the algorithm we have now. As such, a better approach must be devised for a future version of the compiler. For now, however, we will leave it as is.
-
-							*/
-
-							// we will only consider variables in the same scope whose scope level is equal to or less than our current scope level
-							if ((symbol_iter->scope_name == fetched->scope_name) && (symbol_iter->scope_level <= fetched->scope_level)) {
-								// if the symbol name is there, we are done
-								if (symbol_iter->name == fetched->name) {
-									// set our found variable
-									found = true;
-
-									// our target offset is where we want to go; adjust the current offset and increment/decrement the SP accordingly
-									if (*stack_offset > target_offset) {
-										// if the stack_offset is greater than the target offset, we need to increment the stack pointer but decrement the stack offset (they grow in opposite directions)
-										for (; *stack_offset > target_offset; (*stack_offset) -= 1) {
-											assignment_ss << "\t" << "incsp" << std::endl;
-										}
-									}
-									else if (target_offset > *stack_offset) {
-										// if the stack_offset is less than the target offset, we need to decrement the stack pointer but increment the stack offset (they grow in opposite directions)
-										for (; *stack_offset < target_offset; (*stack_offset) += 1) {
-											assignment_ss << "\t" << "decsp" << std::endl;
-										}
-									}
-									else if (target_offset == *stack_offset) {
-										// otherwise, we do nothing; the SP must be where we want it
-									}
-								}
-								// otherwise, increase the target offset, increment the iterator, and continue
-								else {
-									// if the type is a string
-									if (symbol_iter->type == STRING) {
-										// increment by two words
-										target_offset += 2;
-									}
-									else {
-										// only increment by one word if it is not a string type
-										target_offset++;
-									}
-									// increment the iterator so we don't get stuck in an infinite loop
-									symbol_iter++;
-								}
-							}
-							// if it is out of scope, increment the iterator; don't consider any out of scope variables
-							else {
-								symbol_iter++;
-							}
-						}
-
-						// check to make sure we got the variable
-						if (found) {
-							// now that we have the position in the stack, we can make the assignment
-							// if it is a string,
-							if (literal_arg->get_type() == STRING) {
-								// define the string as a constant
-								/*
-
-								Literal argument - string constant naming convention:
-									__ARG__STRC_SP_X
-								where X is the stack_offset in hex
-
-								*/
-								assignment_ss << "@db " << "__ARG__STRC_SP_" << std::hex << target_offset << " (" << literal_arg->get_value() << ")" << std::endl;
-								size_t string_length = literal_arg->get_value().length();
-
-								assignment_ss << "\t" << "loada #$" << std::hex << string_length << std::endl;
-								assignment_ss << "\t" << "loadb " << "#__ARG__STRC_SP_" << std::hex << target_offset << std::endl;
-
-								assignment_ss << "\t" << "pha" << std::endl;
-								assignment_ss << "\t" << "phb" << std::endl;
-
-								// modify the stack offset so we know where we are in the stack
-								(*stack_offset) += 2;
-							}
-							// if it is not a string,
-							else {
-								// if it is an int, load the A register with that value and push it to the stack
-								assignment_ss << "\t" << "loada #" << literal_arg->get_value() << std::endl;
-								assignment_ss << "\t" << "pha" << std::endl;
-
-								// increment the stack offset by one word
-								(*stack_offset) += 1;
-							}
-
-							// finally, mark it as defined if it is not already
-							if (!this->symbol_table.lookup(var_name, this->current_scope_name)->defined) {
-								this->symbol_table.define(var_name, this->current_scope_name);
-							}
-						}
-						else {
-							// if we could not locate the variable, throw an exception
-							throw std::runtime_error(("**** Error: Could not locate local variable '" + fetched->name + "' for stack address (error occurred on line " + std::to_string(assignment_statement.get_line_number()) + ").").c_str());
-						}
-					}
-				}
-				// if they do not match, throw an exception
-				else {
-					throw std::runtime_error(("**** Type Error: Cannot make assignment of '" + literal_arg->get_value() + "' to '" + fetched->name + "' because the types are incompatible (cannot pair '" + get_string_from_type(literal_arg->get_type()) + "' with '" + get_string_from_type(fetched->type) + "'). Error occurred on line " + std::to_string(assignment_statement.get_line_number()) + ".").c_str());
-				}
-			}
-			// we can also have a variable as our rvalue
-			else if (RValueType == LVALUE) {
-				// get our variable
-				LValue variable_to_get = *dynamic_cast<LValue*>(assignment_statement.get_rvalue().get());
-
-				// check to sure that the lvalue is in our symbol table in our current scope or in the global scope
-				if ((this->symbol_table.is_in_symbol_table(variable_to_get.getValue(), this->current_scope_name)) || (this->symbol_table.is_in_symbol_table(variable_to_get.getValue(), "global"))) {
-					// TODO: compile for lvalue
-				}
-				else {
-					throw std::runtime_error(("**** Could not find '" + variable_to_get.getValue() + "' in symbol table (at least, not in an appropriate scope). Error occurred on line " + std::to_string(assignment_statement.get_line_number())).c_str());
-				}
-			}
-			else if (RValueType == UNARY) {
-				// TODO: compile assignment for unary
+			// if the types do not match, we must throw an exception
+			else {
+				throw std::runtime_error("Type match error: cannot match '" + get_string_from_type(fetched->type) + "' and '" + get_string_from_type(rvalue_data_type) + "' (line " + std::to_string(assignment_statement.get_line_number()) + ")");
 			}
 		}
 	}
@@ -777,13 +752,13 @@ std::stringstream Compiler::call(Call call_statement, size_t* stack_offset, size
 								if (*stack_offset > (argument_symbol_data.stack_offset - 1)) {
 									// decrement stack_offset until it matches up with our symbol's stack offset - 1
 									for (; *stack_offset > (argument_symbol_data.stack_offset + 1); (*stack_offset)--) {
-										call_ss << "\t" << "decsp" << std::endl;	// decrement the SP by a word
+										call_ss << "\t" << "incsp" << std::endl;	// decrement the SP by a word
 									}
 								}
 								else if (*stack_offset < (argument_symbol_data.stack_offset + 1)) {
 									// increment stack_offset until it matches with our symbol's offset - 1
 									for (; *stack_offset < (argument_symbol_data.stack_offset - 1); (*stack_offset)++) {
-										call_ss << "\t" << "incsp" << std::endl;	// increment the SP by a word
+										call_ss << "\t" << "decsp" << std::endl;	// increment the SP by a word
 									}
 								}
 								
@@ -1077,7 +1052,7 @@ Compiler::Compiler(std::istream& sin_file, uint8_t _wordsize, std::vector<std::s
 	this->strc_number = 0;
 
 	this->_DATA_PTR = 0;	// our first address for variables is $00
-	this->AST_index = -1;	// we use "get_next_statement()" every time, which increments before returning; as such, start at -1 so we fetch the 0th item, not the 1st, when we first call the compilation function
+	this->AST_index = 0;	// we use "get_next_statement()" every time, which increments before returning; as such, start at -1 so we fetch the 0th item, not the 1st, when we first call the compilation function
 	symbol_table = SymbolTable();
 
 	if (include_builtins) {
@@ -1091,6 +1066,15 @@ Compiler::Compiler(std::istream& sin_file, uint8_t _wordsize, std::vector<std::s
 
 Compiler::Compiler() {
 	// TODO: give default values for compiler initialization
+	this->library_names = {};
+	this->AST_index = 0;
+	this->_wordsize = 16;
+	this->current_scope = 0;
+	this->current_scope_name = "global";
+	this->next_available_addr = 0;
+	this->strc_number = 0;
+	this->_DATA_PTR = 0;
+	this->object_file_names = {};
 }
 
 Compiler::~Compiler()

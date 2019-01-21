@@ -53,6 +53,12 @@ class Compiler
 
 	int _DATA_PTR;	// holds the next memory address to use for a variable in the _DATA section
 
+	/* 
+	The following functions returns the type of the expression passed into it once fully evaluated
+	Note unary and binary trees are not fully parsed, only the first left-hand operand is returned -- any errors in type will be found once the tree or unary value is actually evaluated
+	*/
+	Type get_expression_data_type(std::shared_ptr<Expression> to_evaluate);
+
 	void produce_binary_tree(Binary bin_exp);	// writes a binary tree to the file
 	void multiply(Binary mult_exp);	// write a multiplication statement
 	void divide(Binary div_exp);	// write a division statement
@@ -73,7 +79,7 @@ public:
 	void produce_sina_file(std::string sina_filename, bool include_builtins = true);	// opens a file and calls the actual compilation routine; in a separate function so that we can use recursion
 	std::stringstream compile_to_stringstream(bool include_builtins = true);
 
-	//void operator=(const Compiler& to_compare);
+	// TODO: add a compiler error class so we can automatically print out error messages with codes and line numbers
 
 	Compiler(std::istream& sin_file, uint8_t _wordsize, std::vector<std::string>* object_file_names, std::vector<std::string>* included_libraries, bool include_builtins = true);	// the compiler is initialized using a file, and it will lex and parse it; the parameter 'include_builtins' will default to 'true', but we will be able to supress it
 	Compiler();

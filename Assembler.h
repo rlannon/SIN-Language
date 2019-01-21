@@ -124,7 +124,7 @@ class Assembler
 	// get the instructions of a SINASM file and returns them in a vector<int>
 	std::vector<uint8_t> assemble();
 public:
-	// take a SINASM file as input and creates a .sinc file to be used by the SINVM; one of the entry functions for the class; note that this can also be done by using a SinObjectFile instance and passing an initialized Assembler object to SinObjectFile's "write_sinc_file" member function
+	// take a SINASM file as input and creates a .sinc file to be used by the SINVM
 	void create_sinc_file(std::string output_file_name);
 
 	// get the list of object files for the linker

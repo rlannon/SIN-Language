@@ -129,7 +129,7 @@ class LexerException : public std::exception {
 	char ch_;
 public:
 	explicit LexerException(const std::string& err_message, const int& err_position, const char& ch);
-	virtual const char* what() const;
+	virtual const char* what() const noexcept;
 	char get_char();
 	int get_pos();
 };

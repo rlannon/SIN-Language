@@ -64,6 +64,6 @@ class ParserException : public std::exception {
 	int line_number_;
 public:
 	explicit ParserException(const std::string& err_message, const int& err_code, const int& line_number = 0);
-	virtual const char* what() const;
+	virtual const char* what() const noexcept;
 	int get_code();
 };

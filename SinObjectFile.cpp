@@ -1,5 +1,22 @@
 #include "SinObjectFile.h"
 
+AssemblerData::AssemblerData(uint8_t _wordsize, std::vector<uint8_t> _text, std::list<std::tuple<std::string, int, std::string>> _symbol_table, std::list<std::tuple<std::string, int>> _relocation_table, std::list<std::tuple<std::string, std::vector<uint8_t>>> _data_table) : _wordsize(_wordsize), _text(_text), _symbol_table(_symbol_table), _relocation_table(_relocation_table), _data_table(_data_table)
+{
+}
+
+// implement the AssemblerData type
+AssemblerData::AssemblerData() {
+	this->_data_table = {};
+	this->_relocation_table = {};
+	this->_symbol_table = {};
+	this->_text = {};
+	this->_wordsize = 0;
+}
+
+AssemblerData::~AssemblerData() {
+
+}
+
 // TODO: return the symbol table and relocation table as well...
 
 void SinObjectFile::load_sinc_file(std::istream & file)
@@ -10,7 +27,7 @@ void SinObjectFile::load_sinc_file(std::istream & file)
 	file.read(buffer, 4);
 
 	// if our magic number is valid
-	if (header[0, 1, 2, 3] == *"s", "i", "n", "C") {
+	if (std::strcmp(header, "sinC")) {
 
 		// get the word size
 		this->_wordsize = BinaryIO::readU8(file);
@@ -134,7 +151,7 @@ void SinObjectFile::load_sinc_file(std::istream & file)
 	}
 }
 
-void SinObjectFile::write_sinc_file(std::string output_file_name, Assembler* assembler_obj)
+void SinObjectFile::write_sinc_file(std::string output_file_name, AssemblerData assembler_obj)
 {
 	/*
 	
@@ -143,13 +160,14 @@ void SinObjectFile::write_sinc_file(std::string output_file_name, Assembler* ass
 	*/
 
 	// first, add the file name to our list of files we need linked
-	assembler_obj->obj_files_to_link.push_back(output_file_name + ".sinc");
+	// TODO: add name of file we need linked in the Assembler itself, not here
+	//assembler_obj->obj_files_to_link.push_back(output_file_name + ".sinc");
 
 	// create a binary file of the specified name (with the sinc extension)
 	std::ofstream sinc_file(output_file_name + ".sinc", std::ios::out | std::ios::binary);
 
 	// create a vector<int> to hold the binary program data; it will be initialized to our assembled file
-	std::vector<uint8_t> program_data = assembler_obj->assemble();
+	std::vector<uint8_t> program_data = assembler_obj._text;
 	// after assembly, "assembler_obj->relocation_table" and "assembler_obj->symbol_table" will contain the correct data
 
 
@@ -160,11 +178,11 @@ void SinObjectFile::write_sinc_file(std::string output_file_name, Assembler* ass
 
 
 	// Write the magic number to the file header
-	char * header = ("sinC");
+	const char * header = ("sinC");
 	sinc_file.write(header, 4);
 
 	// write the word size
-	BinaryIO::writeU8(sinc_file, assembler_obj->_WORDSIZE);
+	BinaryIO::writeU8(sinc_file, assembler_obj._wordsize);
 
 	// write the endianness
 	BinaryIO::writeU8(sinc_file, 2);	// sinVM uses big endian for its byte order
@@ -192,11 +210,11 @@ void SinObjectFile::write_sinc_file(std::string output_file_name, Assembler* ass
 	// Symbol table info:
 
 	// write the number of entries in our symbol table
-	int num_symbols = assembler_obj->symbol_table.size();
+	int num_symbols = assembler_obj._symbol_table.size();
 	BinaryIO::writeU32(sinc_file, num_symbols);
 
 	// write data in for each symbol in the table
-	for (std::list<std::tuple<std::string, int, std::string>>::iterator symbol_iter = assembler_obj->symbol_table.begin(); symbol_iter != assembler_obj->symbol_table.end(); symbol_iter++) {
+	for (std::list<std::tuple<std::string, int, std::string>>::iterator symbol_iter = assembler_obj._symbol_table.begin(); symbol_iter != assembler_obj._symbol_table.end(); symbol_iter++) {
 		// get the various values so we don't need to use std::get<> every time
 		std::string symbol_name = std::get<0>(*symbol_iter);
 		int symbol_value = std::get<1>(*symbol_iter);
@@ -235,11 +253,11 @@ void SinObjectFile::write_sinc_file(std::string output_file_name, Assembler* ass
 	// Relocation table info:
 
 	// write the number of entries in the relocation table
-	int num_relocation_entries = assembler_obj->relocation_table.size();
+	int num_relocation_entries = assembler_obj._relocation_table.size();
 	BinaryIO::writeU32(sinc_file, num_relocation_entries);
 
 	// write the data for each symbol in the relocation table
-	for (std::list<std::tuple<std::string, int>>::iterator relocation_iter = assembler_obj->relocation_table.begin(); relocation_iter != assembler_obj->relocation_table.end(); relocation_iter++) {
+	for (std::list<std::tuple<std::string, int>>::iterator relocation_iter = assembler_obj._relocation_table.begin(); relocation_iter != assembler_obj._relocation_table.end(); relocation_iter++) {
 		// like before, get the various values so we don't need to use std::get<> every time
 		std::string relocation_name = std::get<0>(*relocation_iter);
 		uint16_t relocation_pointer = std::get<1>(*relocation_iter);
@@ -272,11 +290,11 @@ void SinObjectFile::write_sinc_file(std::string output_file_name, Assembler* ass
 	// Data header
 
 	// write in the number of entries
-	BinaryIO::writeU32(sinc_file, assembler_obj->data_table.size());
+	BinaryIO::writeU32(sinc_file, assembler_obj._data_table.size());
 
 	// write in all of the constants
 	// iterate through the data_table and write data accordingly
-	for (std::list<std::tuple<std::string, std::vector<uint8_t>>>::iterator it = assembler_obj->data_table.begin(); it != assembler_obj->data_table.end(); it++) {
+	for (std::list<std::tuple<std::string, std::vector<uint8_t>>>::iterator it = assembler_obj._data_table.begin(); it != assembler_obj._data_table.end(); it++) {
 		// 0x00 - 0x01	->	number of bytes in the constant
 		BinaryIO::writeU16(sinc_file, std::get<1>(*it).size());
 

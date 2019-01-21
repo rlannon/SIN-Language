@@ -8,29 +8,11 @@ BUILTINS:
 STRING LITERALS:
 	While some literals can be easily expressed in assembly, string literals are a little special--they require their own string literals in the .data section of the file, and as such, require '@db' directives. The naming convention for these literals is as follows:
 	
-	- Globals:
-		Global string literals use __STRC_GLOBAL_Ly_xxxx, where 'y' is the scope level in the global namespace and 'xxxx' is the number string literal
-
-	- Locals:
-		String literals in local scopes use __STRC_LOCAL_<function name>_Ly_xxxx, where <function name> is the name of the function, y is the scope level for the function, and 'xxxx' is the number string literal in that scope
-
-	For example, the code
-		@print("Hello, world!");
-	would generate
-		@db __STRC_GLOBAL_L0_0 (Hello, world!)
-	if it was not in any subscope. If we had:
-		if (...) {
-			@print("Hello, world!");
-		}
-	we would get
-		@db __STRC_GLOBAL_L1_0 (Hello, world!)
-	instead.
-
-	If we had:
-		def myFunc() {
-			@print(Hello, world!);
-		}
-	we would get:
-		@db __STRC_LOCAL_myFunc_L1_0 (Hello, world!)
+	__STRC__NUM_xxxx, where 'xxxx' is the number string literal
 
 	A good compiler optimization (for memory usage) will be to find all of the string literals that are the same, and updating the assembly code to remove unnecessary literal definitions, instead using ones that already exist
+
+GLOBAL VARIABLES
+	Global variables will be declared using the '@rs' assembler directive.
+
+	Note that string types are special; they must be dynamically allocated

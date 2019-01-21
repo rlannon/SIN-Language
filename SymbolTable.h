@@ -34,6 +34,7 @@ typedef struct Symbol
 	
 	std::string name;	// the name of the variable / function
 	Type type;	// the variable type (for functions, the return type)
+	Type sub_type;	// the subtype -- e.g., on "ptr<int>", the type is "ptr" and the subtype is "int"
 
 	std::string scope_name;	// the name of the scope -- either "global" or the name of the function
 	int scope_level;	// the /level/ of scope within the program; if we are in a loop or ite block, the level will increase
@@ -47,7 +48,7 @@ typedef struct Symbol
 	std::vector<std::shared_ptr<Statement>> formal_parameters;	// used only for function symbols
 
 	// constructor/destructor
-	Symbol(std::string name, Type type, std::string scope_name, int scope_level, std::string quality = "none", bool defined = false, std::vector<std::shared_ptr<Statement>> formal_parameters = {});
+	Symbol(std::string name, Type type, std::string scope_name, int scope_level, Type sub_type = NONE, std::string quality = "none", bool defined = false, std::vector<std::shared_ptr<Statement>> formal_parameters = {});
 	Symbol();
 	~Symbol();
 };
@@ -59,7 +60,7 @@ class SymbolTable
 
 	std::vector<Symbol> symbols;
 
-	void insert(std::string name, Type type, std::string scope_name, int scope_level, std::string quality = "none", bool intialized = false, std::vector<std::shared_ptr<Statement>> formal_parameters = {});
+	void insert(std::string name, Type type, std::string scope_name, int scope_level, Type sub_type = NONE, std::string quality = "none", bool intialized = false, std::vector<std::shared_ptr<Statement>> formal_parameters = {});
 	void define(std::string symbol_name, std::string scope_name);	// list the symbol of a given name in a given scope as defined
 
 	void remove(std::string symbol_name, std::string scope_name, int scope_level);	// removes a symbol from the table; used to remove symbols from the table in ITE branches and loops

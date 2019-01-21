@@ -44,12 +44,13 @@ void help(std::string flag="") {
 }
 
 
-
+// TODO: make the main function more modular
 int main (int argc, char** argv[]) {
 	// first, make a vector of strings to hold **argv 
 	std::vector<std::string> program_arguments;
-	// create a vector of SinObjectFile to hold any filenames that are passed as parameters
-	std::vector<SinObjectFile> objects_vector;
+
+	// create a vector of SinObjectFile to hold any filenames that are passed as parameters -- allocate on the heap; we need it for the duration of the program
+	std::vector<SinObjectFile>* objects_vector = new std::vector<SinObjectFile>;
 
 	// if we didn't pass in any command-line parameters, we need to make sure we get the necessary information from the user
 	if (argc == 1) {
@@ -208,7 +209,7 @@ int main (int argc, char** argv[]) {
 			if (sinc_file.is_open()) {
 				// initialize the object file
 				SinObjectFile obj_file(sinc_file);
-				objects_vector.push_back(obj_file);
+				objects_vector->push_back(obj_file);
 
 				sinc_file.close();
 			}
@@ -239,10 +240,17 @@ int main (int argc, char** argv[]) {
 					// if we are interpreting, we must lex and parse the file
 					Lexer lexer(sin_file);
 					Parser parser(lexer);
-					Interpreter interpreter;
+					Interpreter* interpreter = new Interpreter();	// allocate on the heap because it's a big object
 
 					// run the AST produced by the parser
-					interpreter.interpretAST(parser.createAST());
+					interpreter->interpretAST(parser.createAST());
+
+					if (debug_values) {
+						std::cout << "Done. Press enter to exit..." << std::endl;
+						std::cin.get();
+					}
+
+					delete interpreter;	// free the memory we allocated for the interpreter object
 
 					sin_file.close();
 				}
@@ -253,7 +261,7 @@ int main (int argc, char** argv[]) {
 				}
 			}
 			else {
-				throw std::exception("**** Only .sin files may be interpreted.");
+				throw std::runtime_error("**** Only .sin files may be interpreted.");
 			}
 		}
 		// compile a .sin file
@@ -267,12 +275,13 @@ int main (int argc, char** argv[]) {
 				if (sin_file.is_open()) {
 					// create a vector of file names
 					std::vector<std::string> object_file_names;
-					// compile the file
-					Compiler compiler(sin_file, wordsize, &object_file_names, &library_names, include_builtins);
+					
+					// compile the file -- allocate the compiler object on the heap because it's a pretty big object
+					Compiler* compiler = new Compiler(sin_file, wordsize, &object_file_names, &library_names, include_builtins);
 
 					// if we want to produce an asm file
 					if (produce_asm_file) {
-						compiler.produce_sina_file(filename_no_extension + ".sina");
+						compiler->produce_sina_file(filename_no_extension + ".sina");
 
 						// create SinObjectFile objects for each item in object_file_names
 						for (std::vector<std::string>::iterator it = object_file_names.begin(); it != object_file_names.end(); it++) {
@@ -283,7 +292,7 @@ int main (int argc, char** argv[]) {
 							if (sinc_file.is_open()) {
 								// if we can find the file, then create an object from it and add it to the object vector
 								SinObjectFile obj(sinc_file);
-								objects_vector.push_back(obj);
+								objects_vector->push_back(obj);
 							}
 							else {
 								file_error(*it);
@@ -300,7 +309,7 @@ int main (int argc, char** argv[]) {
 					}
 					// if we just want to generate code and assemble it
 					else {
-						sina_code << compiler.compile_to_stringstream().str();
+						sina_code << compiler->compile_to_stringstream().str();
 						saved_stringstream = true;
 
 						// create object files for each object in object_file_names
@@ -312,7 +321,7 @@ int main (int argc, char** argv[]) {
 							if (sinc_file.is_open()) {
 								// if we can find the file, then create an object from it and add it to the object vector
 								SinObjectFile obj(sinc_file);
-								objects_vector.push_back(obj);
+								objects_vector->push_back(obj);
 							}
 							else {
 								file_error(*it);
@@ -324,14 +333,19 @@ int main (int argc, char** argv[]) {
 						}
 					}
 
+					// close our file
 					sin_file.close();
+
+					// delete our compiler object
+					delete compiler;
+
 				} else {
 					file_error(filename);
 					exit(1);
 				}
 			}
 			else {
-				throw std::exception("**** To compile, file type must be 'sin'.");
+				throw std::runtime_error("**** To compile, file type must be 'sin'.");
 			}
 		}
 		
@@ -359,7 +373,7 @@ int main (int argc, char** argv[]) {
 					}
 				}
 				else {
-					throw std::exception("**** To disassemble, file type must be 'sinc' or 'sml'.");
+					throw std::runtime_error("**** To disassemble, file type must be 'sinc' or 'sml'.");
 				}
 			}
 			else if (assemble) {
@@ -369,26 +383,27 @@ int main (int argc, char** argv[]) {
 						sina_file.open(filename, std::ios::in);
 						if (sina_file.is_open()) {
 							// write an object file using an Assembler and SinObjectFile objects
-							Assembler assemble(sina_file, wordsize);
-							SinObjectFile obj_file_from_assembler;
-							obj_file_from_assembler.write_sinc_file(filename_no_extension, &assemble);
+							Assembler* assemble = new Assembler(sina_file, wordsize);	// use the heap because it's a fairly large object
+							assemble->create_sinc_file(filename_no_extension);
 
 							// update our object files list
-							std::vector<std::string> obj_filenames = assemble.get_obj_files_to_link();	// so we don't need to execute a function in every iteration of the loop
+							std::vector<std::string> obj_filenames = assemble->get_obj_files_to_link();	// so we don't need to execute a function in every iteration of the loop
+
 							for (std::vector<std::string>::iterator it = obj_filenames.begin(); it != obj_filenames.end(); it++) {
 								std::ifstream sinc_file;
 								sinc_file.open(*it, std::ios::in | std::ios::binary);
+								SinObjectFile obj_file_from_assembler(sinc_file);
 
 								if (sinc_file.is_open()) {
 									// open the file
 									obj_file_from_assembler.load_sinc_file(sinc_file);
 									// add it to our objects vector
-									objects_vector.push_back(obj_file_from_assembler);
+									objects_vector->push_back(obj_file_from_assembler);
 									// close the file
 									sinc_file.close();
 								}
 								else {
-									throw std::exception(("**** Could not load object file '" + *it + "' after assembly.").c_str());
+									throw std::runtime_error("**** Could not load object file '" + *it + "' after assembly.");
 								}
 							}
 
@@ -397,6 +412,8 @@ int main (int argc, char** argv[]) {
 							filename = filename_no_extension + file_extension;
 
 							sina_file.close();
+
+							delete assemble;	// free the memory we allocated for our assembler
 						}
 						else {
 							file_error(filename);
@@ -404,7 +421,7 @@ int main (int argc, char** argv[]) {
 						}
 					}
 					else {
-						throw std::exception("**** To assemble, file type must be 'sina'.");
+						throw std::runtime_error("**** To assemble, file type must be 'sina'.");
 					}
 				}
 				else if (compile && !produce_asm_file) {
@@ -425,12 +442,12 @@ int main (int argc, char** argv[]) {
 								// open the file
 								obj_file_from_assembler.load_sinc_file(sinc_file);
 								// add it to the front of our objects vector
-								objects_vector.insert(objects_vector.begin(), obj_file_from_assembler);
+								objects_vector->insert(objects_vector->begin(), obj_file_from_assembler);
 								// close the file
 								sinc_file.close();
 							}
 							else {
-								throw std::exception(("**** Could not load object file '" + *it + "' after assembly.").c_str());
+								throw std::runtime_error("**** Could not load object file '" + *it + "' after assembly.");
 							}
 						}
 
@@ -439,7 +456,7 @@ int main (int argc, char** argv[]) {
 						filename = filename_no_extension + file_extension;
 					}
 					else {
-						throw std::exception("**** Stringstream was not saved!");
+						throw std::runtime_error("**** Stringstream was not saved!");
 					}
 				}
 			}
@@ -448,9 +465,9 @@ int main (int argc, char** argv[]) {
 		// link files
 		if (link) {
 			// if we have object files to linke
-			if (objects_vector.size() != 0) {
+			if (objects_vector->size() != 0) {
 				// create a linker object using our objects vector
-				Linker linker(objects_vector);
+				Linker linker(*objects_vector);
 				linker.create_sml_file(filename_no_extension);
 
 				// update the filename
@@ -458,7 +475,7 @@ int main (int argc, char** argv[]) {
 				filename = filename_no_extension + file_extension;
 			}
 			else {
-				throw std::exception("**** You must supply object files to link.");
+				throw std::runtime_error("**** You must supply object files to link.");
 			}
 		}
 
@@ -470,16 +487,18 @@ int main (int argc, char** argv[]) {
 				sml_file.open(filename, std::ios::in | std::ios::binary);
 				if (sml_file.is_open()) {
 					// create an instance of the SINVM with our SML file and run it
-					SINVM vm(sml_file);
-					vm.run_program();
+					SINVM* vm = new SINVM(sml_file);	// use the heap because the vm is pretty large
+					vm->run_program();
 
 					if (debug_values) {
-						vm._debug_values();
+						vm->_debug_values();
 						std::cout << "Done. Press enter to exit..." << std::endl;
 						std::cin.get();
 					}
 
 					sml_file.close();
+
+					delete vm;	// free the memory used by the vm
 				}
 				else {
 					file_error(filename);
@@ -488,7 +507,7 @@ int main (int argc, char** argv[]) {
 
 			}
 			else {
-				throw std::exception("**** The SIN VM may only run SIN VM executable files (.sml).");
+				throw std::runtime_error("**** The SIN VM may only run SIN VM executable files (.sml).");
 			}
 		}
 	}
@@ -505,6 +524,9 @@ int main (int argc, char** argv[]) {
 		// exit with code 2 (an execption occurred)
 		exit(2);
 	}
+
+	// free the memory for objects_vector
+	delete objects_vector;
 
 	// exit the program
 	return 0;

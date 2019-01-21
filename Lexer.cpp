@@ -18,7 +18,7 @@ lexeme::lexeme(std::string type, std::string value, int line_number) : type(type
 
 // keywords is an alphabetized list of the keywords in SIN
 // it must be alphabetized in order to use the find algorithm from the standard library
-const std::vector<std::string> Lexer::keywords{ "alloc", "and", "asm", "bool", "const", "def", "else", "float", "if", "include", "int", "let", "or", "ptr", "raw", "return", "string", "void", "while", "xor"};
+const std::vector<std::string> Lexer::keywords{ "alloc", "and", "asm", "bool", "const", "def", "dynamic", "else", "float", "if", "include", "int", "let", "or", "ptr", "raw", "return", "static", "string", "void", "while", "xor"};
 
 // Our regular expressions
 const std::string Lexer::punc_exp = "[\\.',:;\\[\\]\\{\\}\\(\\)]";	// expression for punctuation
@@ -442,7 +442,7 @@ LexerException::LexerException(const std::string& err_message, const int& err_po
 
 }
 
-const char* LexerException::what() const {
+const char* LexerException::what() const noexcept {
 	return LexerException::message_.c_str();
 }
 

@@ -8,7 +8,6 @@
 #include <fstream>
 
 #include "BinaryIO.h"
-#include "Assembler.h"
 
 /*
 
@@ -16,22 +15,22 @@ This file contains the definition for the SinObjectFile class, a class to hold a
 
 */
 
-class Assembler;	// forward declare "Assembler" so we can use it here
-
 // to maintain the .sinc file standard
 const uint8_t sinc_version = 2;
 
-// numeric constants to represent our data types
-namespace symbol_constants {
-	const uint8_t _void_t = 0x00;
-	const uint8_t _bool_t = 0x01;
-	const uint8_t _int_t = 0x02;
-	const uint8_t _float_t = 0x03;
-	const uint8_t _string_t = 0x04;
+// create a data type that will hold all the data for an Assembler object that we will need to write a .sinc file; this is to avoid circular dependencies
+typedef struct AssemblerData
+{
+	uint8_t _wordsize;
+	std::vector<uint8_t> _text;
+	std::list<std::tuple<std::string, int, std::string>> _symbol_table;
+	std::list<std::tuple<std::string, int>> _relocation_table;
+	std::list<std::tuple<std::string, std::vector<uint8_t>>> _data_table;
 
-	const uint8_t _ptr_t = 0x10;
-	const uint8_t _array_t = 0x20;
-}
+	AssemblerData(uint8_t _wordsize, std::vector<uint8_t> _text, std::list<std::tuple<std::string, int, std::string>> _symbol_table, std::list<std::tuple<std::string, int>> _relocation_table, std::list<std::tuple<std::string, std::vector<uint8_t>>> _data_table);
+	AssemblerData();
+	~AssemblerData();
+};
 
 class SinObjectFile
 {
@@ -57,7 +56,7 @@ class SinObjectFile
 public:
 	// load a .sinc file and populate our class data accordingly
 	void load_sinc_file(std::istream& file);
-	void write_sinc_file(std::string output_file_name, Assembler* assembler_obj);
+	void write_sinc_file(std::string output_file_name, AssemblerData assembler_obj);
 
 	// get data about the file/program
 	uint8_t get_wordsize();

@@ -153,11 +153,26 @@ void Interpreter::setVarValue(LValue variable, std::tuple<Type, std::string> new
 
 // allocate a variable
 void Interpreter::allocateVar(Allocation allocation, std::list<InterpreterSymbol>* vars_table) {
-	// Initialize the variable with its type, name, and no value / NULL value
-	InterpreterSymbol var = InterpreterSymbol(allocation.get_var_type(), allocation.get_var_name(), "", allocation.get_var_subtype());
+	// get the initial value
+	std::tuple<Type, std::string> initial_value;
+	if (allocation.get_initial_value()->get_expression_type() == EXPRESSION_GENERAL) {
+		initial_value = std::make_tuple(NONE, "");
+	}
+	else {
+		 initial_value = this->evaluateExpression(allocation.get_initial_value().get(), vars_table);
+	}
 
-	// Push our newly-allocated variable to our variables vector
-	vars_table->push_back(var);
+	// if we have an initialized value that isn't the proper type, throw an error
+	if ((std::get<0>(initial_value) != NONE) && (std::get<0>(initial_value) != allocation.get_var_type())) {
+		throw std::runtime_error("Mismatched type in alloc-define statement! (line " + std::to_string(allocation.get_line_number()) + ")");
+	}
+	else {
+		// Initialize the variable with its type, name
+		InterpreterSymbol var = InterpreterSymbol(allocation.get_var_type(), allocation.get_var_name(), std::get<1>(initial_value), allocation.get_var_subtype());
+
+		// Push our newly-allocated variable to our variables vector
+		vars_table->push_back(var);
+	}
 }
 
 // define a function
@@ -492,7 +507,7 @@ std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, 
 				InterpreterSymbol* _dereferenced = (InterpreterSymbol*)address;
 
 				// make sure type of var is equal to the subtype of _dereferenced
-				if (are_compatible_types(var->data_type, _dereferenced->subtype)) {
+				if (are_compatible_types(var->subtype, _dereferenced->data_type)) {
 					return std::make_tuple(_dereferenced->subtype, _dereferenced->value);
 				}
 				else {
@@ -885,7 +900,6 @@ void Interpreter::interpretAST(StatementBlock AST) {
 	catch (InterpreterException &i_e) {
 		std::cerr << "Interpreter Exception: \n\t" << i_e.what() << "\n\tCode: " << i_e.get_code() << std::endl;
 	}
-	std::cout << "Done" << std::endl;
 	return;
 }
 
@@ -907,7 +921,7 @@ Interpreter::~Interpreter()
 *************************************************************************/
 
 
-const char* InterpreterException::what() const {
+const char* InterpreterException::what() const noexcept {
 	return InterpreterException::message_.c_str();
 }
 
@@ -923,7 +937,7 @@ InterpreterException::InterpreterException() {
 
 }
 
-const char* TypeMatchError::what() const {
+const char* TypeMatchError::what() const noexcept {
 	return TypeMatchError::message_.c_str();
 }
 
