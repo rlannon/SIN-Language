@@ -287,9 +287,15 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 								throw ParserException("Expected '{' after 'else' in conditional", 331, current_lex.line_number);
 							}
 						}
+						// we also do not require an else clause in ITE statements -- so just create the statement with an empty clause if that's the case
+						else {
+							stmt = std::make_shared<IfThen>(condition, std::make_shared<StatementBlock>(if_branch));
+							stmt->set_line_number(current_lex.line_number);
+							return stmt;
+						}
 					}
-
-					return std::make_shared<IfThenElse>(condition, std::make_shared<StatementBlock>(if_branch));
+					
+					//return std::make_shared<IfThenElse>(condition, std::make_shared<StatementBlock>(if_branch));
 				}
 				// If our condition is not followed by an opening curly
 				else {
@@ -752,8 +758,8 @@ std::shared_ptr<Expression> Parser::parseExpression(int prec) {
 		else if (current_lex.value == "*") {
 			left = this->createDereferenceObject();
 		}
-		// check to see if we have the unary plus operator
-		else if ((current_lex.value == "+") || (current_lex.value == "-")) {
+		// check to see if we have a unary operator
+		else if ((current_lex.value == "+") || (current_lex.value == "-") || (current_lex.value == "!")) {
 			// get the next leceme
 			lexeme next = this->next();
 			// declare our operand
@@ -781,8 +787,11 @@ std::shared_ptr<Expression> Parser::parseExpression(int prec) {
 			if (current_lex.value == "+") {
 				left = std::make_shared<Unary>(operand, PLUS);
 			}
-			else {
+			else if (current_lex.value == "-") {
 				left = std::make_shared<Unary>(operand, MINUS);
+			}
+			else if (current_lex.value == "!") {
+				left = std::make_shared<Unary>(operand, NOT);
 			}
 		}
 	}

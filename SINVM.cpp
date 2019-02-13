@@ -103,15 +103,39 @@ void SINVM::execute_instruction(int opcode) {
 		case SEC:
 			this->set_status_flag('C');
 			break;
+		case CLN:
+			this->clear_status_flag('N');
+			break;
+		case SEN:
+			this->set_status_flag('N');
+			break;
 
 		// ALU instructions
 		// For these, we will use our load function to get the data we want in addition to the A register; we won't put it in the a register, but we will use the function because it will give it to us no problem
 		case ADDCA:
 		{
+			// get the addend
 			int addend = this->execute_load();
 
 			// add the fetched data to A
 			REG_A += addend;
+
+			// if the MSB is set, set the N flag
+			if (REG_A >= 0x8000) {
+				this->set_status_flag('N');
+			}
+			else {
+				this->clear_status_flag('N');
+			}
+
+			// set the Z flag if both values are 0
+			if ((REG_A == 0) && (addend == 0)) {
+				this->set_status_flag('Z');
+			}
+			else {
+				this->clear_status_flag('Z');
+			}
+
 			break;
 		}
 		case SUBCA:
@@ -1042,6 +1066,7 @@ void SINVM::_debug_values() {
 	std::cout << "\t\tB: $" << std::hex << this->REG_B << std::endl;
 	std::cout << "\t\tX: $" << std::hex << this->REG_X << std::endl;
 	std::cout << "\t\tY: $" << std::hex << this->REG_Y << std::endl;
+	std::cout << "\t\tSP: $" << std::hex << (int)this->SP << std::endl;
 	std::cout << "\t\tSTATUS: $" << std::hex << (int)this->STATUS << std::endl << std::endl;
 
 	std::cout << "Memory: " << std::endl;

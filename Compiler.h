@@ -46,12 +46,18 @@ class Compiler
 
 	SymbolTable symbol_table;	// create an object for our symbol table
 
+	size_t stack_offset;
+
 	unsigned int current_scope;	// tells us what scope level we are currently in
 	std::string current_scope_name;
 	unsigned int next_available_addr;	// the next available address in the local page
+
 	size_t strc_number;	// the next available number for a string constant
+	size_t branch_number;	// the next available number for a branch ID
 
 	int _DATA_PTR;	// holds the next memory address to use for a variable in the _DATA section
+
+	// TODO: add stack_offset as a member? If the compiler should always be tracking its current memory offset, it makes sense to use it as a member...
 
 	/* 
 	The following functions returns the type of the expression passed into it once fully evaluated
@@ -60,6 +66,7 @@ class Compiler
 	Type get_expression_data_type(std::shared_ptr<Expression> to_evaluate);
 
 	void produce_binary_tree(Binary bin_exp);	// writes a binary tree to the file
+	std::stringstream produce_unary_tree(Unary unary_exp, unsigned int line_number, size_t* stack_offset = nullptr, size_t max_offset = 0);	// writes the evaluation of a unary value
 	void multiply(Binary mult_exp);	// write a multiplication statement
 	void divide(Binary div_exp);	// write a division statement
 
@@ -67,14 +74,16 @@ class Compiler
 	void include_file(Include include_statement);	// add a file to the solution
 
 	std::stringstream fetch_value(std::shared_ptr<Expression> to_fetch, unsigned int line_number, size_t* stack_offset = nullptr, size_t max_offset = 0);	// produces asm code to put the result of the specified expression in A
+	std::stringstream incsp_to_stack_frame(size_t* stack_offset, size_t max_offset);
 
 	std::stringstream allocate(Allocation allocation_statement, size_t* stack_offset = nullptr, size_t* max_offset = nullptr);	// add a variable to the symbol table (using an allocation statement)
 	std::stringstream define(Definition definition_statement);	// add a function definition (using a definition statement)
 	std::stringstream assign(Assignment assignment_statement, size_t* stack_offset = nullptr);
 	std::stringstream call(Call call_statement, size_t* stack_offset = nullptr, size_t max_offset = 0);
 	std::stringstream ite(IfThenElse ite_statement, size_t* stack_offset = nullptr, size_t max_offset = 0);
+	std::stringstream while_loop(WhileLoop while_statement, size_t* stack_offset = nullptr, size_t max_offset = 0);
 
-	std::stringstream compile_to_sinasm(StatementBlock AST, unsigned int local_scope_level, std::string local_scope_name = "global", size_t* stack_offset = nullptr, size_t* max_offset = 0);	// compiles SIN code and writes SINASM code to output_file; modifies the member's vector pointer to list the dependencies
+	std::stringstream compile_to_sinasm(StatementBlock AST, unsigned int local_scope_level, std::string local_scope_name = "global", size_t* stack_offset = nullptr, size_t max_offset = 0);	// compiles SIN code and writes SINASM code to output_file; modifies the member's vector pointer to list the dependencies
 public:
 	void produce_sina_file(std::string sina_filename, bool include_builtins = true);	// opens a file and calls the actual compilation routine; in a separate function so that we can use recursion
 	std::stringstream compile_to_stringstream(bool include_builtins = true);

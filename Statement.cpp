@@ -181,16 +181,26 @@ ReturnStatement::ReturnStatement() {
 
 /*******************	ITE CLASS		********************/
 
-std::shared_ptr<Expression> IfThenElse::get_condition() {
-	return IfThenElse::condition;
+std::shared_ptr<Expression> IfThen::get_condition() {
+	return this->condition;
 }
 
-std::shared_ptr<StatementBlock> IfThenElse::get_if_branch() {
+std::shared_ptr<StatementBlock> IfThen::get_if_branch() {
 	return this->if_branch;
 }
 
 std::shared_ptr<StatementBlock> IfThenElse::get_else_branch() {
 	return this->else_branch;
+}
+
+IfThen::IfThen(std::shared_ptr<Expression> condition_ptr, std::shared_ptr<StatementBlock> if_branch_ptr) {
+	IfThen::statement_type = IF_THEN;
+	IfThen::condition = condition_ptr;
+	IfThen::if_branch = if_branch_ptr;
+}
+
+IfThen::IfThen() {
+	this->statement_type = IF_THEN;
 }
 
 

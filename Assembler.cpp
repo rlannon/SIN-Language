@@ -1021,7 +1021,13 @@ void Assembler::create_sinc_file(std::string output_file_name)
 
 	// create an object to hold the data for our .sinc file, and pass it the assembler object we are in
 	SinObjectFile object_file;
-	AssemblerData asm_data(this->_WORDSIZE, this->assemble(), this->symbol_table, this->relocation_table, this->data_table);
+	AssemblerData asm_data(this->_WORDSIZE, this->assemble());
+	
+	// the tables don't get set in initialization because the file needs to be assembled first
+	asm_data._symbol_table = this->symbol_table;
+	asm_data._relocation_table = this->relocation_table;
+	asm_data._data_table = this->data_table;
+
 	object_file.write_sinc_file(output_file_name, asm_data);
 
 	// return to caller

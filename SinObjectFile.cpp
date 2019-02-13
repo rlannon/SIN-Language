@@ -1,7 +1,8 @@
 #include "SinObjectFile.h"
 
-AssemblerData::AssemblerData(uint8_t _wordsize, std::vector<uint8_t> _text, std::list<std::tuple<std::string, int, std::string>> _symbol_table, std::list<std::tuple<std::string, int>> _relocation_table, std::list<std::tuple<std::string, std::vector<uint8_t>>> _data_table) : _wordsize(_wordsize), _text(_text), _symbol_table(_symbol_table), _relocation_table(_relocation_table), _data_table(_data_table)
+AssemblerData::AssemblerData(uint8_t _wordsize, std::vector<uint8_t> _text) : _wordsize(_wordsize), _text(_text)
 {
+
 }
 
 // implement the AssemblerData type

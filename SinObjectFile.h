@@ -27,7 +27,7 @@ typedef struct AssemblerData
 	std::list<std::tuple<std::string, int>> _relocation_table;
 	std::list<std::tuple<std::string, std::vector<uint8_t>>> _data_table;
 
-	AssemblerData(uint8_t _wordsize, std::vector<uint8_t> _text, std::list<std::tuple<std::string, int, std::string>> _symbol_table, std::list<std::tuple<std::string, int>> _relocation_table, std::list<std::tuple<std::string, std::vector<uint8_t>>> _data_table);
+	AssemblerData(uint8_t _wordsize, std::vector<uint8_t> _text);
 	AssemblerData();
 	~AssemblerData();
 };

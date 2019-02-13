@@ -82,6 +82,102 @@ void Compiler::produce_binary_tree(Binary bin_exp) {
 	// TODO: devise binary tree algorithm
 }
 
+std::stringstream Compiler::produce_unary_tree(Unary unary_exp, unsigned int line_number, size_t* stack_offset, size_t max_offset)
+{
+	std::stringstream unary_ss;
+
+	// TODO: evaluate unary
+
+	/*
+	
+	The available unary operators are:
+		+	PLUS	Does nothing
+		-	MINUS	Negative value
+		!	NOT		Not operator
+	
+	*/
+	
+	// First, we need the fetch the operand and load it into register A -- how we do this depends on the type of expression in our unary
+	if (unary_exp.get_operand()->get_expression_type() == LITERAL) {
+		// cast the operand to a literal type
+		Literal* unary_operand = dynamic_cast<Literal*>(unary_exp.get_operand().get());
+
+		// act according to its data type
+		if (unary_operand->get_type() == BOOL) {
+			if (unary_operand->get_value() == "True") {
+				unary_ss << "\tloada #$01" << std::endl;
+			}
+			else if (unary_operand->get_value() == "False") {
+				unary_ss << "\tloada #$00" << std::endl;
+			}
+			else {
+				throw std::runtime_error("Invalid boolean literal value.");
+			}
+		}
+		else if (unary_operand->get_type() == INT) {
+			unary_ss << "\t" << "loada #$" << std::hex << std::stoi(unary_operand->get_value()) << std::endl;
+		}
+		else if (unary_operand->get_type() == FLOAT) {
+			// TODO: handle floats
+		}
+		else if (unary_operand->get_type() == STRING) {
+			// define the string constant
+			unary_ss << "@db __STRC__NUM_" << std::dec << this->strc_number << " (" << unary_operand->get_value() << ")" << std::endl;
+			
+			// load our registers with the appropriate values
+			unary_ss << "\t" << "loada #$" << std::hex << unary_operand->get_value().length() << std::endl;
+			unary_ss << "\t" << "loadb #" << "__STRC__NUM_" << std::dec << this->strc_number << std::endl;
+
+			// increment strc_number so we can continue to define string literals
+			this->strc_number++;
+		}
+	}
+	else if (unary_exp.get_operand()->get_expression_type() == LVALUE) {
+		// if we have an lvalue in the unary expression, simply fetch the lvalue
+		unary_ss << this->fetch_value(unary_exp.get_operand(), line_number, stack_offset, max_offset).str();
+	}
+	else if (unary_exp.get_operand()->get_expression_type() == BINARY) {
+		// TODO: parse binary tree to get the result in A
+	}
+	else if (unary_exp.get_operand()->get_expression_type() == UNARY) {
+		// Our unary operand can be another unary expression -- if so, simply get the operand and call this function recursively
+		Unary* unary_operand = dynamic_cast<Unary*>(unary_exp.get_operand().get());	// cast to appropriate type
+		unary_ss << this->produce_unary_tree(*unary_operand, line_number, stack_offset, max_offset).str();	// add the produced code to our code here
+	}
+
+	// Now that the A register contains the value of the operand
+
+	if (unary_exp.get_operator() == PLUS) {
+		// the unary plus operator does nothing
+	}
+	else if (unary_exp.get_operator() == MINUS) {
+		// the unary minus operator will flip every bit and then add 1 to it (to get two's complement) -- this works to convert both ways
+		// the N and Z flags will automatically be set or cleared by the ADDCA instruction
+
+		unary_ss << "\t" << "xora #$FFFF" << std::endl;	// using XOR on A with the value 0xFFFF will flip all bits (0110 XOR 1111 => 1001)
+		unary_ss << "\t" << "addca #$01" << std::endl;	// adding 1 finishes two's complement
+	}
+	else if (unary_exp.get_operator() == NOT) {
+		// 0 is the only value considered to be false; all other values are true -- as such, the not operator will set +/- values to 0, and 0 to 1
+		unary_ss << "\t" << "cmpa #$00" << std::endl;	// compare A to 0
+		unary_ss << "\t" << "breq .NOT__add" << std::endl;
+
+		unary_ss << "\t" << "loada #$00" << std::endl;	// if not 0, set it to 0
+		unary_ss << "\t" << "jmp .NOT__done" << std::endl;
+
+		unary_ss << ".NOT__add:" << std::endl;
+		unary_ss << "\t" << "loada #$01" << std::endl;	// if 0, load a with the value 1
+
+		unary_ss << ".NOT__done:" << std::endl;	// our "done" label
+	}
+	else {
+		// if it is not one of the aforementioned operators, it is an invalid unary operator
+		throw std::runtime_error("Invalid operator in unary expression.");
+	}
+
+	return unary_ss;
+}
+
 
 void Compiler::include_file(Include include_statement)
 {
@@ -366,6 +462,32 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 	return fetch_ss;
 }
 
+std::stringstream Compiler::incsp_to_stack_frame(size_t * stack_offset, size_t max_offset)
+{
+	std::stringstream inc_ss;
+
+	if (stack_offset) {
+		// increment the stack pointer to the end of the current stack frame
+		if (*stack_offset < max_offset) {
+			// transfer the stack pointer to a, add the difference, and transfer it back
+			size_t difference = max_offset - *stack_offset;
+			inc_ss << "\t" << "tspa" << "\t; increment sp by using transfers and addca" << std::endl;
+			inc_ss << "\t" << "addca #$" << std::hex << difference << std::endl;
+			inc_ss << "\t" << "tasp" << std::endl;
+
+			*stack_offset = max_offset;
+		}
+		else if (*stack_offset > max_offset) {
+			throw std::runtime_error("**** Stack pointer was beyond the stack frame!");
+		}
+	}
+	else {
+		std::cerr << "**** Warning: 'stack_offset' was nullptr in 'incsp_to_stack_frame'!" << std::endl;
+	}
+
+	return inc_ss;
+}
+
 
 // allocate a variable
 std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* stack_offset, size_t* max_offset) {
@@ -436,7 +558,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 	}
 
 	// handle all non-const global variables
-	else if (current_scope_name == "global") {
+	else if (current_scope_name == "global" && current_scope == 0) {
 		// if the variable type is anything with a variable length, we need a different mechanism for handling them
 		if (symbol_type == STRING) {
 			// TODO: add support for global strings, arrays, etc.. Strings must always be allocated on the heap unless they are constants. The allocation will return a ptr<string> which will lead to a memory location in the heap that has all the string information
@@ -525,6 +647,7 @@ std::stringstream Compiler::define(Definition definition_statement) {
 				if (arg_alloc->get_var_type() == STRING) {
 					// strings take two words; one for the length, one for the start address
 					// TODO: refactor strings in function definitions
+					current_stack_offset += 2;
 				}
 				else {
 					// all other types are one word
@@ -539,7 +662,7 @@ std::stringstream Compiler::define(Definition definition_statement) {
 		
 		// by this point, all of our function parameters are on the stack, in our symbol table, and our stack offset pointer tells us how many; as such, we can call the compile routine on our AST, as all of the functions for compilation will be able to handle scopes other than global
 		StatementBlock function_procedure = *definition_statement.get_procedure().get();	// get the AST
-		function_asm << this->compile_to_sinasm(function_procedure, 1, func_name, &current_stack_offset, &max_stack_offset).str();	// compile it
+		function_asm << this->compile_to_sinasm(function_procedure, 1, func_name, &current_stack_offset, max_stack_offset).str();	// compile it
 
 		// unwind the stack pointer back to its original position, thereby freeing the memory we allocated for the function
 		for (int i = current_stack_offset; i > 0; i--) {
@@ -593,13 +716,32 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 					/*
 					
 					first, evaluate the right-hand statement
-					fetch_value will write assembly such the value currently in A (the value we fetched) is the evaluated rvalue;
+						(fetch_value will write assembly such the value currently in A (the value we fetched) is the evaluated rvalue)
+					next, check to see whether the variable is /local/ or /global/; local variables will not use symbol names, but globals will
 
 					*/
 
-					assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset).str() << std::endl;	// TODO: add max_offset in the fetch in assignment?
+					if (fetched->scope_level == 0) {
+						// global variables
+						assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset).str() << std::endl;	// TODO: add max_offset in the fetch in assignment?
 
-					assignment_ss << "\t" << "storea " << var_name << std::endl;
+						assignment_ss << "\t" << "storea " << var_name << std::endl;
+					}
+					else {
+						// adjust the stack pointer to point to the appropriate variable
+						for (size_t i = *stack_offset; i > fetched->stack_offset; i--) {
+							*stack_offset -= 1;
+							assignment_ss << "\t" << "incsp" << std::endl;
+						}
+						for (size_t i = *stack_offset; i < fetched->stack_offset; i++) {
+							*stack_offset += 1;
+							assignment_ss << "\t" << "decsp" << std::endl;
+						}
+
+						// now, the stack pointer is pointing to the correct memory address for the variable
+						assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset).str() << std::endl;
+						assignment_ss << "\t" << "pha" << std::endl;
+					}
 
 					// update the symbol's "defined" status
 					fetched->defined = true;
@@ -677,14 +819,17 @@ std::stringstream Compiler::call(Call call_statement, size_t* stack_offset, size
 						/*
 						the INT type is easy to handle; simply write the number
 						*/
-						call_ss << "loada #$" << std::hex << literal_argument->get_value() << std::endl;
+						call_ss << "loada #$" << std::hex << std::stoi(literal_argument->get_value()) << std::endl;
 					}
 					else if (argument_type == STRING) {
 						// add a loada statement for the string length
 						call_ss << "loada #$" << std::hex << literal_argument->get_value().length() << std::endl;
 						// add a loadb statement for the string litereal
-						call_ss << "\t" << "@db __ARGC_STR_" << call_statement.get_func_name() << "__" << i << " (" << literal_argument->get_value() << ")" << std::endl;
-						call_ss << "\t" << "loadb #" << "__ARGC_STR_" << call_statement.get_func_name() << "__" << i << std::endl;
+						call_ss << "\t" << "@db __ARGC_STRC_" << call_statement.get_func_name() << "__" << std::dec << this->strc_number << " (" << literal_argument->get_value() << ")" << std::endl;
+						call_ss << "\t" << "loadb #" << "__ARGC_STRC_" << call_statement.get_func_name() << "__" << std::dec << this->strc_number << std::endl;
+
+						// increment the string constant number
+						this->strc_number += 1;
 
 						// push the length, then the address of the string
 						call_ss << "\t" << "pha" << std::endl;
@@ -815,12 +960,26 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t * stack_offset,
 
 	*/
 
+	// a stringstream for our generated asm
+	std::stringstream ite_ss;
+
+	size_t previous_offset = *stack_offset;	// the previous stack offset -- we will be sure to move the stack pointer back to this point once we are done
+	std::string parent_scope_name = this->current_scope_name;	// the parent scope name must be restored once we exit the scope
+
+	/*
+	First, make sure everything in our branch is under a label so we can use relative labels -- it looks like:
+		__<scope name>_<scope level>__ITE_<branch number>__:
+	*/
+
+	std::string ite_label_name = "__" + this->current_scope_name + "_" + std::to_string(this->current_scope) + "__ITE_" + std::to_string(this->branch_number) + "__";
+	ite_ss << ite_label_name << ":" << std::endl;
+
 	// get the "if" condition
 	// the simplest to do is a literal
-	if (ite_statement.get_condition()->get_expression_type() == LITERAL) {
-		Literal* if_condition = dynamic_cast<Literal*>(ite_statement.get_condition().get());
-
+	if ((ite_statement.get_condition()->get_expression_type() == LITERAL) || (ite_statement.get_condition()->get_expression_type() == LVALUE)) {
 		/*
+
+		Note that this branch will work for both literals AND lvalues as they only require the fetch_value function and a compare statement -- the LValue will be evaluated in fetch_value, and so the comparison will be done on a literal value held in the A register
 
 		Literals are defined to be true/false in the following way:
 			Literal value:		Evaluates to:
@@ -835,28 +994,135 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t * stack_offset,
 				""				False
 				"..."			True	(strings only evaluate to "False" if they are empty)
 
-		Essentially, the assembly performs a "cmp_ #$00 / brne .__" sequence
+		Essentially, the assembly performs a "cmp_ #$00 / breq .else" sequence
 
 		*/
 
-		// TODO: use "fetch_value" to put the value in the A register before doing our compare and branch instructions
-
+		// load the A register with the value
+		ite_ss << this->fetch_value(ite_statement.get_condition(), ite_statement.get_line_number(), stack_offset, max_offset).str();
 	}
 	else if (ite_statement.get_condition()->get_expression_type() == UNARY) {
+		
+		// Unary expressions follow similar rules as literals -- see the above list for reference
+
+		Unary* unary_condition = dynamic_cast<Unary*>(ite_statement.get_condition().get());	// cast the condition to the unary type
+		ite_ss << this->produce_unary_tree(*unary_condition, ite_statement.get_line_number()).str();	// put the evaluated unary expression in A
+
 
 	}
 	else if (ite_statement.get_condition()->get_expression_type() == BINARY) {
-
+		// TODO: evaluate binary conditions
 	}
+
+	// now that we have evaluated the condition, the result of said evaluation is in A; all we need to do is see whether the result was 0 or not -- if so, jump to the end of the 'if' branch
+	ite_ss << "\t" << "cmpa #$00" << std::endl;
+	ite_ss << "\t" << "breq " << ite_label_name << ".else" << std::endl;
+
+	// Now that the condition has been evaluated, and the appropriate branch instructions have bene written, we can write the actual code for the branches
+
+	// increment the scope level because we are within a branch (allows variables local to the scope); further, update the scope name to the branch we want
+	this->current_scope += 1;
+	this->current_scope_name = parent_scope_name + "__ITE_" + std::to_string(this->branch_number);
+
+	// increment the SP to the end of the stack frame
+	ite_ss << this->incsp_to_stack_frame(stack_offset, max_offset).str();
+
+	// now, compile the branch using our compile method
+	ite_ss << this->compile_to_sinasm(*ite_statement.get_if_branch().get(), this->current_scope, this->current_scope_name, stack_offset, max_offset).str();
+
+	// unwind the stack and delete local variables
+	for (size_t i = *stack_offset; i > max_offset; i--) {
+		*stack_offset -= 1;
+		ite_ss << "\t" << "incsp" << std::endl;
+	}
+	// we now need to delete all variables that were local to this if/else block -- iterate through the symbol table, removing the symbols in this local scope
+	std::vector<Symbol>::iterator it = this->symbol_table.symbols.begin();
+	while (it != this->symbol_table.symbols.end()) {
+		// only delete variables that are in the scope with the same name AND of the same level
+		if ((it->scope_name == this->current_scope_name) && (it->scope_level == this->current_scope)) {
+			it = this->symbol_table.symbols.erase(it);	// delete the element at the iterator position, and continue without incrementing the iterator
+		}
+		else {
+			it++;	// only increment the iterator if we do not have a deletion
+		}
+	}
+
+	// now, jump to our .done label so we don't execute the "else" branch
+	ite_ss << "\t" << "jmp " << ite_label_name << ".done" << std::endl;
+	ite_ss << std::endl;
+
+	// the else label
+	ite_ss << ite_label_name << ".else:" << std::endl;
+
+	// if we have an if_then (no else branch), then ignore this
+	if (ite_statement.get_else_branch()) {
+		// increment the scope level because we are within a branch (allows variables local to the scope)
+		ite_ss << this->incsp_to_stack_frame(stack_offset, max_offset).str();
+
+		ite_ss << this->compile_to_sinasm(*ite_statement.get_else_branch().get(), this->current_scope, this->current_scope_name, stack_offset, max_offset).str();
+
+		// unwind the stack and delete local variables
+		for (size_t i = *stack_offset; i > max_offset; i--) {
+			*stack_offset -= 1;
+			ite_ss << "\t" << "incsp" << std::endl;
+		}
+		// we now need to delete all variables that were local to this if/else block -- iterate through the symbol table, removing the symbols in this local scope
+		it = this->symbol_table.symbols.begin();	// use the same iterator as before
+		while (it != this->symbol_table.symbols.end()) {
+			// only delete variables that are in the scope with the same name AND of the same level
+			if ((it->scope_name == this->current_scope_name) && (it->scope_level == this->current_scope)) {
+				it = this->symbol_table.symbols.erase(it);	// delete the element at the iterator position, and continue without incrementing the iterator
+			}
+			else {
+				it++;	// only increment the iterator if we do not have a deletion
+			}
+		}
+	}
+
+	ite_ss << "\t" << "jmp " << ite_label_name << ".done" << std::endl;
+	ite_ss << std::endl;
+
+	// finally, increment the branch number, decrement the scope level, write our ".done" label, and delete all local variables to the branches so we cannot reference them outside the ite
+	this->branch_number++;
+	this->current_scope -= 1;
+	this->current_scope_name = parent_scope_name;	// reset the scope name to the parent scope
+
+	ite_ss << ite_label_name << ".done:" << std::endl;
+	ite_ss << std::endl;
 	
-	return std::stringstream();
+	// return our branch code
+	return ite_ss;
+}
+
+std::stringstream Compiler::while_loop(WhileLoop while_statement, size_t * stack_offset, size_t max_offset)
+{
+	/*
+	
+	Compile the given code into a while loop. The algorithm for generating the code is as follows (note in the future we may use some register optimizations for incrementing counting variables)
+
+	The algorithm essentially works as follows:
+		First, we must evaluate the condition of the loop; if it is true, we continue; if false, we branch to the .done label
+		Next, we must increment the stack pointer to the end of the current scope's stack frame so that we can allocate local variables
+		Then, we run the code inside the loop, allocating any variables within the loop body in a new scope in our symbol table
+		Once the execution is complete, before we jump back to the evaluation statement, we must:
+			delete all variables from the symbol table that were allocated within the loop body;
+			decrement the SP to the bottom of the previous stack frame
+		Jump back to the evaluation statement and continue from step 1
+		
+	
+	*/
+	
+	std::stringstream while_ss;
+
+	// TODO: add the while loop compiler code
+
+	return while_ss;
 }
 
 
 
-// the actual compilation routine
-// it is separate from "Compile::compile()" so that we can call it recursively
-std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int local_scope_level, std::string local_scope_name, size_t* stack_offset, size_t* max_offset) {
+// the actual compilation routine -- it is separate from our entry functions so that we can call it recursively (it is called by our entry functions)
+std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int local_scope_level, std::string local_scope_name, size_t* stack_offset, size_t max_offset) {
 	/*
 	
 	This function takes an AST and produces SINASM that will execute it, stored in a stringstream object.
@@ -912,7 +1178,7 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 			Allocation* alloc_statement = dynamic_cast<Allocation*>(current_statement);
 
 			// compile an alloc statement
-			sinasm_ss << this->allocate(*alloc_statement, stack_offset, max_offset).str();
+			sinasm_ss << this->allocate(*alloc_statement, stack_offset, &max_offset).str();
 		}
 		else if (statement_type == ASSIGNMENT) {
 			// dynamic cast to an Assignment type
@@ -931,13 +1197,31 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 
 			// TODO: write return routine
 		}
-		else if (statement_type == IF_THEN_ELSE) {
-			IfThenElse* ite_statement = dynamic_cast<IfThenElse*>(current_statement);
+		else if ((statement_type == IF_THEN_ELSE) || (statement_type == IF_THEN)) {
+			IfThenElse ite_statement;
+			
+			if (statement_type == IF_THEN) {
+				IfThen if_then_stmt = *dynamic_cast<IfThen*>(current_statement);
+				ite_statement = IfThenElse(if_then_stmt.get_condition(), if_then_stmt.get_if_branch());
+			}
+			else {
+				ite_statement = *dynamic_cast<IfThenElse*>(current_statement);
+			}
 
-			// TODO: write if/then/else routine
+			if (stack_offset && max_offset) {
+				sinasm_ss << this->ite(ite_statement, stack_offset, max_offset).str();
+			}
+			else if (stack_offset) {
+				sinasm_ss << this->ite(ite_statement, stack_offset).str();
+			}
+			else {
+				sinasm_ss << this->ite(ite_statement).str();
+			}
 		}
 		else if (statement_type == WHILE_LOOP) {
 			WhileLoop* while_statement = dynamic_cast<WhileLoop*>(current_statement);
+
+			// TODO: compile while loop
 		}
 		else if (statement_type == DEFINITION) {
 			Definition* def_statement = dynamic_cast<Definition*>(current_statement);
@@ -986,7 +1270,7 @@ void Compiler::produce_sina_file(std::string sina_filename, bool include_builtin
 		// any other common header information will go here
 
 		// write the body of the program
-		this->sina_file << this->compile_to_sinasm(this->AST, current_scope).str();
+		this->sina_file << this->compile_to_sinasm(this->AST, current_scope, current_scope_name, &this->stack_offset).str();
 
 		// write a halt statement before our function definitions
 		this->sina_file << "\t" << "halt" << std::endl;
@@ -1022,7 +1306,7 @@ std::stringstream Compiler::compile_to_stringstream(bool include_builtins) {
 	// any other common header information will go here
 
 	// write the body of the program
-	generated_asm << this->compile_to_sinasm(this->AST, current_scope).str();
+	generated_asm << this->compile_to_sinasm(this->AST, current_scope, current_scope_name, &this->stack_offset).str();
 
 	// write a halt statement before our function definitions
 	generated_asm << "\t" << "halt" << std::endl;
@@ -1049,7 +1333,10 @@ Compiler::Compiler(std::istream& sin_file, uint8_t _wordsize, std::vector<std::s
 
 	this->next_available_addr = 0;	// start our next available address at 0
 
+	this->stack_offset = 0;
+
 	this->strc_number = 0;
+	this->branch_number = 0;
 
 	this->_DATA_PTR = 0;	// our first address for variables is $00
 	this->AST_index = 0;	// we use "get_next_statement()" every time, which increments before returning; as such, start at -1 so we fetch the 0th item, not the 1st, when we first call the compilation function
@@ -1073,6 +1360,7 @@ Compiler::Compiler() {
 	this->current_scope_name = "global";
 	this->next_available_addr = 0;
 	this->strc_number = 0;
+	this->branch_number = 0;
 	this->_DATA_PTR = 0;
 	this->object_file_names = {};
 }

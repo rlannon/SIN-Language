@@ -15,6 +15,7 @@ enum stmt_type {
 	ALLOCATION,
 	ASSIGNMENT,
 	RETURN_STATEMENT,
+	IF_THEN,
 	IF_THEN_ELSE,
 	WHILE_LOOP,
 	DEFINITION,
@@ -140,14 +141,23 @@ public:
 	ReturnStatement();
 };
 
-class IfThenElse : public Statement
-{
+class IfThen : public Statement {
+protected:
 	std::shared_ptr<Expression> condition;
 	std::shared_ptr<StatementBlock> if_branch;
-	std::shared_ptr<StatementBlock> else_branch;
 public:
 	std::shared_ptr<Expression> get_condition();
 	std::shared_ptr<StatementBlock> get_if_branch();
+
+	IfThen(std::shared_ptr<Expression> condition_ptr, std::shared_ptr<StatementBlock> if_branch_ptr);
+	IfThen();
+};
+
+class IfThenElse : public IfThen
+{
+	std::shared_ptr<StatementBlock> else_branch;
+public:
+
 	std::shared_ptr<StatementBlock> get_else_branch();
 
 	IfThenElse(std::shared_ptr<Expression> condition_ptr, std::shared_ptr<StatementBlock> if_branch_ptr, std::shared_ptr<StatementBlock> else_branch_ptr);

@@ -13,7 +13,7 @@ This file also contains lists of the opcodes so that the opcode can be easily re
 */
 
 // the number of instructions in our machine language
-const size_t num_instructions = 55;
+const size_t num_instructions = 57;
 
 // general instructions
 const int HALT = 0xFF;	// halt
@@ -38,6 +38,8 @@ const int STOREY = 0x08;	// store y at address
 // STATUS register
 const int CLC = 0x09;	// clear carry bit
 const int SEC = 0x0A;	// set carry bit
+const int CLN = 0x4A;	// clear the negative bit
+const int SEN = 0x4B;	// set the negative bit
 
 // ALU-related instructions
 const int ADDCA = 0x10;	// add register A (with carry) to some value, storing the result in A
@@ -97,9 +99,9 @@ const int PLB = 0x35;	// pop a value off the stack and store in B
 const int SYSCALL = 0x36;
 
 // some constants for opcode comparisons (used for maintainability)
-const std::string instructions_list[num_instructions] = { "HALT", "NOOP", "LOADA", "STOREA", "LOADB", "STOREB", "LOADX", "STOREX", "LOADY", "STOREY", "CLC", "SEC", "ADDCA", "SUBCA", "ANDA", "ORA", "XORA", "LSR", "LSL", "ROR", "ROL", "INCA", "DECA", "INCX", "DECX", "INCY", "DECY", "INCSP", "DECSP", "CMPA", "CMPB", "CMPX", "CMPY", "JMP", "BRNE", "BREQ", "BRGT", "BRLT", "BRZ", "JSR", "RTS", "TBA", "TXA", "TYA", "TSPA", "TAB", "TAX", "TAY", "TASP", "PHA", "PLA", "PHB", "PLB", "SYSCALL" };
-const int opcodes[num_instructions] = { HALT, NOOP, LOADA, STOREA, LOADB, STOREB, LOADX, STOREX, LOADY, STOREY, CLC, SEC, ADDCA, SUBCA, ANDA, ORA, XORA, LSR, LSL, ROR, ROL, INCA, DECA, INCX, DECX, INCY, DECY, INCSP, DECSP, CMPA, CMPB, CMPX, CMPY, JMP, BRNE, BREQ, BRGT, BRLT, BRZ, JSR, RTS, TBA, TXA, TYA, TSPA, TAB, TAX, TAY, TASP, PHA, PLA, PHB, PLB, SYSCALL };
+const std::string instructions_list[num_instructions] = { "HALT", "NOOP", "LOADA", "STOREA", "LOADB", "STOREB", "LOADX", "STOREX", "LOADY", "STOREY", "CLC", "SEC", "CLN", "SEN", "ADDCA", "SUBCA", "ANDA", "ORA", "XORA", "LSR", "LSL", "ROR", "ROL", "INCA", "DECA", "INCX", "DECX", "INCY", "DECY", "INCSP", "DECSP", "CMPA", "CMPB", "CMPX", "CMPY", "JMP", "BRNE", "BREQ", "BRGT", "BRLT", "BRZ", "JSR", "RTS", "TBA", "TXA", "TYA", "TSPA", "TAB", "TAX", "TAY", "TASP", "PHA", "PLA", "PHB", "PLB", "SYSCALL" };
+const int opcodes[num_instructions] = { HALT, NOOP, LOADA, STOREA, LOADB, STOREB, LOADX, STOREX, LOADY, STOREY, CLC, SEC, CLN, SEN, ADDCA, SUBCA, ANDA, ORA, XORA, LSR, LSL, ROR, ROL, INCA, DECA, INCX, DECX, INCY, DECY, INCSP, DECSP, CMPA, CMPB, CMPX, CMPY, JMP, BRNE, BREQ, BRGT, BRLT, BRZ, JSR, RTS, TBA, TXA, TYA, TSPA, TAB, TAX, TAY, TASP, PHA, PLA, PHB, PLB, SYSCALL };
 
 // opcodes which do not need values to follow them (and, actually, for which proceeding values are forbidden)
-const size_t num_standalone_opcodes = 25;
-const int standalone_opcodes[num_standalone_opcodes] = { HALT, NOOP, CLC, SEC, INCA, DECA, INCX, DECX, INCY, DECY, INCSP, DECSP, RTS, TBA, TXA, TYA, TSPA, TAB, TAX, TAY, TASP, PHA, PLA, PHB, PLB };
+const size_t num_standalone_opcodes = 27;
+const int standalone_opcodes[num_standalone_opcodes] = { HALT, NOOP, CLC, SEC, CLN, SEN, INCA, DECA, INCX, DECX, INCY, DECY, INCSP, DECSP, RTS, TBA, TXA, TYA, TSPA, TAB, TAX, TAY, TASP, PHA, PLA, PHB, PLB };

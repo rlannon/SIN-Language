@@ -16,3 +16,26 @@ GLOBAL VARIABLES
 	Global variables will be declared using the '@rs' assembler directive.
 
 	Note that string types are special; they must be dynamically allocated
+
+CONDITIONALS:
+	Conditionals require labels for branching purposes. They use the following naming convention:
+		__<scope name>_<scope level>__ITE_<number>__
+	For example, this code:
+		if (myFeast) {
+			...
+		}
+
+		if (something) {
+			if (something_else) {
+				...
+			}
+		}
+	Would produce the following labels:
+		__global_0__ITE_0__:
+		__global_0__ITE_1__:
+		__global_1__ITE_2__:
+
+	The ITE number continually increments as we add ITE statements. This is only used so that we can keep the various branches separate in the assembler/linker
+
+	Variables local to conditionals will also have different scope names. The convention is as follows:
+		<parent scope>__ITE_<branch number>

@@ -5,6 +5,19 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+2/13 commit to Compiler:
+
+- Implemented preliminary code to compile if/then/else (ITE) statements
+- Added a routine to handle unary expression evaluation
+- Added 'sen' and 'cln' (set negative and clear negative) opcodes into SINASM
+- Modified some operations within the SINVM to set flags when said operations are performed (e.g., addition can now set the N flag)
+- Local variables are now assigned correctly in the assign function -- rather than using the symbol name, it uses the stack (as it is supposed to)
+- Branching to an ITE now updates the scope name to be __ITE_<branch number>
+- If branches can now be created without an accompanying else branch in the compiler
+- More comments and minor other fixes
+
+--------------------------------------------------------------------------------------------
+
 1/21 commit to Compiler:
 
 - There was a previously unknown bug in the Parser wherein dereferenced pointers would result in errors if they were a part of a binary tree. This has been resolved; in parseExpression, we were returning the dereference object directly rather than passing it into maybeBinary, which is what we should have been doing.
