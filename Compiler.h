@@ -65,7 +65,7 @@ class Compiler
 	*/
 	Type get_expression_data_type(std::shared_ptr<Expression> to_evaluate);
 
-	void produce_binary_tree(Binary bin_exp);	// writes a binary tree to the file
+	std::stringstream produce_binary_tree(Binary bin_exp, unsigned int line_number, size_t* stack_offset = nullptr, size_t max_offset = 0);	// writes a binary tree to the file
 	std::stringstream produce_unary_tree(Unary unary_exp, unsigned int line_number, size_t* stack_offset = nullptr, size_t max_offset = 0);	// writes the evaluation of a unary value
 	void multiply(Binary mult_exp);	// write a multiplication statement
 	void divide(Binary div_exp);	// write a division statement

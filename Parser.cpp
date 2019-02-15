@@ -289,7 +289,7 @@ std::shared_ptr<Statement> Parser::parseStatement() {
 						}
 						// we also do not require an else clause in ITE statements -- so just create the statement with an empty clause if that's the case
 						else {
-							stmt = std::make_shared<IfThen>(condition, std::make_shared<StatementBlock>(if_branch));
+							stmt = std::make_shared<IfThenElse>(condition, std::make_shared<StatementBlock>(if_branch));
 							stmt->set_line_number(current_lex.line_number);
 							return stmt;
 						}

@@ -259,6 +259,7 @@ void Assembler::construct_symbol_table() {
 
 		// check its type
 		if (is_mnemonic(line_data)) {
+			// standalone opcodes take one byte
 			if (is_standalone(this->get_opcode(line_data))) {
 				// increment by one; standalone opcodes are 1 byte in length
 				this->current_byte += 1;
@@ -273,9 +274,14 @@ void Assembler::construct_symbol_table() {
 				if (line_data_vector[1][0] == '.') {
 					std::string label_name = line_data_vector[1];
 				}
+				// sometimes, we don't have any data bytes but we do have the addressing mode -- for operations where the operand is A or B
+				else if ((line_data_vector[1].length() == 1) && (regex_match(line_data_vector[1], std::regex("[abAB]")))) {
+					continue;	// if the operand is A or B, don't add offsets in
+				}
 
+				// if our operand is not A or B, we need to increment by the wordsize in bytes
 				// next, skip ahead in our byte count by the wordsize (in bytes)
-				int offset = this->_WORDSIZE / 8;	// _WORDSIZE / 8 is the number of bytes to offset
+				int offset = (this->_WORDSIZE / 8);	// _WORDSIZE / 8 is the number of bytes to offset
 				this->current_byte += offset;
 
 				continue;
@@ -703,7 +709,7 @@ std::vector<uint8_t> Assembler::assemble()
 						}
 					}
 					// if the value is a label
-					else if ((isalpha(value[0])) || (value[0] == '.') || (value[0] == '_') && !std::regex_match(value, std::regex("[ab]", std::regex_constants::icase))) {
+					else if ((isalpha(value[0]) || (value[0] == '.') || (value[0] == '_')) && !std::regex_match(value, std::regex("[abAB]", std::regex_constants::icase))) {
 						// first, make sure that the label does not end with a colon; throw an error if it does
 						if (value[value.size() - 1] == ':') {
 							throw std::runtime_error("Labels must not be followed by colons when referenced (line " + std::to_string(this->line_counter) + ")");
@@ -749,15 +755,15 @@ std::vector<uint8_t> Assembler::assemble()
 						}
 					}
 					// if the value is 'B'
-					else if ((value.size() == 1) && (value == "B" || value == "b")) {
-						// make sure it is an addition or subtraction
-						if ((opcode == ADDCA) || (opcode == SUBCA)) {
+					else if ((value.size() == 1) && ((value == "B") || (value == "b"))) {
+						// make sure it is an addition, subtraction, or comparison to A
+						if ((opcode == ADDCA) || (opcode == SUBCA) || (opcode == CMPA)) {
 							addressing_mode = addressingmode::reg_b;
 							program_data.push_back(addressing_mode);
 						}
 						// if it's not, throw an exception
 						else {
-							throw std::runtime_error("May only use 'B' as an operand with addition and subtraction instructions (line " + std::to_string(this->line_counter) + ")");
+							throw std::runtime_error("May only use 'B' as an operand with ADDCA, SUBCA, and CMPA instructions (line " + std::to_string(this->line_counter) + ")");
 						}
 					}
 					// otherwise, carry on normally

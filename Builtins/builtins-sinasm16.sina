@@ -1,0 +1,253 @@
+; BUILTINS-SINASM16.SINA
+
+; Copyright 2019 Riley Lannon / truffly
+; github.com/truffly
+
+; 'builtins' is a library to implement all of SIN's built-in functions for compiled SIN in the SIN VM. 
+; This file is, by default, included in /all/ compiled SIN programs; removing this file from the include will remove access to SIN's I/O functions, and the 'asm' keyword will be required in order to do any sort of standard I/O in a SIN application.
+; Further, removing this file will remove the ability to do multiplication, division, and other calculations or functions that are more complex than a few instructions, as the implementations for those within the compiler are included in this file.
+
+; Note that this file is written for a VM of the following specifications:
+;   - SIN VM version 1
+;   - 16-bit mode
+; other versions of the versions will require different file versions if they have different memory layouts
+
+
+
+;;;;;;;;;;      Some Definitions    ;;;;;;;;;;
+
+@db __INPUT_BUFFER_START_ADDR ($1400)   ; defines where our input buffer should start
+@rs __INPUT_LEN     ; a global variable holding the length of the last input
+@rs __MATH_TEMP     ; a temp variable for mathematical functions 
+
+
+
+;;;;;;;;;;      MULTIPLICATION      ;;;;;;;;;;
+
+; This function is not implemented via a SIN wrapper, it is written in pure SINASM. It is done this way for shorter code 
+; The function takes three arguments, pushed in this order -- left, right, and mode (therefore, pulled in reverse order)
+; The mode word simply has two bits of value -- whether we are doing signed arithmetic, and whether we are doing floating point arithmetic
+;;  If the mode is float, it is signed arithmetic by default -- you cannot do unsigned floating point arithmetic in SIN 
+
+; Note: the values should /already be in the registers/ when this subroutine is invoked
+
+__builtins_multiply:
+    ; check the mode
+    pha ; push the A register for now
+    tya ; move the mode into A
+    anda #$01   ; check to see if the floating point bit is raised
+    cmpa #$01
+    breq .mult_float
+    
+    tya ; re-get the mode
+    anda #$02   ; check to see if we have signed arithmetic
+    cmpa #$02
+    breq .mult_signed
+
+.mult_unsigned:
+    ;; First, pull the value we pushed onto the stack back into A 
+    pla 
+    ;; Now, store B at __MATH_TEMP 
+    storeb __MATH_TEMP
+    tab ; make sure A and B have the same register values so we can use 'ADDCA B'
+    loadx #$00
+    cmpx __MATH_TEMP
+    brne .unsigned_loop ;; if B is not 0, go to the loop 
+    ;; if B is equal to 0, we must set A equal to 0 as well
+    loada #$00
+    jmp .mult_done
+.unsigned_loop:
+    addca B
+    incx
+    cmpx __MATH_TEMP
+    brne .unsigned_loop
+    ;; if they are equal, we are done
+    jmp .mult_done
+
+.mult_signed:
+    pla ; pull back into the A register
+    ;; TODO: signed multiplication
+    jmp .mult_done 
+
+.mult_float:
+    pla ; pull back into the A register
+    ;; TODO: floating-point multiplication
+    jmp .mult_done 
+
+.mult_done:
+    rts ; we are done -- return 
+
+
+
+
+;;;;;;;;;;          DIVISION        ;;;;;;;;;;
+
+__builtins_divide:
+    rts
+
+
+
+;;;;;;;;;;          EQUALS          ;;;;;;;;;;
+
+__builtins_equal:
+    cmpa B
+    breq .true
+.false:
+    loada #$00
+    jmp .done
+.true:
+    loada #$01
+.done:
+    rts
+
+
+
+;;;;;;;;;;          LESS            ;;;;;;;;;;
+
+__builtins_less:
+    cmpa B
+    brlt .true
+.false:
+    loada #$00
+    jmp .done 
+.true:
+    loada #$01
+.done:
+    rts
+
+
+
+;;;;;;;;;;      GREATER             ;;;;;;;;;;
+
+__builtins_greater:
+    cmpa B
+    brgt .true 
+.false:
+    loada #$00
+    jmp .done 
+.true:
+    loada #$01
+.done:
+    rts 
+
+
+
+;;;;;;;;;;       GT / EQUALS        ;;;;;;;;;;
+
+__builtins_gt_equal:
+    cmpa B
+    breq .true
+
+    cmpa B
+    brgt .true
+
+.false:
+    loada #$00
+    jmp .done
+
+.true:
+    loada #$01
+
+.done:
+    rts
+
+
+
+;;;;;;;;;;       LT / EQUALS        ;;;;;;;;;;
+
+__builtins_lt_equal:
+    cmpa B
+    breq .true
+
+    cmpa B
+    brlt .true
+
+.false:
+    loada #$00
+    jmp .done
+
+.true:
+    loada #$01
+
+.done:
+    rts
+
+
+
+;;;;;;;;;;      PRINT (STDOUT)      ;;;;;;;;;;
+
+;; SIN's built-in print function operates like so:
+;;  a) pulls the format specifier to A, and transfers that value to register X
+;;  b) pulls the address of the string literal from the stack, storing in B
+;;  c) pulls the length (in bytes) of the string literal from the stack, storing in A
+;;  d) if X is a valid format specifier:
+;;      1) uses a syscall instruction to print a number of bytes contained in A of data at the address contained in B, of the format given by the value in X
+;;        2) otherwise, prints an error and quits
+
+__builtins_print:
+    ;; arguments are the string length, the string address, and the format; length is always pushed first
+    ;; the stack pointer should point to the next word after our format -- we pull in reverse order
+    
+    pla
+    tax     ; store the format number in x
+    
+    plb     ; pull the address of the string literal
+    pla     ; pull the length
+    
+    cmpx #$14
+    breq .ascii
+    
+    cmpx #$15
+    breq .noformat
+
+.error:
+    ; if we arrive here, we have an invalid format specifier 
+    @db __PRINT_ERR_MSG_INVALIDFORMAT (**** Aborting Execution; error in: BUILTINS::PRINT: Invalid format specifier! Remember that the X register must contain the format specifier for the SYSCALL instruction! ****)
+    
+    loada #$AE
+    loadb #__PRINT_ERR_MSG_INVALIDFORMAT
+    
+    syscall #$14
+    
+    halt
+    
+.ascii:
+    syscall #$14    ; print the data to the screen
+    rts
+    
+.noformat:
+    syscall #$15
+    rts
+
+
+
+;;;;;;;;;;      INPUT (STDIN)      ;;;;;;;;;;
+
+;; the SIN built-in input function:
+;;  a) prints a given message
+;;  b) loads the address for the input buffer into the B register
+;;  c) uses a syscall instruction to get data from the standard input, storing it at the address in B onward
+;;  d) stores the length of what was read (in bytes) in the A register
+
+input:
+    ;; arguments are the string length, the string address, and the format
+    
+    ;; since we are just doing a print before our input, we can call the print function here
+    jsr print
+    
+    ;; now, our message has printed, we can read the data
+    
+    loadb __INPUT_BUFFER_START_ADDR     ; use the macro for our buffer start address
+    syscall #$13
+    
+    ; now, the A register holds the length (in bytes) of the data that was read -- so store it in our gobal variable
+    storea __INPUT_LEN
+    
+    ;; return from the subroutine
+    rts
+
+
+
+;;;;;;;;;;      FILE I/O        ;;;;;;;;;;
+
+; yet to be implemented...

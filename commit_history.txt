@@ -5,6 +5,14 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+2/15 commit to Compiler:
+
+- Began process of implementing mathematical functions via the 'builtins' library
+- There was previously a bug where labels were not given the correct address upon assembly; this was due to an oversight in the code where using a register addressing mode would increment the byte counter too far (instead of incrementing it two bytes for 'ADDCA B', it would add the wordsize on top, resulting in overshooting the destination by 2 bytes per register-operand instruction). This has been fixed.
+- Began process of implementing binary tree evaluation, though it is far from complete. There are still many known bugs and incomplete sections of the code.
+
+--------------------------------------------------------------------------------------------
+
 2/13 commit to Compiler:
 
 - Implemented preliminary code to compile if/then/else (ITE) statements

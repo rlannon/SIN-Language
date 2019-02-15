@@ -74,12 +74,100 @@ Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate)
 	return Type();
 }
 
-void Compiler::produce_binary_tree(Binary bin_exp) {
+std::stringstream Compiler::produce_binary_tree(Binary bin_exp, unsigned int line_number, size_t* stack_offset, size_t max_offset)
+{
+	std::stringstream binary_ss;
+
 	Binary current_tree = bin_exp;
 	Expression* left_exp = current_tree.get_left().get();
 	Expression* right_exp = current_tree.get_right().get();
 
-	// TODO: devise binary tree algorithm
+	/*
+	
+	The binary evaluation algorithm works as follows:
+		1. Look at the right operand
+			A. If the operand is another binary tree, call the function recursively on that tree (returning to step one)
+		2. Now look at the left-hand operand
+			A. If the operand is another binary tree, call the function recursively on that tree (returning to step one)
+		3. Evaluate the expression
+			A. If the result was the left_exp, keep it in A
+			B. If the result was the right_exp, transfer it to B
+	
+	*/
+
+	if (right_exp->get_expression_type() == BINARY) {
+		// cast to Binary expression type and call this function recursively
+		Binary* right_operand = dynamic_cast<Binary*>(right_exp);
+		binary_ss << this->produce_binary_tree(*right_operand, line_number, stack_offset, max_offset).str();
+	}
+
+	// once we reach this, the right expression is not binary
+	if (right_exp->get_expression_type() == LVALUE || right_exp->get_expression_type() == LITERAL) {
+		binary_ss << this->fetch_value(bin_exp.get_right(), line_number, stack_offset, max_offset).str();
+		binary_ss << "\t" << "tab" << std::endl;
+	}
+	else if (right_exp->get_expression_type() == UNARY) {
+		Unary* unary_operand = dynamic_cast<Unary*>(right_exp);
+		binary_ss << this->produce_unary_tree(*unary_operand, line_number, stack_offset, max_offset).str();
+		binary_ss << "\t" << "tab" << std::endl;
+	}
+
+	if (left_exp->get_expression_type() == BINARY) {
+		// first, we must push the B register
+		binary_ss << "\t" << "phb" << std::endl;
+
+		// cast to Binary and call this function recursively
+		Binary* left_operand = dynamic_cast<Binary*>(left_exp);
+		binary_ss << this->produce_binary_tree(*left_operand, line_number, stack_offset, max_offset).str();
+
+		// now we can pull the b register again
+		binary_ss << "\t" << "plb" << std::endl;
+	}
+	else {
+		if (left_exp->get_expression_type() == LVALUE || left_exp->get_expression_type() == LITERAL) {
+			binary_ss << this->fetch_value(bin_exp.get_left(), line_number, stack_offset, max_offset).str();
+		}
+		else if (right_exp->get_expression_type() == UNARY) {
+			Unary* unary_operand = dynamic_cast<Unary*>(left_exp);
+			binary_ss << this->produce_unary_tree(*unary_operand, line_number, stack_offset, max_offset).str();
+		}
+	}
+
+	// now, we can perform the operation on the two operands
+	if (bin_exp.get_operator() == PLUS) {
+		binary_ss << "\t" << "addca b" << std::endl;
+	}
+	else if (bin_exp.get_operator() == MINUS) {
+		binary_ss << "\t" << "subca b" << std::endl;
+	}
+	else if (bin_exp.get_operator() == MULT) {
+		binary_ss << "\t" << "jsr __builtins_multiply" << std::endl;
+	}
+	else if (bin_exp.get_operator() == DIV) {
+		binary_ss << "\t" << "jsr __builtins_divide" << std::endl;
+	}
+	else if (bin_exp.get_operator() == EQUAL) {
+		binary_ss << "\t" << "jsr __builtins_equal" << std::endl;
+	}
+	else if (bin_exp.get_operator() == GREATER) {
+		binary_ss << "\t" << "jsr __builtins_greater" << std::endl;
+	}
+	else if (bin_exp.get_operator() == GREATER_OR_EQUAL) {
+		binary_ss << "\t" << "jsr __builtins_gt_equal" << std::endl;
+	}
+	else if (bin_exp.get_operator() == NOT_EQUAL) {
+		binary_ss << "\t" << "jsr __builtins_equal" << std::endl;
+		binary_ss << "\t" << "xora #$01" << std::endl;	// simply perform an equal operation and flip the bit
+	}
+	else if (bin_exp.get_operator() == LESS) {
+		binary_ss << "\t" << "jsr __builtins_less" << std::endl;
+	}
+	else if (bin_exp.get_operator() == LESS_OR_EQUAL) {
+		binary_ss << "\t" << "jsr __builtins_lt_equal" << std::endl;
+	}
+	// TODO: add AND/OR binary operators
+	
+	return binary_ss;
 }
 
 std::stringstream Compiler::produce_unary_tree(Unary unary_exp, unsigned int line_number, size_t* stack_offset, size_t max_offset)
@@ -457,6 +545,14 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		else {
 			throw std::runtime_error(("Variable '" + variable_symbol->name + "' referenced before assignment (line " + std::to_string(line_number) + ")").c_str());
 		}
+	}
+	else if (to_fetch->get_expression_type() == UNARY) {
+		Unary* unary_expression = dynamic_cast<Unary*>(to_fetch.get());
+		fetch_ss << this->produce_unary_tree(*unary_expression, line_number, stack_offset, max_offset).str();
+	}
+	else if (to_fetch->get_expression_type() == BINARY) {
+		Binary* binary_expression = dynamic_cast<Binary*>(to_fetch.get());
+		fetch_ss << this->produce_binary_tree(*binary_expression, line_number, stack_offset, max_offset).str();
 	}
 
 	return fetch_ss;
@@ -963,7 +1059,6 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t * stack_offset,
 	// a stringstream for our generated asm
 	std::stringstream ite_ss;
 
-	size_t previous_offset = *stack_offset;	// the previous stack offset -- we will be sure to move the stack pointer back to this point once we are done
 	std::string parent_scope_name = this->current_scope_name;	// the parent scope name must be restored once we exit the scope
 
 	/*
@@ -1007,11 +1102,12 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t * stack_offset,
 
 		Unary* unary_condition = dynamic_cast<Unary*>(ite_statement.get_condition().get());	// cast the condition to the unary type
 		ite_ss << this->produce_unary_tree(*unary_condition, ite_statement.get_line_number()).str();	// put the evaluated unary expression in A
-
-
 	}
 	else if (ite_statement.get_condition()->get_expression_type() == BINARY) {
 		// TODO: evaluate binary conditions
+	}
+	else {
+		throw std::runtime_error("**** Compiler Error: Invalid expression type in conditional statement! (line " + std::to_string(ite_statement.get_line_number()) + ")");
 	}
 
 	// now that we have evaluated the condition, the result of said evaluation is in A; all we need to do is see whether the result was 0 or not -- if so, jump to the end of the 'if' branch
@@ -1083,7 +1179,7 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t * stack_offset,
 	ite_ss << std::endl;
 
 	// finally, increment the branch number, decrement the scope level, write our ".done" label, and delete all local variables to the branches so we cannot reference them outside the ite
-	this->branch_number++;
+	this->branch_number += 1;
 	this->current_scope -= 1;
 	this->current_scope_name = parent_scope_name;	// reset the scope name to the parent scope
 
@@ -1109,12 +1205,73 @@ std::stringstream Compiler::while_loop(WhileLoop while_statement, size_t * stack
 			decrement the SP to the bottom of the previous stack frame
 		Jump back to the evaluation statement and continue from step 1
 		
-	
+	Note: See the ite( ... ) function for an explanation of how the compiler evaluates conditional expressions
+
 	*/
 	
 	std::stringstream while_ss;
 
-	// TODO: add the while loop compiler code
+	std::string parent_scope_name = this->current_scope_name;
+	std::string while_label_name = "__" + this->current_scope_name + "_" + std::to_string(this->current_scope) + "__WHILE_" + std::to_string(this->branch_number) + "__";
+
+	// put the scope label at the top
+	while_ss << while_label_name << ":" << std::endl;
+
+	if ((while_statement.get_condition()->get_expression_type() == LITERAL) || (while_statement.get_condition()->get_expression_type() == LVALUE)) {
+		while_ss << this->fetch_value(while_statement.get_condition(), while_statement.get_line_number(), stack_offset, max_offset).str();
+	}
+	else if (while_statement.get_condition()->get_expression_type() == UNARY) {
+		Unary* unary_expression = dynamic_cast<Unary*>(while_statement.get_condition().get());
+		while_ss << this->produce_unary_tree(*unary_expression, while_statement.get_line_number(), stack_offset, max_offset).str();
+	}
+	else if (while_statement.get_condition()->get_expression_type() == BINARY) {
+		// TODO: produce binary tree
+	}
+	else {
+		throw std::runtime_error("**** Compiler Error: Invalid expression type in conditional expression (line " + std::to_string(while_statement.get_line_number()) + ")");
+	}
+
+	// now that A holds the result of the expression, use a compare statement; if the condition evaluates to false, we are done
+	while_ss << "\t" << "cmpa #$00" << std::endl;
+	while_ss << "\t" << "breq " << while_label_name << ".done" << std::endl;
+
+	// increment our stack pointer to the end of the current stack frame
+	this->incsp_to_stack_frame(stack_offset, max_offset);
+	// increment the branch and scope numbers and update the scope name
+	this->current_scope += 1;
+	this->current_scope_name = parent_scope_name + "__WHILE_" + std::to_string(branch_number);
+
+	// put in the label for our loop
+	while_ss << while_label_name << ".loop:" << std::endl;
+
+	// compile the branch code
+	while_ss << this->compile_to_sinasm(*while_statement.get_branch().get(), this->current_scope, this->current_scope_name, stack_offset, max_offset).str();
+
+	// unwind the stack and delete local variables
+	for (size_t i = *stack_offset; i > max_offset; i--) {
+		*stack_offset -= 1;
+		while_ss << "\t" << "incsp" << std::endl;
+	}
+	// we now need to delete all variables that were local to this if/else block -- iterate through the symbol table, removing the symbols in this local scope
+	std::vector<Symbol>::iterator it = this->symbol_table.symbols.begin();
+	while (it != this->symbol_table.symbols.end()) {
+		// only delete variables that are in the scope with the same name AND of the same level
+		if ((it->scope_name == this->current_scope_name) && (it->scope_level == this->current_scope)) {
+			it = this->symbol_table.symbols.erase(it);	// delete the element at the iterator position, and continue without incrementing the iterator
+		}
+		else {
+			it++;	// only increment the iterator if we do not have a deletion
+		}
+	}
+
+	// now, jump back to the condition
+	while_ss << "\t" << "jmp " << while_label_name << std::endl;
+
+	// now that we are done, put the done label in and perform our clean-up
+	while_ss << while_label_name << ".done:" << std::endl;
+	this->branch_number += 1;
+	this->current_scope_name = parent_scope_name;
+	this->current_scope -= 1;
 
 	return while_ss;
 }
@@ -1197,16 +1354,8 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 
 			// TODO: write return routine
 		}
-		else if ((statement_type == IF_THEN_ELSE) || (statement_type == IF_THEN)) {
-			IfThenElse ite_statement;
-			
-			if (statement_type == IF_THEN) {
-				IfThen if_then_stmt = *dynamic_cast<IfThen*>(current_statement);
-				ite_statement = IfThenElse(if_then_stmt.get_condition(), if_then_stmt.get_if_branch());
-			}
-			else {
-				ite_statement = *dynamic_cast<IfThenElse*>(current_statement);
-			}
+		else if (statement_type == IF_THEN_ELSE) {
+			IfThenElse ite_statement = *dynamic_cast<IfThenElse*>(current_statement);
 
 			if (stack_offset && max_offset) {
 				sinasm_ss << this->ite(ite_statement, stack_offset, max_offset).str();
@@ -1221,7 +1370,15 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 		else if (statement_type == WHILE_LOOP) {
 			WhileLoop* while_statement = dynamic_cast<WhileLoop*>(current_statement);
 
-			// TODO: compile while loop
+			if (stack_offset && max_offset) {
+				sinasm_ss << this->while_loop(*while_statement, stack_offset, max_offset).str();
+			}
+			else if (stack_offset) {
+				sinasm_ss << this->while_loop(*while_statement, stack_offset).str();
+			}
+			else {
+				sinasm_ss << this->while_loop(*while_statement).str();
+			}
 		}
 		else if (statement_type == DEFINITION) {
 			Definition* def_statement = dynamic_cast<Definition*>(current_statement);
