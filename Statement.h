@@ -115,17 +115,14 @@ public:
 
 class Assignment : public Statement
 {
-	LValue lvalue;
+	std::shared_ptr<Expression> lvalue;
 	std::shared_ptr<Expression> rvalue_ptr;
 public:
-	// get the variable names / expression types
-	std::string get_lvalue_name();
-	exp_type get_rvalue_expression_type();
-
 	// get the variables / expressions themselves
-	LValue get_lvalue();
+	std::shared_ptr<Expression> get_lvalue();
 	std::shared_ptr<Expression> get_rvalue();
 
+	Assignment(std::shared_ptr<Expression> lvalue, std::shared_ptr<Expression> rvalue);
 	Assignment(LValue lvalue, std::shared_ptr<Expression> rvalue);
 	Assignment();
 };

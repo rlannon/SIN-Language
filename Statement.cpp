@@ -131,17 +131,7 @@ Allocation::Allocation() {
 
 /*******************	ASSIGNMENT CLASS	********************/
 
-
-std::string Assignment::get_lvalue_name() {
-	return this->lvalue.getValue();
-}
-
-exp_type Assignment::get_rvalue_expression_type() {
-	Expression* _rval = dynamic_cast<Expression*>(rvalue_ptr.get());
-	return _rval->get_expression_type();
-}
-
-LValue Assignment::get_lvalue() {
+std::shared_ptr<Expression> Assignment::get_lvalue() {
 	return this->lvalue;
 }
 
@@ -149,9 +139,13 @@ std::shared_ptr<Expression> Assignment::get_rvalue() {
 	return this->rvalue_ptr;
 }
 
-Assignment::Assignment(LValue lvalue, std::shared_ptr<Expression> rvalue) : lvalue(lvalue) {
+Assignment::Assignment(std::shared_ptr<Expression> lvalue, std::shared_ptr<Expression> rvalue) : lvalue(lvalue), rvalue_ptr(rvalue) {
 	Assignment::statement_type = ASSIGNMENT;
-	Assignment::rvalue_ptr = rvalue;
+}
+
+Assignment::Assignment(LValue lvalue, std::shared_ptr<Expression> rvalue) : rvalue_ptr(rvalue) {
+	this->lvalue = std::make_shared<LValue>(lvalue);
+	this->statement_type = ASSIGNMENT;
 }
 
 Assignment::Assignment() {

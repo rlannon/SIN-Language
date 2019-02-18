@@ -299,7 +299,11 @@ void Interpreter::executeStatement(Statement* statement, std::list<InterpreterSy
 
 // evaluate an assignment statement
 void Interpreter::evaluateAssignment(Assignment assign, std::list<InterpreterSymbol>* vars_table) {
-	LValue lvalue = assign.get_lvalue();
+	LValue lvalue;
+	if (assign.get_lvalue()->get_expression_type() == LVALUE) {
+		lvalue = *dynamic_cast<LValue*>(assign.get_lvalue().get());
+	}
+
 	Expression* RValue = dynamic_cast<Expression*>(assign.get_rvalue().get());
 
 	Type lvalue_type = this->getVar(lvalue.getValue(), vars_table).data_type;
@@ -334,7 +338,7 @@ void Interpreter::evaluateVoidFunction(Call func_to_evaluate, std::list<Interpre
 
 	// create instances of all our local function variables
 	if (func_to_evaluate.get_args_size() == func_def.get_args().size()) {
-		for (int i = 0; i < func_def.get_args().size(); i++) {
+		for (size_t i = 0; i < func_def.get_args().size(); i++) {
 			Allocation* current_arg = dynamic_cast<Allocation*>(func_def.get_args()[i].get());
 			Expression* arg = dynamic_cast<Expression*>(func_to_evaluate.get_arg(i).get());
 			std::tuple<Type, std::string> argv;
@@ -370,7 +374,7 @@ std::tuple<Type, std::string> Interpreter::evaluateValueReturningFunction(ValueR
 
 	// create instances of all our local function variables
 	if (func_to_evaluate.get_args_size() == func_def.get_args().size()) {
-		for (int i = 0; i < func_def.get_args().size(); i++) {
+		for (size_t i = 0; i < func_def.get_args().size(); i++) {
 			Allocation* current_arg = dynamic_cast<Allocation*>(func_def.get_args()[i].get());
 			Expression* arg = dynamic_cast<Expression*>(func_to_evaluate.get_arg(i).get());
 			std::tuple<Type, std::string> argv;
@@ -393,7 +397,7 @@ std::tuple<Type, std::string> Interpreter::evaluateValueReturningFunction(ValueR
 		throw InterpreterException("Number of arguments in function call is not equal to number in definition!", 3140);
 	}
 
-	int i = 0;
+	size_t i = 0;
 	StatementBlock* procedure = dynamic_cast<StatementBlock*>(func_def.get_procedure().get());
 	Expression* return_exp = new Expression();
 	while (i < procedure->statements_list.size()) {
@@ -589,7 +593,7 @@ std::tuple<Type, std::string> Interpreter::evaluateExpression(Expression* expr, 
 			}
 			else if (operand_type == FLOAT) {
 				// get the value, change its sign, and return it
-				float converted_operand_value = std::stoi(operand_value);
+				float converted_operand_value = std::stof(operand_value);
 				converted_operand_value = -converted_operand_value;
 				operand_value = std::to_string(converted_operand_value);
 				return std::make_tuple(operand_type, operand_value);

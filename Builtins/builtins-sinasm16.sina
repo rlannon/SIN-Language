@@ -33,29 +33,40 @@
 
 __builtins_multiply:
     ; check the mode
-    pha ; push the A register for now
-    tya ; move the mode into A
-    anda #$01   ; check to see if the floating point bit is raised
-    cmpa #$01
+    tay ; move A to Y for now
+    tstatusa
+
+    anda #%00000100   ; check to see if the floating point bit is raised
+    cmpa #%00000100
     breq .mult_float
     
-    tya ; re-get the mode
-    anda #$02   ; check to see if we have signed arithmetic
-    cmpa #$02
+    tstatusa ; re-get the mode
+    anda #%10000000   ; check to see if we have signed arithmetic
+    cmpa #%10000000
     breq .mult_signed
 
 .mult_unsigned:
-    ;; First, pull the value we pushed onto the stack back into A 
-    pla 
-    ;; Now, store B at __MATH_TEMP 
-    storeb __MATH_TEMP
-    tab ; make sure A and B have the same register values so we can use 'ADDCA B'
+    ;; First, transfer B to A to X and decrement it
+    tba 
+    tax
+    decx 
+
+    ;; Next, pull the value we pushed onto the stack back into A, and move that value into B as well 
+    tya
+    tab ; this allows us to use 'ADDCA B'
+
+    ;; Now, store X at __MATH_TEMP -- this will be our comparator
+    storex __MATH_TEMP
+
+    ;; Set up our comparison for the loop 
     loadx #$00
     cmpx __MATH_TEMP
     brne .unsigned_loop ;; if B is not 0, go to the loop 
+
     ;; if B is equal to 0, we must set A equal to 0 as well
     loada #$00
     jmp .mult_done
+
 .unsigned_loop:
     addca B
     incx
@@ -65,13 +76,36 @@ __builtins_multiply:
     jmp .mult_done
 
 .mult_signed:
-    pla ; pull back into the A register
-    ;; TODO: signed multiplication
+    ; First, take the two's complement of B to get the positive value
+    tba 
+    xora #$FFFF
+    ; however, we skip adding #$01 to it because we want it to be one less than the value (for the loop)
+    tax
+    storex __MATH_TEMP  ; store the value in __MATH_TEMP
+
+    tya ; pull back into the A register
+    tab ; store in B so we can use 'ADDCA B'
+
+    loadx #$00
+    cmpx __MATH_TEMP
+    brne .signed_next   ; as long as B isn't 0, go to the loop
+
+    ; if B is 0, A is 0 as well
+    loada #$00
+    jmp .mult_done
+
+.signed_next:
+    ; use JSR .unsigned_loop -- since .mult_done is just an RTS, it will return us here, which will jump back to .mult_done and return us from the mult function
+    jsr .unsigned_loop
+
+    ; now, all we need to do is take two's complement of the answer
+    xora #$FFFF
+    addca #$01
+
     jmp .mult_done 
 
 .mult_float:
-    pla ; pull back into the A register
-    ;; TODO: floating-point multiplication
+    tya ; pull back into the A register
     jmp .mult_done 
 
 .mult_done:

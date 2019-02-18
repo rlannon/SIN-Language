@@ -15,7 +15,7 @@ std::shared_ptr<Statement> Compiler::get_current_statement(StatementBlock AST)
 }
 
 
-Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate)
+Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate, bool get_subtype)
 {
 	/*
 	
@@ -40,7 +40,13 @@ Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate)
 		if (this->symbol_table.is_in_symbol_table(lvalue_exp->getValue(), this->current_scope_name)) {
 			// get the variable's symbol and return the type
 			Symbol* lvalue_symbol = this->symbol_table.lookup(lvalue_exp->getValue(), this->current_scope_name);
-			return lvalue_symbol->type;
+
+			if (get_subtype && (lvalue_symbol->sub_type != NONE)) {
+				return lvalue_symbol->sub_type;
+			}
+			else {
+				return lvalue_symbol->type;
+			}
 		}
 		else {
 			throw std::runtime_error("Cannot find '" + lvalue_exp->getValue() + "' in symbol table (perhaps it is out of scope?)");
@@ -62,19 +68,17 @@ Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate)
 	else if (to_evaluate->get_expression_type() == BINARY) {
 		Binary* binary_exp = dynamic_cast<Binary*>(to_evaluate.get());
 
-		return this->get_expression_data_type(binary_exp->get_left());
+		Type return_type = this->get_expression_data_type(binary_exp->get_left(), true);
+		return return_type;
 	}
 	else if (to_evaluate->get_expression_type() == DEREFERENCED) {
 		Dereferenced* dereferenced_exp = dynamic_cast<Dereferenced*>(to_evaluate.get());
 
-		// we technically don't NEED recursion here, but we can use it
-		return this->get_expression_data_type(dereferenced_exp->get_ptr_shared());
+		return this->get_expression_data_type(dereferenced_exp->get_ptr_shared(), true);
 	}
-	
-	return Type();
 }
 
-std::stringstream Compiler::produce_binary_tree(Binary bin_exp, unsigned int line_number, size_t* stack_offset, size_t max_offset)
+std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int line_number, size_t* stack_offset, size_t max_offset, Type right_type)
 {
 	std::stringstream binary_ss;
 
@@ -98,17 +102,34 @@ std::stringstream Compiler::produce_binary_tree(Binary bin_exp, unsigned int lin
 	if (right_exp->get_expression_type() == BINARY) {
 		// cast to Binary expression type and call this function recursively
 		Binary* right_operand = dynamic_cast<Binary*>(right_exp);
-		binary_ss << this->produce_binary_tree(*right_operand, line_number, stack_offset, max_offset).str();
+		binary_ss << this->evaluate_binary_tree(*right_operand, line_number, stack_offset, max_offset, right_type).str();
+		binary_ss << "\t" << "tab" << std::endl;
 	}
 
 	// once we reach this, the right expression is not binary
-	if (right_exp->get_expression_type() == LVALUE || right_exp->get_expression_type() == LITERAL) {
+	if (right_exp->get_expression_type() == LVALUE || right_exp->get_expression_type() == LITERAL || right_exp->get_expression_type() == DEREFERENCED) {
+		// update right_type
+		right_type = this->get_expression_data_type(current_tree.get_right());
+
 		binary_ss << this->fetch_value(bin_exp.get_right(), line_number, stack_offset, max_offset).str();
 		binary_ss << "\t" << "tab" << std::endl;
 	}
 	else if (right_exp->get_expression_type() == UNARY) {
 		Unary* unary_operand = dynamic_cast<Unary*>(right_exp);
-		binary_ss << this->produce_unary_tree(*unary_operand, line_number, stack_offset, max_offset).str();
+
+		right_type = get_expression_data_type(unary_operand->get_operand());
+
+		// signed arithmetic will depend on the evaluation of a unary expression; if there are no unaries, there is no sign
+		// if the quality is "minus", set the "N" flag
+		if (unary_operand->get_operator() == MINUS) {
+			binary_ss << "\t" << "tay" << std::endl;
+			binary_ss << "\t" << "tstatusa" << std::endl;
+			binary_ss << "\t" << "ora #%10000000" << std::endl;
+			binary_ss << "\t" << "tastatus" << std::endl;
+			binary_ss << "\t" << "tya" << std::endl;
+		}
+
+		binary_ss << this->evaluate_unary_tree(*unary_operand, line_number, stack_offset, max_offset).str();
 		binary_ss << "\t" << "tab" << std::endl;
 	}
 
@@ -118,19 +139,37 @@ std::stringstream Compiler::produce_binary_tree(Binary bin_exp, unsigned int lin
 
 		// cast to Binary and call this function recursively
 		Binary* left_operand = dynamic_cast<Binary*>(left_exp);
-		binary_ss << this->produce_binary_tree(*left_operand, line_number, stack_offset, max_offset).str();
+		binary_ss << this->evaluate_binary_tree(*left_operand, line_number, stack_offset, max_offset, right_type).str();
 
 		// now we can pull the b register again
 		binary_ss << "\t" << "plb" << std::endl;
 	}
 	else {
-		if (left_exp->get_expression_type() == LVALUE || left_exp->get_expression_type() == LITERAL) {
-			binary_ss << this->fetch_value(bin_exp.get_left(), line_number, stack_offset, max_offset).str();
+		// check to make sure the type matches
+		Type left_type = this->get_expression_data_type(current_tree.get_left());
+
+		if (left_type == right_type) {
+			if (left_exp->get_expression_type() == LVALUE || left_exp->get_expression_type() == LITERAL || left_exp->get_expression_type() == DEREFERENCED) {
+				binary_ss << this->fetch_value(bin_exp.get_left(), line_number, stack_offset, max_offset).str();
+			}
+			else if (right_exp->get_expression_type() == UNARY) {
+				Unary* unary_operand = dynamic_cast<Unary*>(left_exp);
+				binary_ss << this->evaluate_unary_tree(*unary_operand, line_number, stack_offset, max_offset).str();
+			}
 		}
-		else if (right_exp->get_expression_type() == UNARY) {
-			Unary* unary_operand = dynamic_cast<Unary*>(left_exp);
-			binary_ss << this->produce_unary_tree(*unary_operand, line_number, stack_offset, max_offset).str();
+		else {
+			throw std::runtime_error("Types in binary expression do not match! (line " + std::to_string(line_number) + ")");
 		}
+	} 
+
+	// set STATUS bits accordingly
+	if (right_type == FLOAT) {
+		binary_ss << "\n\t" << "; Set 'float' bit in STATUS" << std::endl;
+		binary_ss << "\t" << "tay" << std::endl;
+		binary_ss << "\t" << "tstatusa" << std::endl;
+		binary_ss << "\t" << "ora #%00000100" << std::endl;	// set the F bit in STATUS
+		binary_ss << "\t" << "tastatus" << std::endl;
+		binary_ss << "\t" << "tya" << std::endl << std::endl;
 	}
 
 	// now, we can perform the operation on the two operands
@@ -170,7 +209,7 @@ std::stringstream Compiler::produce_binary_tree(Binary bin_exp, unsigned int lin
 	return binary_ss;
 }
 
-std::stringstream Compiler::produce_unary_tree(Unary unary_exp, unsigned int line_number, size_t* stack_offset, size_t max_offset)
+std::stringstream Compiler::evaluate_unary_tree(Unary unary_exp, unsigned int line_number, size_t* stack_offset, size_t max_offset)
 {
 	std::stringstream unary_ss;
 
@@ -230,7 +269,7 @@ std::stringstream Compiler::produce_unary_tree(Unary unary_exp, unsigned int lin
 	else if (unary_exp.get_operand()->get_expression_type() == UNARY) {
 		// Our unary operand can be another unary expression -- if so, simply get the operand and call this function recursively
 		Unary* unary_operand = dynamic_cast<Unary*>(unary_exp.get_operand().get());	// cast to appropriate type
-		unary_ss << this->produce_unary_tree(*unary_operand, line_number, stack_offset, max_offset).str();	// add the produced code to our code here
+		unary_ss << this->evaluate_unary_tree(*unary_operand, line_number, stack_offset, max_offset).str();	// add the produced code to our code here
 	}
 
 	// Now that the A register contains the value of the operand
@@ -498,15 +537,22 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 	}
 	else if (to_fetch->get_expression_type() == DEREFERENCED) {
 		// TODO: get the value of a dereferenced variable
-		Dereferenced* dereferenced_exp = dynamic_cast<Dereferenced*>(to_fetch.get());
-
-		// check to make sure the variable is in the symbol table
-		if (this->symbol_table.is_in_symbol_table(dereferenced_exp->get_ptr().getValue(), this->current_scope_name)) {
-			// use recursion to get the lvalue
-			return this->fetch_value(dereferenced_exp->get_ptr_shared(), line_number, stack_offset, max_offset);
+		Dereferenced* dereferenced_exp = dynamic_cast<Dereferenced*>(to_fetch.get());;
+		
+		if (dereferenced_exp->get_ptr_shared()->get_expression_type() == DEREFERENCED) {
+			fetch_ss << this->fetch_value(dereferenced_exp->get_ptr_shared(), line_number, stack_offset, max_offset).str();
 		}
 		else {
-			throw std::runtime_error("Could not find '" + dereferenced_exp->get_ptr().getValue() + "' in symbol table; perhaps it is out of scope? (line " + std::to_string(line_number) + ")");
+			// check to make sure the variable is in the symbol table
+			if (this->symbol_table.is_in_symbol_table(dereferenced_exp->get_ptr().getValue(), this->current_scope_name)) {
+				// if the variable is in the symbol table, only use recursion if the type is still a pointer
+				Symbol* referenced_var = this->symbol_table.lookup(dereferenced_exp->get_ptr().getValue(), this->current_scope_name);
+				fetch_ss << "\t" << "loady #$00" << std::endl;
+				fetch_ss << "\t" << "loada (" << referenced_var->name << "), y" << std::endl;
+			}
+			else {
+				throw std::runtime_error("Could not find '" + dereferenced_exp->get_ptr().getValue() + "' in symbol table; perhaps it is out of scope? (line " + std::to_string(line_number) + ")");
+			}
 		}
 	}
 	else if (to_fetch->get_expression_type() == ADDRESS_OF) {
@@ -548,11 +594,11 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 	}
 	else if (to_fetch->get_expression_type() == UNARY) {
 		Unary* unary_expression = dynamic_cast<Unary*>(to_fetch.get());
-		fetch_ss << this->produce_unary_tree(*unary_expression, line_number, stack_offset, max_offset).str();
+		fetch_ss << this->evaluate_unary_tree(*unary_expression, line_number, stack_offset, max_offset).str();
 	}
 	else if (to_fetch->get_expression_type() == BINARY) {
 		Binary* binary_expression = dynamic_cast<Binary*>(to_fetch.get());
-		fetch_ss << this->produce_binary_tree(*binary_expression, line_number, stack_offset, max_offset).str();
+		fetch_ss << this->evaluate_binary_tree(*binary_expression, line_number, stack_offset, max_offset).str();
 	}
 
 	return fetch_ss;
@@ -781,11 +827,35 @@ std::stringstream Compiler::define(Definition definition_statement) {
 
 
 std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stack_offset) {
+
+	// TODO: add support for double/triple/quadruple/etc. ref pointers
+
 	// create a stringstream to which we will write write our generated code
 	std::stringstream assignment_ss;
+	LValue* assignment_lvalue;
+	std::string var_name = "";
 
-	// first, check to see if the variable is in the symbol table
-	std::string var_name = assignment_statement.get_lvalue_name();
+	if (assignment_statement.get_lvalue()->get_expression_type() == LVALUE) {
+		assignment_lvalue = dynamic_cast<LValue*>(assignment_statement.get_lvalue().get());
+		var_name = assignment_lvalue->getValue();
+	}
+	else if (assignment_statement.get_lvalue()->get_expression_type() == DEREFERENCED) {
+		std::shared_ptr<Expression> assign_lvalue = assignment_statement.get_lvalue();
+		while (assign_lvalue->get_expression_type() == DEREFERENCED) {
+			Dereferenced* deref = dynamic_cast<Dereferenced*>(assign_lvalue.get());
+			assign_lvalue = deref->get_ptr_shared();
+		}
+		if (assign_lvalue->get_expression_type() == LVALUE) {
+			assignment_lvalue = dynamic_cast<LValue*>(assign_lvalue.get());
+			var_name = assignment_lvalue->getValue();
+		}
+		else {
+			throw std::runtime_error("Error in parsing deref tree!");
+		}
+	}
+	else {
+		throw std::runtime_error("Cannot use expression of this type in lvalue! (line " + std::to_string(assignment_statement.get_line_number()) + ")");
+	}
 
 	if (this->symbol_table.is_in_symbol_table(var_name, this->current_scope_name)) {
 		// get the symbol information
@@ -821,7 +891,15 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 						// global variables
 						assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset).str() << std::endl;	// TODO: add max_offset in the fetch in assignment?
 
-						assignment_ss << "\t" << "storea " << var_name << std::endl;
+						if (assignment_statement.get_lvalue()->get_expression_type() != DEREFERENCED) {
+							assignment_ss << "\t" << "storea " << var_name << std::endl;
+						}
+						else {
+							assignment_ss << "\t" << "loady #$00" << std::endl;
+							Dereferenced* dereferenced_value = dynamic_cast<Dereferenced*>(assignment_statement.get_lvalue().get());
+							assignment_ss << this->fetch_value(dereferenced_value->get_ptr_shared(), assignment_statement.get_line_number(), stack_offset).str();
+							assignment_ss << "\t" << "storea (" << var_name << ", y)" << std::endl;
+						}
 					}
 					else {
 						// adjust the stack pointer to point to the appropriate variable
@@ -836,7 +914,20 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 
 						// now, the stack pointer is pointing to the correct memory address for the variable
 						assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset).str() << std::endl;
-						assignment_ss << "\t" << "pha" << std::endl;
+
+						if (assignment_statement.get_lvalue()->get_expression_type() != DEREFERENCED) {
+							assignment_ss << "\t" << "pha" << std::endl;
+							*stack_offset += 1;	// when we push a variable, we need to update our stack offset
+						}
+						else {
+							// we can use indexed indirect addressing with the x register to determine where the data should be stored
+							assignment_ss << "\t" << "decsp" << std::endl;
+							assignment_ss << "\t" << "tab" << std::endl;
+							assignment_ss << "\t" << "pla" << std::endl;
+							assignment_ss << "\t" << "tax" << std::endl;
+							assignment_ss << "\t" << "tba" << std::endl;
+							assignment_ss << "\t" << "storea ($00, X)" << std::endl;
+						}
 					}
 
 					// update the symbol's "defined" status
@@ -1101,7 +1192,7 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t * stack_offset,
 		// Unary expressions follow similar rules as literals -- see the above list for reference
 
 		Unary* unary_condition = dynamic_cast<Unary*>(ite_statement.get_condition().get());	// cast the condition to the unary type
-		ite_ss << this->produce_unary_tree(*unary_condition, ite_statement.get_line_number()).str();	// put the evaluated unary expression in A
+		ite_ss << this->evaluate_unary_tree(*unary_condition, ite_statement.get_line_number()).str();	// put the evaluated unary expression in A
 	}
 	else if (ite_statement.get_condition()->get_expression_type() == BINARY) {
 		// TODO: evaluate binary conditions
@@ -1222,7 +1313,7 @@ std::stringstream Compiler::while_loop(WhileLoop while_statement, size_t * stack
 	}
 	else if (while_statement.get_condition()->get_expression_type() == UNARY) {
 		Unary* unary_expression = dynamic_cast<Unary*>(while_statement.get_condition().get());
-		while_ss << this->produce_unary_tree(*unary_expression, while_statement.get_line_number(), stack_offset, max_offset).str();
+		while_ss << this->evaluate_unary_tree(*unary_expression, while_statement.get_line_number(), stack_offset, max_offset).str();
 	}
 	else if (while_statement.get_condition()->get_expression_type() == BINARY) {
 		// TODO: produce binary tree
@@ -1483,7 +1574,7 @@ Compiler::Compiler(std::istream& sin_file, uint8_t _wordsize, std::vector<std::s
 	Parser parser(lex);
 	
 	// get the AST from the parser
-	this->AST = parser.createAST();
+	this->AST = parser.create_ast();
 
 	this->current_scope = 0;	// start at the global scope
 	this->current_scope_name = "global";

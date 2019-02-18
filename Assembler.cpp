@@ -267,6 +267,12 @@ void Assembler::construct_symbol_table() {
 				// it's a standalone instruction, so we don't need the rest of the line
 				continue;
 			}
+			// instructions using the A or B addressing modes use 2 bytes
+			else if ((line_data_vector[1].length() == 1) && (regex_match(line_data_vector[1], std::regex("[abAB]")))) {
+				this->current_byte += 2;
+				continue;
+			}
+			// all other instructions use 2 bytes + the word size (for data)
 			else {
 				this->current_byte += 2;	// increment the current byte by 2; one for the mnemonic itself and one for the addressing mode
 
@@ -274,12 +280,7 @@ void Assembler::construct_symbol_table() {
 				if (line_data_vector[1][0] == '.') {
 					std::string label_name = line_data_vector[1];
 				}
-				// sometimes, we don't have any data bytes but we do have the addressing mode -- for operations where the operand is A or B
-				else if ((line_data_vector[1].length() == 1) && (regex_match(line_data_vector[1], std::regex("[abAB]")))) {
-					continue;	// if the operand is A or B, don't add offsets in
-				}
 
-				// if our operand is not A or B, we need to increment by the wordsize in bytes
 				// next, skip ahead in our byte count by the wordsize (in bytes)
 				int offset = (this->_WORDSIZE / 8);	// _WORDSIZE / 8 is the number of bytes to offset
 				this->current_byte += offset;
@@ -696,8 +697,16 @@ std::vector<uint8_t> Assembler::assemble()
 						// now that we have the addressing mode, push it to program data
 						program_data.push_back(addressing_mode);
 
-						// now, get the integer value of the address
-						int address = get_integer_value(value);
+						int address = 0;
+						// as long as we don't have a symbol, get the integer value of the address
+						if (!isalpha(value[0])) {
+							address = get_integer_value(value);
+						}
+						// if we do have a symbol, add it to the relocation table
+						else {
+							std::string symbol_name = value.substr(0, value.find(')'));
+							this->relocation_table.push_back(std::make_tuple(symbol_name, this->current_byte));
+						}
 
 						// increment the current byte according to _WORDSIZE
 						this->current_byte += this->_WORDSIZE / 8;	// increment 1 per byte in the _WORDSIZE

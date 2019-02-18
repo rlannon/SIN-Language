@@ -63,10 +63,10 @@ class Compiler
 	The following functions returns the type of the expression passed into it once fully evaluated
 	Note unary and binary trees are not fully parsed, only the first left-hand operand is returned -- any errors in type will be found once the tree or unary value is actually evaluated
 	*/
-	Type get_expression_data_type(std::shared_ptr<Expression> to_evaluate);
+	Type get_expression_data_type(std::shared_ptr<Expression> to_evaluate, bool get_subtype = false);
 
-	std::stringstream produce_binary_tree(Binary bin_exp, unsigned int line_number, size_t* stack_offset = nullptr, size_t max_offset = 0);	// writes a binary tree to the file
-	std::stringstream produce_unary_tree(Unary unary_exp, unsigned int line_number, size_t* stack_offset = nullptr, size_t max_offset = 0);	// writes the evaluation of a unary value
+	std::stringstream evaluate_binary_tree(Binary bin_exp, unsigned int line_number, size_t* stack_offset = nullptr, size_t max_offset = 0, Type right_type = NONE);	// writes a binary tree to the file
+	std::stringstream evaluate_unary_tree(Unary unary_exp, unsigned int line_number, size_t* stack_offset = nullptr, size_t max_offset = 0);	// writes the evaluation of a unary value
 	void multiply(Binary mult_exp);	// write a multiplication statement
 	void divide(Binary div_exp);	// write a division statement
 

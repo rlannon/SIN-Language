@@ -349,6 +349,9 @@ void SINVM::execute_instruction(int opcode) {
 		case TSPA:
 			REG_A = (int)SP;	// SP holds the address to which the next element in the stack will go, and is incremented every time something is pushed, and decremented every time something is popped
 			break;
+		case TSTATUSA:
+			REG_A = (int)STATUS;
+			break;
 		case TAB:
 			REG_B = REG_A;
 			break;
@@ -360,6 +363,9 @@ void SINVM::execute_instruction(int opcode) {
 			break;
 		case TASP:
 			SP = (size_t)REG_A;
+			break;
+		case TASTATUS:
+			STATUS = (uint8_t)REG_A;
 			break;
 
 		// The stack
@@ -388,7 +394,7 @@ void SINVM::execute_instruction(int opcode) {
 			this->PC++;
 			int syscall_number = this->get_data_of_wordsize();
 
-			// TODO: execute system call accordingly
+			// TODO: implement more syscalls
 
 			// If our syscall is for stdin or stdout
 			if (syscall_number == 0x13) {
@@ -564,17 +570,27 @@ int SINVM::execute_load() {
 	// indirect indexed
 	else if (addressing_mode == addressingmode::indirect_indexed_x) {
 		// indirect indexed addressing with the X register
+
+		// get the data at the address indicated by data_to_load
+		int data_in_memory = this->get_data_from_memory(data_to_load);
+		// now go to that address + reg_x and return the data there
+		return this->get_data_from_memory(data_in_memory + REG_X);
 	}
 	else if (addressing_mode == addressingmode::indirect_indexed_y) {
 		// indirect indexed addressing with the Y register
+		int data_in_memory = this->get_data_from_memory(data_to_load);
+		return this->get_data_from_memory(data_in_memory + REG_Y);
 	}
 
 	// indexed indirect
 	else if (addressing_mode == addressingmode::indexed_indirect_x) {
-
+		// go to data_to_load + X, get the value there, go to that address, and return the value stored there
+		int data_in_memory = this->get_data_from_memory(data_to_load + REG_X);
+		return this->get_data_from_memory(data_in_memory);
 	}
 	else if (addressing_mode == addressingmode::indexed_indirect_y) {
-
+		int data_in_memory = this->get_data_from_memory(data_to_load + REG_Y);
+		return this->get_data_from_memory(data_in_memory);
 	}
 }
 
@@ -601,14 +617,26 @@ void SINVM::execute_store(int reg_to_store) {
 	// act according to the addressing mode
 	if ((addressing_mode != addressingmode::immediate) && (addressing_mode != addressingmode::reg_a) && (addressing_mode != addressingmode::reg_b)) {
 		// add the appropriate register if it is an indexed addressing mode
-		if (addressing_mode == addressingmode::x_index) {
+		if ((addressing_mode == addressingmode::x_index) || (addressing_mode == addressingmode::indirect_indexed_x)) {
+			// since we will index after, we can include indirect indexed here -- if it's indirect, we simply get that value before we index
+			if (addressing_mode == addressingmode::indirect_indexed_x) {
+				memory_address = this->get_data_from_memory(memory_address);
+			}
+			// index the memory address with X
 			memory_address += this->REG_X;
 		}
-		else if (addressing_mode == addressingmode::y_index) {
+		else if ((addressing_mode == addressingmode::y_index) || (addressing_mode == addressingmode::indirect_indexed_y)) {
+			if (addressing_mode == addressingmode::indirect_indexed_y) {
+				memory_address = this->get_data_from_memory(memory_address);
+			}
 			memory_address += this->REG_Y;
 		}
-
-		// TODO: add support for indirect addressing
+		else if (addressing_mode == addressingmode::indexed_indirect_x) {
+			memory_address = this->get_data_from_memory(memory_address + REG_X);
+		}
+		else if (addressing_mode == addressingmode::indexed_indirect_y) {
+			memory_address = this->get_data_from_memory(memory_address + REG_Y);
+		}
 
 		// use our store_in_memory function
 		this->store_in_memory(memory_address, reg_to_store);
@@ -628,11 +656,17 @@ int SINVM::get_data_from_memory(int address) {
 	int data = 0;
 	int wordsize_bytes = this->_WORDSIZE / 8;
 
-	for (int i = 0; i < (wordsize_bytes - 1); i++) {
-		data += this->memory[address + i];
-		data = data << (i * 8);
+	size_t memory_index = 0;
+	size_t bitshift_index = (wordsize_bytes - 1);
+
+	while (memory_index < (wordsize_bytes - 1)) {
+		data += this->memory[address + memory_index];
+		data <<= (bitshift_index * 8);
+
+		memory_index++;
+		bitshift_index--;
 	}
-	data += this->memory[address + (wordsize_bytes - 1)];
+	data += this->memory[address + memory_index];
 
 	return data;
 }
@@ -884,6 +918,7 @@ void SINVM::execute_jmp() {
 		this->PC = memory_address - 1;
 		return;
 	}
+	// indexed
 	else if (addressing_mode == addressingmode::x_index) {
 		memory_address += REG_X;
 		this->PC = memory_address - 1;
@@ -892,9 +927,41 @@ void SINVM::execute_jmp() {
 		memory_address += REG_Y;
 		this->PC = memory_address - 1;
 	}
+	// indexed indirect modes -- first, add the register value, get the value stored at that address, then use that fetched value as the memory location
+	else if (addressing_mode == addressingmode::indexed_indirect_x) {
+		size_t address_of_value = memory_address + REG_X;
+		
+		memory_address = this->get_data_from_memory(address_of_value);
+		this->PC = memory_address - 1;
+	}
+	else if (addressing_mode == addressingmode::indexed_indirect_y) {
+		size_t address_of_value = memory_address + REG_Y;
 
-	// TODO: Indirect indexed ?
+		memory_address = this->get_data_from_memory(address_of_value);
+		this->PC = memory_address - 1;
+	}
+	// indirect indexed modes -- first, get the value stored at memory_address, then add the register index
+	else if (addressing_mode == addressingmode::indirect_indexed_x) {
+		/*
+		
+		First, we update the value of memory_address -- e.g., if memory_address was $1234:
+			if $1234, $1235 had the value $23, $C0, we would get the value at $1234 -- $23C0
+			then, we set memory_address to that value -- 23C0
+			then, we add the value at the X or Y register
+		
+		*/
+		
+		memory_address = this->get_data_from_memory(memory_address);
+		memory_address += REG_X;
 
+		this->PC = memory_address - 1;
+	}
+	else if (addressing_mode == addressingmode::indirect_indexed_y) {
+		memory_address = this->get_data_from_memory(memory_address);
+		memory_address += REG_Y;
+
+		this->PC = memory_address - 1;
+	}
 	else {
 		throw std::runtime_error("Invalid addressing mode for JMP instruction.");
 	}
@@ -1070,9 +1137,9 @@ void SINVM::_debug_values() {
 	std::cout << "\t\tSTATUS: $" << std::hex << (int)this->STATUS << std::endl << std::endl;
 
 	std::cout << "Memory: " << std::endl;
-	for (int i = 0; i < 10; i++) {
-		// display the first 10 addresses from each of the first two pages of memory
-		std::cout << "\t$000" << i << ": $" << std::hex << (int)this->memory[i] << "\t\t$0" << 256 + i << ": $" << (int)this->memory[256 + i] << std::endl;
+	for (int i = 0; i < 0xFF; i++) {
+		// display the first two pages of memory
+		std::cout << "\t$000" << i << ": $" << std::hex << (int)this->memory[i] << "\t\t$0" << 0x100 + i << ": $" << (int)this->memory[256 + i] << std::endl;
 	}
 
 	std::cout << std::endl;

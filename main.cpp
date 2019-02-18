@@ -243,7 +243,7 @@ int main (int argc, char** argv[]) {
 					Interpreter* interpreter = new Interpreter();	// allocate on the heap because it's a big object
 
 					// run the AST produced by the parser
-					interpreter->interpretAST(parser.createAST());
+					interpreter->interpretAST(parser.create_ast());
 
 					if (debug_values) {
 						std::cout << "Done. Press enter to exit..." << std::endl;

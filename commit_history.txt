@@ -5,6 +5,30 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+2/17 commit to Compiler:
+
+- Fixed more bugs in the builtins mathematical functions and implemented signed multiplication
+	(bugs being not getting the correct number when multiplying)
+- Fixed a bug in the SINVM code that resulted in an incorrect number being outputted in the load_data_from_memory() function -- switched from a for loop with one index variable to a while loop with 2, which solved the issue
+- Fixed some bugs relating to pointers in the compiler -- specifically:
+	1) the compiler would report a type match error when the rvalue of an assignment had a pointer in it (specifically in binary rvalue expressions)
+	2) the compiler could not properly use dereferenced pointer values as it did not distinguish between pointers and non-pointer lvalues; it can now properly make such references as the indirect addressing modes exist in the assembler
+- Fixed pointer dereferences in Parser -- double-ref pointers ended up breaking in the Parser; this is no longer the case, as the method implemented here seems to be more robust than the previous way
+- Refactored the Parser to use many functions instead of a single large one to parse statements
+- Changed the "lvalue" variable under Statement::Assignment to be a shared pointer rather than an LValue; this allows the left hand expression to be a dereferenced pointer
+- Implemented indexed indirect and indirect indexed addressing modes in the VM
+- Added an 'f' flag in the STATUS register to indicate a floating point number
+- Cleaned up code, added more comments
+- Addressed some of the compiler warnings, particularly those about signed/unsigned mismatches (there was a discrepancy between types -- most notably, comparing size_t and int)
+
+Notes:
+	- The code currently cannot handle double ref pointers; this is something that will be added in future. Single ref pointers are OK so far
+	- There are yet more bugs to fix and there will always be more code to clean up; future commits will include more fixes, refactoring, and comments
+	- The 'builtins' functions for mathematics are not yet complete; the library will be expanded in future commits
+	- The main function is inefficient and the current methods for use of flags do not work if you wish to use multiple at a time; the main function will therefore be refactored in a future commit to be more modular and efficient.
+
+--------------------------------------------------------------------------------------------
+
 2/15 commit to Compiler:
 
 - Began process of implementing mathematical functions via the 'builtins' library
