@@ -247,7 +247,7 @@ std::shared_ptr<Statement> Parser::parse_statement() {
 		}
 		// Parse a function declaration
 		else if (current_lex.value == "def") {
-			
+			return this->parse_definition(current_lex);
 		}
 		// if none of the keywords were valid, throw an error
 		else {
