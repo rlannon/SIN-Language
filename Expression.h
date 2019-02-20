@@ -5,52 +5,10 @@
 #include <tuple>
 #include <exception>
 
+#include "EnumeratedTypes.h"
 
-// Define our custom types for expressions and statements
 
-enum exp_operator {
-	PLUS,
-	MINUS,
-	MULT,
-	DIV,
-	EQUAL,
-	NOT_EQUAL,
-	GREATER,
-	LESS,
-	GREATER_OR_EQUAL,
-	LESS_OR_EQUAL,
-	AND,
-	NOT,
-	OR,
-	NO_OP
-};
-
-const exp_operator translate_operator(std::string op_string);
-
-enum Type {
-	INT,
-	FLOAT,
-	STRING,
-	BOOL,
-	VOID,
-	PTR,
-	RAW8,
-	RAW16,
-	RAW32,
-	NONE
-};
-
-enum exp_type {
-	// although we could continue to use strings for Expression::type, using an enum will ultimately be much easier
-	EXPRESSION_GENERAL,
-	LITERAL,
-	LVALUE,
-	ADDRESS_OF,
-	DEREFERENCED,
-	BINARY,
-	UNARY,
-	VALUE_RETURNING_CALL
-};
+const exp_operator translate_operator(std::string op_string);	// given the string name for an exp_operator, returns that exp_operator
 
 const int num_types = 11;
 

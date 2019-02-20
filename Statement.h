@@ -6,21 +6,7 @@
 #include <sstream>
 
 #include "Expression.h"
-
-
-// use an enum to track statement types instead of strings
-enum stmt_type {
-	STATEMENT_GENERAL,
-	INCLUDE,
-	ALLOCATION,
-	ASSIGNMENT,
-	RETURN_STATEMENT,
-	IF_THEN_ELSE,
-	WHILE_LOOP,
-	DEFINITION,
-	CALL,
-	INLINE_ASM
-};
+#include "EnumeratedTypes.h"
 
 
 // Statement is the base class for all statements
@@ -92,7 +78,7 @@ class Allocation : public Statement
 	Type subtype;	// the subtype
 	std::string value;
 
-	std::string quality;	// the "quality" of the variable (defaults to "none", but can be const, etc)
+	SymbolQuality quality;	// the "quality" of the variable (defaults to "none", but can be const, etc)
 
 	// If we have an alloc-define statement, we will need:
 	bool initialized;	// whether the variable was defined upon allocation
@@ -104,12 +90,12 @@ public:
 	static std::string get_var_type_as_string(Type to_convert);
 	std::string get_var_name();
 
-	std::string get_quality();
+	SymbolQuality get_quality();
 
 	bool was_initialized();
 	std::shared_ptr<Expression> get_initial_value();
 
-	Allocation(Type type, std::string value, Type subtype = NONE, bool was_initialized = false, std::shared_ptr<Expression> initial_value = std::make_shared<Expression>(), std::string quality = "none");	// use default parameters to allow us to use alloc-define syntax, but we don't have to
+	Allocation(Type type, std::string value, Type subtype = NONE, bool was_initialized = false, std::shared_ptr<Expression> initial_value = std::make_shared<Expression>(), SymbolQuality quality = NO_QUALITY);	// use default parameters to allow us to use alloc-define syntax, but we don't have to
 	Allocation();
 };
 

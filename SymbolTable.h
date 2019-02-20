@@ -5,8 +5,8 @@
 #include <tuple>
 #include <exception>
 
-#include "Expression.h"	// "Type" enum
 #include "Statement.h"
+#include "EnumeratedTypes.h"
 
 /*
 
@@ -22,7 +22,6 @@ The symbol table is structured like so:
 		tells us whether the symbol has been defined, or merely allocated
 
 */
-
 
 typedef struct Symbol
 {
@@ -40,7 +39,7 @@ typedef struct Symbol
 	int scope_level;	// the /level/ of scope within the program; if we are in a loop or ite block, the level will increase
 
 	bool defined;	// tracks whether the variable has been defined; we cannot use it before it is defined
-	std::string quality;	// tells us whether something is const, etc.
+	SymbolQuality quality;	// tells us whether something is const, etc.
 
 	size_t stack_offset;	// used for local symbols to determine the offset (in words) from the initial address of the SP
 
@@ -48,7 +47,7 @@ typedef struct Symbol
 	std::vector<std::shared_ptr<Statement>> formal_parameters;	// used only for function symbols
 
 	// constructor/destructor
-	Symbol(std::string name, Type type, std::string scope_name, int scope_level, Type sub_type = NONE, std::string quality = "none", bool defined = false, std::vector<std::shared_ptr<Statement>> formal_parameters = {});
+	Symbol(std::string name, Type type, std::string scope_name, int scope_level, Type sub_type = NONE, SymbolQuality quality = NO_QUALITY, bool defined = false, std::vector<std::shared_ptr<Statement>> formal_parameters = {});
 	Symbol();
 	~Symbol();
 };
@@ -60,7 +59,8 @@ class SymbolTable
 
 	std::vector<Symbol> symbols;
 
-	void insert(std::string name, Type type, std::string scope_name, int scope_level, Type sub_type = NONE, std::string quality = "none", bool intialized = false, std::vector<std::shared_ptr<Statement>> formal_parameters = {});
+	void insert(std::string name, Type type, std::string scope_name, int scope_level, Type sub_type = NONE, SymbolQuality quality = NO_QUALITY, bool intialized = false, std::vector<std::shared_ptr<Statement>> formal_parameters = {});
+	void insert(Symbol to_add);
 	void define(std::string symbol_name, std::string scope_name);	// list the symbol of a given name in a given scope as defined
 
 	void remove(std::string symbol_name, std::string scope_name, int scope_level);	// removes a symbol from the table; used to remove symbols from the table in ITE branches and loops

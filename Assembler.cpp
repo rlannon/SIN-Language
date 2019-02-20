@@ -932,89 +932,16 @@ std::vector<uint8_t> Assembler::assemble()
 
 
 // disassemble a .sinc file and produce a .sina file of the same name
-// TODO: update for new .sinc format; use labels / macros
 
 void Assembler::disassemble(std::istream& sinc_file, std::string output_file_name) {
 	// create an object for our object file
 	SinObjectFile object_file;
 	object_file.load_sinc_file(sinc_file);
 
-	// load the file data appropriately
 	this->_WORDSIZE = object_file.get_wordsize();
-	std::vector<uint8_t> program_data = object_file.get_program_data();
 
-	// create our output file
-	std::ofstream sina_file;
-	sina_file.open(output_file_name, std::ios::out);
+	// TODO: update disassemble function
 
-	// iterate through our vector of bytes
-	std::vector<uint8_t>::iterator program_iterator = program_data.begin();
-	while (program_iterator != program_data.end()) {
-		int opcode = *program_iterator;
-
-		// if we have a valid opcode
-		if (is_opcode(opcode)) {
-			// if it's a standalone opcode, write it to the file, add a newline character, and continue
-			if (is_standalone(*program_iterator)) {
-				sina_file << get_mnemonic(*program_iterator) << std::endl;
-				program_iterator++;
-				continue;
-			}
-			else {
-				// get the addressing mode
-				program_iterator++;
-				uint8_t addressing_mode = *program_iterator;
-
-				program_iterator++;
-				// get the number of bytes as is appropriate for the wordsize
-				int value = 0;
-				for (int i = this->_WORDSIZE / 8; i > 0; i--) {
-					value += *program_iterator;	// add the value of the program iterator to 'value'
-					value = value << ((i - 1) * 8);	// will shift by 0 the last time
-					program_iterator++;	// increment the iterator
-				}
-
-				// write the opcode
-				sina_file << get_mnemonic(opcode) << " ";
-
-				// write the value, the format of which depends on the addressing mode
-				if (addressing_mode == 0) {
-					sina_file << "$" << std::hex << value << std::endl;
-				}
-				else if (addressing_mode == 1) {
-					sina_file << "$" << std::hex << value << ", X" << std::endl;
-				}
-				else if (addressing_mode == 2) {
-					sina_file << "$" << std::hex << value << ", Y" << std::endl;
-				}
-				else if (addressing_mode == 3) {
-					sina_file << "#$" << std::hex << value << std::endl;
-				}
-				else if (addressing_mode == 4) {
-					// TODO: add 8-bit mode ?
-				}
-				else if (addressing_mode == 5) {
-					sina_file << "($" << std::hex << value << ", X)" << std::endl;
-				}
-				else if (addressing_mode == 6) {
-					sina_file << "($" << std::hex << value << ", Y)" << std::endl;
-				}
-				else if (addressing_mode == 7) {
-					sina_file << "A" << std::endl;
-				}
-
-				continue;
-			}
-		}
-		else {
-			std::stringstream hex_number;
-			hex_number << std::hex << *program_iterator;	// format the decimal number as hex
-			throw std::runtime_error("Unrecognized instruction opcode '$" + hex_number.str() + "'");
-		}
-	}
-
-	// close the file and return to caller
-	sina_file.close();
 	return;
 }
 

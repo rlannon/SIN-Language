@@ -31,10 +31,10 @@ class SINVM
 	uint16_t CALL_SP;	// the call stack pointer -- return addresses are not held on the regular stack; modified only by JSR and RTS
 
 	// create objects for our registers
-	int REG_A;
-	int REG_B;
-	int REG_X;
-	int REG_Y;
+	uint16_t REG_A;
+	uint16_t REG_B;
+	uint16_t REG_X;
+	uint16_t REG_Y;
 
 	/*
 	The status register has the following layout:

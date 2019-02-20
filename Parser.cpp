@@ -383,24 +383,24 @@ std::shared_ptr<Statement> Parser::parse_allocation(lexeme current_lex)
 			// Note: pointers, consts, and RAWs must be treated a little bit differently than other fundamental types
 
 			// in case we have a raw, we need to define these
-			std::string quality = "none";
+			SymbolQuality quality = NO_QUALITY;
 			bool initialized = false;
 			std::shared_ptr<Expression> initial_value = std::make_shared<Expression>();	// empty expression by default
 
 			// check our quality, if any
 			if (var_type.value == "const") {
 				// change the variable quality
-				quality = "const";
+				quality = CONSTANT;
 
 				// get the actual variable type
 				var_type = this->next();
 			}
 			else if (var_type.value == "dynamic") {
-				quality = "dynamic";
+				quality = DYNAMIC;
 				var_type = this->next();
 			}
 			else if (var_type.value == "static") {
-				quality = "static";
+				quality = STATIC;
 				var_type = this->next();
 			}
 
@@ -504,7 +504,7 @@ std::shared_ptr<Statement> Parser::parse_allocation(lexeme current_lex)
 				}
 				else {
 					// if it is NOT alloc-define syntax, we have to make sure the variable is not const before allocating it -- all const variables MUST be defined in the allocation
-					if (quality == "const") {
+					if (quality == CONSTANT) {
 						throw ParserException("Const variables must use alloc-define syntax (e.g., 'alloc const int a: 5').", 000, current_lex.line_number);
 					}
 					else {

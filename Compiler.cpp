@@ -463,13 +463,20 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 			fetch_ss << "\t" << "loada #$" << std::hex << bool_expression_as_int << std::endl;
 		}
 		else if (literal_expression->get_expression_type() == FLOAT) {
-			// copy the bits of the float value into an integer
+			// floats are unique in SIN in that they are the only data type that is larger than the machine's word size; even in 16-bit SIN, floats are 32 bits
+			// copy the bits of the float value into a uint32_t
 			float literal_value = std::stof(literal_expression->get_value());
-			int converted_value;
-			memcpy(&converted_value, &literal_value, sizeof(int));
+			uint32_t converted_value;
+			memcpy(&converted_value, &literal_value, sizeof(uint32_t));
 
-			// write the integer value (in hex notation) into a
-			fetch_ss << "\t" << "loada #$" << std::hex << converted_value << std::endl;
+			// set the F bit in the status register using Y as our temp variable
+			fetch_ss << "\t" << "tay" << std::endl;
+			fetch_ss << "\t" << "tstatusa" << std::endl;
+			fetch_ss << "\t" << "ora #%00000100" << std::endl;
+			fetch_ss << "\t" << "tastatus" << std::endl;
+			fetch_ss << "\t" << "tya" << std::endl;
+
+			// TODO: continue implementing floating-point -- implement a 'half' type? Dynamically allocate floats?
 		}
 		else if (literal_expression->get_expression_type() == STRING) {
 			// first, define a constant for the string using our naming convention
@@ -498,7 +505,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 				// TODO: fetch variable from global scope
 				// all we need to do is use the variable name for globals; however, we need to know the type
 				
-				if (variable_symbol->quality == "dynamic") {
+				if (variable_symbol->quality == DYNAMIC) {
 					// TODO: add support for data types with variable lengths (like strings)
 				}
 				else {
@@ -521,7 +528,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 				}
 
 				// now, the offsets are the same; get the variable's value
-				if (variable_symbol->quality == "dynamic") {
+				if (variable_symbol->quality == DYNAMIC) {
 					// dynamic variables must use pointer dereferencing
 					// TODO: implement dynamic memory
 				}
@@ -564,7 +571,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 
 		// make sure the variable was defined
 		if (variable_symbol->defined) {
-			if (variable_symbol->quality == "dynamic") {
+			if (variable_symbol->quality == DYNAMIC) {
 				// TODO: implement address_of for dynamic memory
 			}
 			else {
@@ -641,57 +648,97 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 
 	std::stringstream allocation_ss;
 
-	std::string symbol_name = allocation_statement.get_var_name();
-	Type symbol_type = allocation_statement.get_var_type();
-	Type symbol_subtype = allocation_statement.get_var_subtype();
-	std::string symbol_quality = allocation_statement.get_quality();
-	bool initialized = allocation_statement.was_initialized();
 	std::shared_ptr<Expression> initial_value = allocation_statement.get_initial_value();
+	Symbol to_allocate(allocation_statement.get_var_name(), allocation_statement.get_var_type(), current_scope_name, current_scope, allocation_statement.get_var_subtype(), allocation_statement.get_quality(), allocation_statement.was_initialized());
 
 	// the 'insert' function will throw an error if the given symbol is already in the table in the same scope
 	// this allows two variables in separate scopes to have different names, but also allows local variables to shadow global ones
 	// local variable names are ALWAYS used over global ones
-	this->symbol_table.insert(symbol_name, symbol_type, current_scope_name, current_scope, symbol_subtype, symbol_quality, initialized);
+	this->symbol_table.insert(to_allocate);
 
 	// if we have a const, we can use the "@db" directive
-	if (symbol_quality == "const") {
+	if (to_allocate.quality == CONSTANT) {
 		// make sure it is initialized
-		if (initialized) {
-
-			// TODO: we seem to be getting the values of expressions and comparing them to symbols a lot before writing assembly -- could we make this process more modular so we can call a function and hide the dirty details of it away? It would make for easier to read and more maintainable code if it's possible
-
+		if (to_allocate.defined) {
 			// get the initial value's expression type and handle it accordingly
 			if (initial_value->get_expression_type() == LITERAL) {
 				// literal values are easy
 				Literal* const_literal = dynamic_cast<Literal*>(initial_value.get());
 
 				// make sure the types match
-				if (symbol_type == const_literal->get_type()) {
+				if (to_allocate.type == const_literal->get_type()) {
 					std::string const_value = const_literal->get_value();
 
 					// use "@db"
-					allocation_ss << "@db " << symbol_name << " (" << const_value << ")" << std::endl;
+					allocation_ss << "@db " << to_allocate.name << " (" << const_value << ")" << std::endl;
 				}
 				else {
-					throw std::runtime_error(("Types do not match (line " + std::to_string(allocation_statement.get_line_number()) + ")").c_str());
+					throw CompilerException("Types do not match", 0, allocation_statement.get_line_number());
 				}
 			}
-			else if (initial_value->get_expression_type() == UNARY) {
-				Unary* const_unary = dynamic_cast<Unary*>(initial_value.get());
-				
-				// TODO: write unary scheme for constants
-				// TODO: allow constants to use the value of an address ?
-			}
-			else if (initial_value->get_expression_type() == BINARY) {
-				// produce a binary tree; the result will be in A
-				// TODO: allow constants to use the value of an address
-			}
 			else if (initial_value->get_expression_type() == LVALUE) {
-				// TODO: write lvalue scheme for constants
+				// dynamic cast to lvalue
+				LValue* initializer_lvalue = dynamic_cast<LValue*>(initial_value.get());
+
+				// look through the symbol table to get the symbol
+				Symbol* initializer_symbol = this->symbol_table.lookup(initializer_lvalue->getValue(), this->current_scope_name);	// this will throw an exception if the object isn't in the symbol table
+
+				// verify the symbol is defined
+				if (initializer_symbol->defined) {
+					// verify the types match -- we don't need to worry about subtypes just yet
+					if (initializer_symbol->type == to_allocate.type) {
+						// different data types must be treated differently
+						if (to_allocate.type == STRING) {
+							// allocate a string constant
+						}
+						// TODO: add the array type here as well, once that is implemented in SIN
+						else {
+							// define the constant using a dummy value
+							allocation_ss << "@db " << to_allocate.name << " (0)" << std::endl;
+
+							// now, use fetch_value to get the value of our lvalue and store the value in A at the constant we have defined
+							this->fetch_value(initial_value, allocation_statement.get_line_number(), stack_offset, *max_offset);
+							allocation_ss << "storea " << to_allocate.name << std::endl;
+						}
+					}
+				}
+				else {
+					throw CompilerException("'" + initializer_symbol->name + "' was referenced before assignment.", 0, allocation_statement.get_line_number());
+				}
 			}
 			else if (initial_value->get_expression_type() == DEREFERENCED) {
-				// TODO: write dereferenced scheme for constants
+				Dereferenced* initializer_deref = dynamic_cast<Dereferenced*>(initial_value.get());
+				// TODO: implement dereferenced constant initializer
 			}
+			else if (initial_value->get_expression_type() == ADDRESS_OF) {
+				// TODO: implement address_of constant initializer
+			}
+			else if (initial_value->get_expression_type() == UNARY) {
+				Unary* initializer_unary = dynamic_cast<Unary*>(initial_value.get());
+				// if the types match
+				if (this->get_expression_data_type(initial_value) == to_allocate.type) {
+					allocation_ss << "@db " << to_allocate.name << " (0)" << std::endl;
+					// get the evaluated unary
+					this->evaluate_unary_tree(*initializer_unary, allocation_statement.get_line_number(), stack_offset, *max_offset);	// evaluate the unary expression
+					allocation_ss << "storea " << to_allocate.name << std::endl;
+				}
+				else {
+					throw CompilerException("Types do not match", 0, allocation_statement.get_line_number());
+				}
+			}
+			else if (initial_value->get_expression_type() == BINARY) {
+				Binary* initializer_binary = dynamic_cast<Binary*>(initial_value.get());
+				// if the types match
+				if (this->get_expression_data_type(initial_value) == to_allocate.type) {
+					allocation_ss << "@db " << to_allocate.name << " (0)";
+					this->evaluate_binary_tree(*initializer_binary, allocation_statement.get_line_number(), stack_offset, *max_offset);
+					allocation_ss << "storea " << to_allocate.name << std::endl;
+				}
+				else {
+					throw CompilerException("Types do not match", 0, allocation_statement.get_line_number());
+				}
+			}
+			// TODO: add other const initializer expressions
 		}
 		else {
 			// this error should have been caught by the parser, but just to be safe...
@@ -702,13 +749,13 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 	// handle all non-const global variables
 	else if (current_scope_name == "global" && current_scope == 0) {
 		// if the variable type is anything with a variable length, we need a different mechanism for handling them
-		if (symbol_type == STRING) {
+		if (to_allocate.type == STRING) {
 			// TODO: add support for global strings, arrays, etc.. Strings must always be allocated on the heap unless they are constants. The allocation will return a ptr<string> which will lead to a memory location in the heap that has all the string information
 			// TODO: set the quality to "dynamic"
 		}
 		else {
 			// reserve the variable itself
-			allocation_ss << "@rs " << symbol_name << std::endl;	// syntax is "@rs macro_name"
+			allocation_ss << "@rs " << to_allocate.name << std::endl;	// syntax is "@rs macro_name"
 		}
 	}
 
@@ -721,7 +768,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 			// add the variables to the symbol table and to the function's list of variable names
 
 			// update the stack offset
-			if (symbol_type == STRING) {
+			if (to_allocate.type == STRING) {
 				// strings will increment the stack offset by two words; allocate the space for it on the stack by decrementing the stack pointer and also increment the stack_offset variable by two words
 				
 				// TODO: add support for local strings (allocates the same way -- i.e. it uses the heap -- , it just adds to the local variable table)
@@ -761,7 +808,7 @@ std::stringstream Compiler::define(Definition definition_statement) {
 
 	// function definitions have to be in the global scope
 	if (current_scope_name == "global" && current_scope == 0) {
-		this->symbol_table.insert(func_name, return_type, "global", 0, NONE, "none", true, definition_statement.get_args());
+		this->symbol_table.insert(func_name, return_type, "global", 0, NONE, NO_QUALITY, true, definition_statement.get_args());
 		// next, we will make sure that all of the function code gets written to a stringstream; once we have gone all the way through the AST, we will write our functions as subroutines to the end of the file
 
 		// create a label for the function name
@@ -862,7 +909,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 		Symbol* fetched = this->symbol_table.lookup(var_name, this->current_scope_name);
 
 		// if the quality is "const" throw an error; we cannot make assignments to const-qualified variables
-		if (fetched->quality == "const") {
+		if (fetched->quality == CONSTANT) {
 			throw std::runtime_error(("**** Cannot make an assignment to a const-qualified variable! (error occurred on line " + std::to_string(assignment_statement.get_line_number()) + ")").c_str());
 		}
 		// otherwise, make the assignment
@@ -874,7 +921,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 			if ((fetched->type == rvalue_data_type) || (fetched->sub_type == rvalue_data_type)) {
 
 				// dynamic memory must be handled a little differently than automatic memory because under the hood, it is implemented through pointers
-				if (fetched->quality == "dynamic") {
+				if (fetched->quality == DYNAMIC) {
 					// TODO: implement dynamic memory
 				}
 				// automatic memory is easier to handle than dynamic and static

@@ -2,7 +2,7 @@
 
 SIN Compiler
 main.cpp
-Copyright 2018 Riley Lannon (truffly)
+Copyright 2019 Riley Lannon
 
 This is the main file for the SIN Compiler application. SIN is a small programming language that I will be using
 as a way to get practice in compiler writing.
@@ -514,9 +514,10 @@ int main (int argc, char** argv[]) {
 	// if an exception was thrown, catch it
 	catch (std::exception& e) {
 		// print the error message
-		std::cerr << "The program had to abort because the following exception occurred:" << std::endl;
-		std::cerr << "\t" << e.what() << std::endl;
-		std::cerr << "\nPress enter to exit..." << std::endl;
+		std::cout << "\n\n********************" << std::endl;
+		std::cout << "The program had to abort because the following exception occurred during execution:" << std::endl;
+		std::cout << "\t" << e.what() << std::endl;
+		std::cout << "\nPress enter to exit..." << std::endl;
 
 		// wait for user input before exiting
 		std::cin.get();

@@ -61,6 +61,9 @@ public:
 	// get data about the file/program
 	uint8_t get_wordsize();
 	std::vector<uint8_t> get_program_data();
+	std::list<std::tuple<std::string, int, std::string>>* get_symbol_table();
+	std::list<std::tuple<std::string, int, std::vector<uint8_t>>>* get_data_table();
+	std::list<std::tuple<std::string, int>>* get_relocation_table();
 
 	SinObjectFile();
 	SinObjectFile(std::istream& file);

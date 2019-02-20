@@ -101,7 +101,7 @@ std::string Allocation::get_var_name() {
 	return this->value;
 }
 
-std::string Allocation::get_quality()
+SymbolQuality Allocation::get_quality()
 {
 	return this->quality;
 }
@@ -116,7 +116,7 @@ std::shared_ptr<Expression> Allocation::get_initial_value()
 	return this->initial_value;
 }
 
-Allocation::Allocation(Type type, std::string value, Type subtype, bool initialized, std::shared_ptr<Expression> initial_value, std::string quality) : type(type), value(value), subtype(subtype), initialized(initialized), initial_value(initial_value), quality(quality) {
+Allocation::Allocation(Type type, std::string value, Type subtype, bool initialized, std::shared_ptr<Expression> initial_value, SymbolQuality quality) : type(type), value(value), subtype(subtype), initialized(initialized), initial_value(initial_value), quality(quality) {
 	Allocation::statement_type = ALLOCATION;
 }
 
@@ -125,6 +125,7 @@ Allocation::Allocation() {
 	Allocation::subtype = NONE;	// will remain 'NONE' unless 'type' is a ptr or array
 	Allocation::initialized = false;
 	Allocation::statement_type = ALLOCATION;
+	Allocation::quality = NO_QUALITY;
 }
 
 

@@ -334,6 +334,21 @@ std::vector<uint8_t> SinObjectFile::get_program_data() {
 	return this->program_data;
 }
 
+std::list<std::tuple<std::string, int, std::string>>* SinObjectFile::get_symbol_table()
+{
+	return &this->symbol_table;
+}
+
+std::list<std::tuple<std::string, int, std::vector<uint8_t>>>* SinObjectFile::get_data_table()
+{
+	return &this->data_table;
+}
+
+std::list<std::tuple<std::string, int>>* SinObjectFile::get_relocation_table()
+{
+	return &this->relocation_table;
+}
+
 
 // Class constructor and destructor
 

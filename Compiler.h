@@ -13,6 +13,7 @@
 // #include "Statement.h"	// included in "Parser.h"
 #include "SymbolTable.h"	// for our symbol table object
 #include "Assembler.h"	// so we can assemble our compiled files into .sinc files
+#include "CompilerException.h"	// so that we can use our custom exceptions
 
 /*
 

@@ -5,6 +5,18 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+2/20 commit to Compiler:
+
+- Changed github username, so made changes in the code to reflect that (where github was mentioned).
+- Changed SINVM registers from 'int' to 'uint16_t' -- this more accurately reflects how the inner workings of this processor are supposed to be.
+- Removed old 'Assembler::disassemble()' code, as the .sinc format has changed since that code was written and the disassemble code was never updated. The function will be rewritten in a future commit.
+- Refactored some of the code to make initial assignments to constants. It is still incomplete but will be completed in future commits.
+- Added a 'CompilerException' class; all compiler exceptions will be modified to this type in future.
+- Began implementation of a 32-bit (single precicion) float type, though this may be changed to 16 bits (half-precision) depending on how it is ultimately implemented in the VM.
+- Moved the various enumerated types into their own file for better maintainability / overall organization.
+
+--------------------------------------------------------------------------------------------
+
 2/17 commit to Compiler:
 
 - Fixed more bugs in the builtins mathematical functions and implemented signed multiplication
