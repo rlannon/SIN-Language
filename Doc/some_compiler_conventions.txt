@@ -19,7 +19,7 @@ GLOBAL VARIABLES
 
 CONDITIONALS:
 	Conditionals require labels for branching purposes. They use the following naming convention:
-		__<scope name>_<scope level>__ITE_<number>__
+		__<scope name>_<scope level>__ITE_<branch number>__
 	For example, this code:
 		if (myFeast) {
 			...
@@ -39,3 +39,7 @@ CONDITIONALS:
 
 	Variables local to conditionals will also have different scope names. The convention is as follows:
 		<parent scope>__ITE_<branch number>
+
+WHILE LOOPS:
+	While loops also require labels for branching purposes. They use a similar naming convention to ITE statements:
+		__<scope name>_<scope level>__WHILE_<branch number>__

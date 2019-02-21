@@ -206,7 +206,7 @@ void SINVM::execute_instruction(int opcode) {
 				this->SP += (this->_WORDSIZE / 8);
 			}
 			else {
-				throw std::runtime_error("**** Runtime error: Stack underflow!");
+				throw VMException("Stack underflow.", this->PC);
 			}
 			break;
 		case DECSP:
@@ -215,7 +215,7 @@ void SINVM::execute_instruction(int opcode) {
 				this->SP -= (this->_WORDSIZE / 8);
 			}
 			else {
-				throw std::runtime_error("**** Runtime error: Stack overflow!");
+				throw VMException("Stack overflow.", this->PC);
 			}
 			break;
 
@@ -315,7 +315,7 @@ void SINVM::execute_instruction(int opcode) {
 				}
 			}
 			else {
-				throw std::runtime_error("**** Runtime error: Stack overflow on call stack!");
+				throw VMException("Stack overflow on call stack.", this->PC);
 			}
 
 			this->PC = address_to_jump - 1;
@@ -444,8 +444,8 @@ void SINVM::execute_instruction(int opcode) {
 					current_char = this->memory[current_address];	// get the next character
 				}
 
-				// output the string we have created, enclosed in quotes
-				std::cout << "\"" <<  output_string << "\"" << std::endl;
+				// output the string we have created
+				std::cout << output_string << std::endl;
 			}
 			else if (syscall_number == 0x15) {
 				// Read out the number of bytes stored in A, starting at the address stored in B, and print them (as raw hex values) to the standard output
@@ -457,10 +457,15 @@ void SINVM::execute_instruction(int opcode) {
 					std::cout << "$" << std::hex << (int)this->memory[start_address + i] << std::endl;
 				}
 			}
-			// TODO: check for more syscall numbers...
-			// if it is not a valid syscall number,
+			else if (syscall_number == 0x20) {
+				this->free_heap_memory();
+			}
+			else if (syscall_number == 0x21) {
+				this->allocate_heap_memory();
+			}
+			// if it is not a valid syscall number, throw an error
 			else {
-				throw std::runtime_error("Unknown syscall number; halting execution.");
+				throw VMException("Unknown syscall number; halting execution.", this->PC);
 			}
 
 			break;
@@ -469,7 +474,7 @@ void SINVM::execute_instruction(int opcode) {
 		// if we encounter an unknown opcode
 		default:
 		{
-			throw std::runtime_error("Unknown opcode; halting execution.");
+			throw VMException("Unknown opcode; halting execution.", this->PC);
 			break;
 		}
 	}
@@ -645,7 +650,7 @@ void SINVM::execute_store(int reg_to_store) {
 	}
 	else if (addressing_mode == addressingmode::immediate) {
 		// we cannot use immediate addressing with a store instruction, so throw an exception
-		throw std::runtime_error("Invalid addressing mode for store instruction.");
+		throw VMException("Invalid addressing mode for store instruction.", this->PC);
 	}
 }
 
@@ -803,7 +808,7 @@ void SINVM::execute_bitshift(int opcode)
 		// if we have an invalid addressing mode
 		// TODO: validate addressing mode in assembler for bitshifting instructions
 		else {
-			throw std::runtime_error("Cannot use that addressing mode with bitshifting instructions.");
+			throw VMException("Cannot use that addressing mode with bitshifting instructions.", this->PC);
 		}
 
 		if (opcode == LSR || opcode == ROR) {
@@ -963,7 +968,7 @@ void SINVM::execute_jmp() {
 		this->PC = memory_address - 1;
 	}
 	else {
-		throw std::runtime_error("Invalid addressing mode for JMP instruction.");
+		throw VMException("Invalid addressing mode for JMP instruction.", this->PC);
 	}
 
 	return;
@@ -976,7 +981,7 @@ void SINVM::push_stack(int reg_to_push) {
 
 	// first, make sure the stack hasn't hit its bottom
 	if (this->SP < _STACK_BOTTOM) {
-		throw std::runtime_error("**** ERROR: Stack overflow.");
+		throw VMException("Stack overflow.", this->PC);
 	}
 
 	for (int i = (this->_WORDSIZE / 8); i > 0; i--) {
@@ -992,7 +997,7 @@ int SINVM::pop_stack() {
 
 	// first, make sure we aren't going beyond the bounds of the stack
 	if (this->SP > _STACK) {
-		throw std::runtime_error("**** ERROR: Stack underflow.");
+		throw VMException("Stack underflow.", this->PC);
 	}
 
 	// for each byte in a word, we must increment the stack pointer by one byte (increments BEFORE reading, as the SP points to the next AVAILABLE byte), get the data, shifted over according to what byte number we are on--remember we are reading the data back in little-endian byte order, not big, so we shift BEFORE we add
@@ -1009,6 +1014,76 @@ int SINVM::pop_stack() {
 	return stack_data;
 }
 
+void SINVM::free_heap_memory()
+{
+	/*
+	
+	Free the memory block starting at the memory address indicated by the B register. If there is no memory there, throw a VMException
+
+	*/
+
+	std::list<DynamicObject>::iterator obj_iter = this->dynamic_objects.begin();
+	bool found = false;
+
+	while ((obj_iter != this->dynamic_objects.end()) && !found) {
+		// if the address of the object is the address we want to free, break from the loop; obj_iter contains the reference
+		if (obj_iter->get_start_address() == REG_B) {
+			found = true;
+		}
+		// otherwise, increment the iterator
+		else {
+			obj_iter++;
+		}
+	}
+
+	if (found) {
+		this->dynamic_objects.remove(*obj_iter);
+	}
+	else {
+		throw VMException("Cannot free memory at location specified.");
+	}
+}
+
+void SINVM::allocate_heap_memory()
+{
+	// first, check to see the next available address in the heap that is large enough for this object -- use an iterator
+	std::list<DynamicObject>::iterator obj_iter = this->dynamic_objects.begin();
+	DynamicObject previous(_HEAP_START, 0);
+	uint16_t next_available_address = 0x00;
+
+	// if we have no DynamicObjects, the first location is _HEAP_START
+	if (this->dynamic_objects.size() == 0) {
+		next_available_address = _HEAP_START;
+	}
+
+	while (obj_iter != this->dynamic_objects.end()) {
+		// check to see if there's room between the end of the previous object (which is the start address + size) and the start of the next object
+		if (REG_A <= (obj_iter->get_start_address() - (previous.get_start_address() + previous.get_size()))) {
+			// if there is, update the start address
+			next_available_address = previous.get_start_address() + previous.get_size();
+			obj_iter = this->dynamic_objects.end();	// set it to the end so that we exit the loop
+		}
+		else {
+			// update 'previous' and increment the object iterator
+			previous = *obj_iter;
+			obj_iter++;
+		}
+	}
+	// do one last check against the very last item and the end of the heap
+	if (REG_A <= (_HEAP_MAX - previous.get_start_address() + previous.get_size())) {
+		next_available_address = previous.get_start_address() + previous.get_size();
+	}
+
+	// if the next available address is within our heap space, we are ok
+	if ((next_available_address >= _HEAP_START) || (next_available_address <= _HEAP_MAX)) {
+		REG_B = next_available_address;	// set the B register to the available address
+		this->dynamic_objects.push_back(DynamicObject(REG_B, REG_A));	// add the object to our dynamic object table
+	}
+	else {
+		// otherwise, throw an exception; we cannot allocate the memory
+		throw VMException("Cannot allocate memory.", this->PC);
+	}
+}
 
 
 void SINVM::set_status_flag(char flag) {
@@ -1165,21 +1240,23 @@ SINVM::SINVM(std::istream& file)
 
 	// if the size of the program is greater than 0xF000 - 0x2600, it's too big
 	if (prg_data.size() > (_PRG_TOP - _PRG_BOTTOM)) {
-		throw std::runtime_error("Program too large for conventional memory map!");
+		throw VMException("Program too large for conventional memory map!");
 
-		// remap memory instead?
+		// TODO: remap memory if the program is too large instead of exiting?
 
 	}
 
 	// copy the program data into memory
 	std::vector<uint8_t>::iterator instruction_iter = prg_data.begin();
 	size_t memory_index = this->program_start_address;
-
 	while ((instruction_iter != prg_data.end())) {
 		this->memory[memory_index] = *instruction_iter;
 		memory_index++;
 		instruction_iter++;
 	}
+
+	// initialize our list of dynamic objects as an empty list
+	this->dynamic_objects = {};
 
 	// initialize the stack to location to our stack's upper limit; it grows downwards
 	this->SP = _STACK;
@@ -1188,13 +1265,17 @@ SINVM::SINVM(std::istream& file)
 	// always initialize our status register so that all flags are not set
 	this->STATUS = 0;
 
+	// Set the word at 0x00 to 0 so that null pointers will not ever be valid
+	this->memory[0] = 0;
+	this->memory[1] = 0;
+
 	// initialize the program counter to start at the top of the program
 	if (prg_data.size() != 0) {
 		this->PC = this->program_start_address;	// make sure that we don't read memory that doesn't exist if our program is empty
 	}
 	else {
 		// throw an exception; the VM cannot execute an empty program
-		throw std::runtime_error("Cannot execute an empty program; program size must be > 0");
+		throw VMException("Cannot execute an empty program; program size must be > 0");
 	}
 }
 

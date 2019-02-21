@@ -11,7 +11,7 @@
 #include "Statement.h"
 #include "Expression.h"
 #include "Lexer.h"
-
+#include "Exceptions.h"	// ParserException
 
 
 class Parser
@@ -66,16 +66,4 @@ public:
 	Parser(std::ifstream* token_stream);
 	Parser();
 	~Parser();
-};
-
-
-// Our general exception class
-class ParserException : public std::exception {
-	std::string message_;
-	int code_;
-	int line_number_;
-public:
-	explicit ParserException(const std::string& err_message, const int& err_code, const int& line_number = 0);
-	virtual const char* what() const noexcept;
-	int get_code();
 };

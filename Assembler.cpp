@@ -712,8 +712,8 @@ std::vector<uint8_t> Assembler::assemble()
 						this->current_byte += this->_WORDSIZE / 8;	// increment 1 per byte in the _WORDSIZE
 
 						// now, turn the integer into a series of big-endian bytes
-						for (int i = this->_WORDSIZE / 8; i > 0; i--) {
-							uint8_t byte = address << ((i - 1) * 8);
+						for (size_t i = this->_WORDSIZE / 8; i > 0; i--) {
+							uint8_t byte = address >> ((i - 1) * 8);
 							program_data.push_back(byte);
 						}
 					}

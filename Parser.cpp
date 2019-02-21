@@ -1034,19 +1034,3 @@ Parser::Parser()
 Parser::~Parser()
 {
 }
-
-
-
-// Define our exceptions
-
-const char* ParserException::what() const noexcept {
-	return ParserException::message_.c_str();
-}
-
-int ParserException::get_code() {
-	return ParserException::code_;
-}
-
-ParserException::ParserException(const std::string& err_message, const int& err_code, const int& line_number) : code_(err_code), line_number_(line_number) {
-	message_ = "Line " + std::to_string(line_number) + ": " + err_message;
-}
