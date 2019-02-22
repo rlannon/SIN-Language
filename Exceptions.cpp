@@ -2,28 +2,22 @@
 
 /*
 
-	Exceptions.cpp
+Exceptions.cpp
 
-	The implementation of the classes/methods defined in Exceptions.h
+The implementation of the classes/methods defined in Exceptions.h
+
+Note that all what() messages MUST be constructed in the constructor for the exception (unless we have a const char that does not rely on any variable data).
 
 */
 
 // Compiler Exceptions
 
 const char* CompilerException::what() const noexcept {
-	std::string error_message = "**** Compiler Error " + std::to_string(this->code) + ": " + this->message + " (line " + std::to_string(this->line) + ")";
-	return error_message.c_str();
+	return message.c_str();
 }
 
 CompilerException::CompilerException(const std::string& message, unsigned int code, unsigned int line) : message(message), code(code), line(line) {
-
-}
-
-CompilerException::CompilerException()
-{
-	this->message = "";
-	this->code = 0;
-	this->line = 0;
+	this->message = "**** Compiler Error " + std::to_string(this->code) + ": " + this->message + " (line " + std::to_string(this->line) + ")";
 }
 
 
@@ -31,16 +25,11 @@ CompilerException::CompilerException()
 // Parser Exceptions
 
 const char* ParserException::what() const noexcept {
-	std::string error_message = "**** Parser error: " + this->message + "(Error occurred on line " + std::to_string(this->line_number) + ")";
-	return error_message.c_str();
+	return message_.c_str();
 }
 
-int ParserException::get_code() {
-	return ParserException::code;
-}
-
-ParserException::ParserException(const std::string& err_message, const int& err_code, const int& line_number) : code(err_code), line_number(line_number) {
-	
+ParserException::ParserException(const std::string& message, const unsigned int& code, const unsigned int& line) : message_(message), code_(code), line_(line) {
+	message_ = "**** Parser Error " + std::to_string(code_) + ": " + message_ + " (line " + std::to_string(line_) + ")";
 }
 
 
@@ -48,13 +37,12 @@ ParserException::ParserException(const std::string& err_message, const int& err_
 // SINVM Exceptions
 
 const char* VMException::what() const noexcept {
-	std::stringstream err_ss;
-	err_ss << "**** SINVM Error: " << this->message << std::endl << "Error was encountered at memory location " << std::hex << this->address << std::dec << std::endl;
-	std::string err_msg = err_ss.str();
-
-	return err_msg.c_str();
+	return message.c_str();
 }
 
-VMException::VMException(const std::string& message, uint16_t address) : message(message), address(address) {
-
+VMException::VMException(const std::string& message, const uint16_t& address) : message(message), address(address) {
+	// we must construct the message here, in the constructor
+	std::stringstream err_ss;
+	err_ss << "**** SINVM Error: " << this->message << std::endl << "Error was encountered at memory location " << std::hex << this->address << std::dec << std::endl;
+	this->message = err_ss.str();
 }

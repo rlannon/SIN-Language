@@ -699,7 +699,7 @@ std::vector<uint8_t> Assembler::assemble()
 
 						int address = 0;
 						// as long as we don't have a symbol, get the integer value of the address
-						if (!isalpha(value[0])) {
+						if (!isalpha(value[0]) && (value[0] != '_')) {
 							address = get_integer_value(value);
 						}
 						// if we do have a symbol, add it to the relocation table

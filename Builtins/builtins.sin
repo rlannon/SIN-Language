@@ -1,13 +1,32 @@
 ////////////////////      BUILTINS.SIN        ////////////////////
 
-// Copyright 2019 Riley Lannon / truffly
-// github.com/truffly
+// Copyright 2019 Riley Lannon
+// github.com/rlannon
 
 // A wrapper for all of SIN's built-in functions (such as I/O). All of the assembly implementation is contained within an included file "builtins-sinasm16.sina', a SINASM file containing the implementation for the SIN VM. This file simply allows the compiler to use the assembly functions through allowing it to access its symbols. If we did not have a wrapper, using these functions would be a lot more of a headache -- having a SIN file wrapper allows us to 
 
 
 // include the asm implementation of builtins
 include "builtins-sinasm16.sina"
+
+
+////////////////////            MEMCPY          ////////////////////
+
+def void memcpy(alloc ptr<int> source, alloc ptr<int> destination, alloc int size) {
+    // copies 'size' words at 'source' into 'destination'
+
+    // arguments will automatically be pushed onto the stack, so we just need to call the asm function
+
+    asm<sinasm16> {
+        jsr __builtins_memcpy
+
+        ;; we already popped back the stack pointer in the function, but the compiler doesn't know
+        ;; As a result, we must decrement it as many words as we popped from the stack so the unwinding doesn't screw up the stack pointer 
+        decsp 
+        decsp 
+        decsp 
+    }
+}
 
 
 ////////////////////      PRINT (STDOUT)        ////////////////////

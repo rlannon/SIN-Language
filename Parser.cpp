@@ -117,7 +117,7 @@ StatementBlock Parser::create_ast() {
 		// skip any semicolons and newline characters, if there are any in the tokens list
 		this->skipPunc(';');
 		this->skipPunc('\n');
-		
+
 		// if we encounter a null lexeme, skip it
 		while (this->current_token() == null_lexeme) {
 			this->next();
@@ -665,11 +665,17 @@ std::shared_ptr<Statement> Parser::parse_definition(lexeme current_lex)
 					while (this->current_token().value != ")") {
 						args.push_back(this->parse_statement());
 						this->next();
+
+						// if we have multiple arguments, current_token() will return a comma, but we don't want to advance twice in case we hit the closing paren; as a result, we only advance once more if there is a comma
+						if (this->current_token().value == ",") {
+							this->next();
+						}
 					}
 				}
 				else {
 					this->next();	// skip the closing paren
 				}
+
 				// Args should be empty if we don't have any
 				// Now, check to make sure we have a curly brace
 				if (this->peek().value == "{") {

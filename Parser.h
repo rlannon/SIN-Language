@@ -6,7 +6,6 @@
 #include <vector>
 #include <string>
 #include <tuple>
-#include <exception>
 
 #include "Statement.h"
 #include "Expression.h"

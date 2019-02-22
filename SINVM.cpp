@@ -199,7 +199,10 @@ void SINVM::execute_instruction(int opcode) {
 		case DECY:
 			this->REG_Y -= 1;
 			break;
-		// Note that INCSP and DECSP modify by one /word/, not one byte (like other increment instructions do)
+		case INCB:
+			this->REG_B += 1;
+			break;
+		// Note that INCSP and DECSP modify by one /word/, not one byte (it is unlike the other inc/dec instructions in this way)
 		case INCSP:
 			// increment by one word
 			if (this->SP < (uint16_t)_STACK) {
@@ -444,7 +447,7 @@ void SINVM::execute_instruction(int opcode) {
 					current_char = this->memory[current_address];	// get the next character
 				}
 
-				// output the string we have created
+				// print the string
 				std::cout << output_string << std::endl;
 			}
 			else if (syscall_number == 0x15) {

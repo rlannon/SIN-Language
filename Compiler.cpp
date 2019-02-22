@@ -462,7 +462,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 
 			fetch_ss << "\t" << "loada #$" << std::hex << bool_expression_as_int << std::endl;
 		}
-		else if (literal_expression->get_expression_type() == FLOAT) {
+		else if (literal_expression->get_type() == FLOAT) {
 			// floats are unique in SIN in that they are the only data type that is larger than the machine's word size; even in 16-bit SIN, floats are 32 bits
 			// copy the bits of the float value into a uint32_t
 			float literal_value = std::stof(literal_expression->get_value());
@@ -478,7 +478,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 
 			// TODO: continue implementing floating-point -- implement a 'half' type? Dynamically allocate floats?
 		}
-		else if (literal_expression->get_expression_type() == STRING) {
+		else if (literal_expression->get_type() == STRING) {
 			// first, define a constant for the string using our naming convention
 			std::string string_constant_name;
 			string_constant_name = "__STRC__NUM_" + std::to_string(this->strc_number);	// define the constant name
@@ -502,20 +502,25 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		if (variable_symbol->defined) {
 			// check the scope; we need to do different things for global and local scopes
 			if ((variable_symbol->scope_name == "global") && (variable_symbol->scope_level == 0)) {
-				// TODO: fetch variable from global scope
 				// all we need to do is use the variable name for globals; however, we need to know the type
-				
 				if (variable_symbol->quality == DYNAMIC) {
-					// TODO: add support for data types with variable lengths (like strings)
+					// first, we need to load the length of the string, which is the first word at the address of the string
+					fetch_ss << "\t" << "loady #$00" << std::endl;
+					fetch_ss << "\t" << "loada (" << variable_symbol->name << "), y" << std::endl;
+					fetch_ss << "\t" << "incy" << "\n" << "incy" << std::endl;;
+
+					// we need to get the address in B, but we must also increment B by two so we don't load the length as a character
+					fetch_ss << "\t" << "loadb " << variable_symbol->name << std::endl;
+					fetch_ss << "\t" << "incb" << "\n\t" << "incb" << std::endl;
+
+					// Now we are done; A and B contain the proper information
 				}
 				else {
 					fetch_ss << "\t" << "loada " << variable_symbol->name << std::endl;
 				}
 			}
 			else {
-				// TODO: fetch variable from local scope
 				// first, move the SP to the address of the variable; we don't need if statements because the while loops won't run if the condition is not met
-
 				// if our current offset is higher than the offset of the variable, decrement the stack offset (to go backward in the downward-growing stack)
 				while (*stack_offset > variable_symbol->stack_offset + 1) {
 					fetch_ss << "\t" << "incsp" << std::endl;
@@ -526,15 +531,27 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 					fetch_ss << "\t" << "decsp" << std::endl;
 					(*stack_offset) += 1;
 				}
-
+				
 				// now, the offsets are the same; get the variable's value
 				if (variable_symbol->quality == DYNAMIC) {
 					// dynamic variables must use pointer dereferencing
-					// TODO: implement dynamic memory
+					// so we pull the address of the string into B
+					fetch_ss << "\t" << "plb" << std::endl;
+					(*stack_offset) -= 1;
+
+					// now, we must get the value at the address contained in B -- use the X register for this -- which is our string length
+					fetch_ss << "\t" << "tba" << "\n\t" << "tax" << std::endl;
+					fetch_ss << "\t" << "loada ($00, X)" << std::endl;
+					
+					// now, increment B by 2 so that we point to the correct byte
+					fetch_ss << "\t" << "incb" << "\n\t" << "incb" << std::endl;
+
+					// Now, A and B contain the correct values
 				}
 				else {
 					// pull the value into the A register
 					fetch_ss << "\t" << "pla" << std::endl;
+					(*stack_offset) -= 1;	// we pulled from the stack, so we must adjust the stack offset
 				}
 			}
 		}
@@ -572,7 +589,20 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		// make sure the variable was defined
 		if (variable_symbol->defined) {
 			if (variable_symbol->quality == DYNAMIC) {
-				// TODO: implement address_of for dynamic memory
+				// Getting the address of a dynamic variable is easy -- we simply move the stack pointer to the proper byte, pull the value into A
+				// TODO: use addca instead of incsp for larger increments
+				while (*stack_offset > variable_symbol->stack_offset + 1) {
+					fetch_ss << "\t" << "incsp" << std::endl;
+					(*stack_offset) -= 1;
+				}
+				while (*stack_offset < variable_symbol->stack_offset + 1) {
+					fetch_ss << "\t" << "decsp" << std::endl;
+					(*stack_offset) += 1;
+				}
+
+				// now that the stack pointer is in the right place, we can pull the value into A
+				fetch_ss << "\t" << "pla" << std::endl;
+				*stack_offset -= 1;
 			}
 			else {
 				if (variable_symbol->scope_name == "global") {
@@ -748,14 +778,62 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 
 	// handle all non-const global variables
 	else if (current_scope_name == "global" && current_scope == 0) {
+		// reserve the variable itself first -- it may be a pointer to the variable if we need to dynamically allocate it
+		allocation_ss << "@rs " << to_allocate.name << std::endl;	// syntax is "@rs macro_name"
+
 		// if the variable type is anything with a variable length, we need a different mechanism for handling them
 		if (to_allocate.type == STRING) {
-			// TODO: add support for global strings, arrays, etc.. Strings must always be allocated on the heap unless they are constants. The allocation will return a ptr<string> which will lead to a memory location in the heap that has all the string information
-			// TODO: set the quality to "dynamic"
-		}
-		else {
-			// reserve the variable itself
-			allocation_ss << "@rs " << to_allocate.name << std::endl;	// syntax is "@rs macro_name"
+			// we don't know how many bytes to reserve for the string -- so we have to wait until it's assigned
+			if (to_allocate.defined) {
+				// if it IS defined, we can allocate the space for it dynamically
+
+				// fetch the initial value -- A will contain the length, B will contain the address
+				allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), stack_offset, *max_offset).str();
+
+				if (*stack_offset != *max_offset) {
+					// transfer A and B to X and Y before incrementing the stack pointer
+					allocation_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;
+
+					// increment the stack pointer to the end of the stack frame so we can use the stack
+					this->incsp_to_stack_frame(stack_offset, *max_offset);
+
+					// move X and Y back into A and B
+					allocation_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;
+				}
+
+				allocation_ss << "\t" << "phb" << std::endl;	// push the address of the string variable
+				
+				// add some padding to the string length
+				allocation_ss << "\t" << "pha" << std::endl;
+				allocation_ss << "\t" << "addca #$10" << std::endl;
+
+				// next, create the system call to allocate the memory on the heap
+				allocation_ss << "\t" << "syscall #$21" << std::endl;
+				allocation_ss << "\t" << "storeb " << to_allocate.name << std::endl;	// store the address in our pointer variable
+
+				// get the original value of A back
+				allocation_ss << "\t" << "pla" << std::endl;
+
+				// next, store the length in the heap
+				allocation_ss << "\t" << "loady #$00" << std::endl;
+				allocation_ss << "\t" << "storea (" << to_allocate.name << "), y" << std::endl;
+				
+				// next, get the value of our pointer and increment by 2 for memcpy
+				allocation_ss << "\t" << "loada " << to_allocate.name << std::endl;
+				allocation_ss << "\t" << "addca #$02" << std::endl;
+
+				// the address of the string variable has already been pushed, so the next thing to push is the address of our destination
+				allocation_ss << "\t" << "pha" << std::endl;
+
+				// next, we need to push the length of the string, which we will get from our pointer variable
+				allocation_ss << "\t" << "loada (" << to_allocate.name << "), y" << std::endl;
+				allocation_ss << "\t" << "pha" << std::endl;
+				
+				// finally, call the subroutine
+				allocation_ss << "\t" << "jsr __builtins_memcpy" << std::endl;
+
+				// the memory has been successfully copied over; our assignment is done
+			}
 		}
 	}
 
@@ -1619,7 +1697,7 @@ Compiler::Compiler(std::istream& sin_file, uint8_t _wordsize, std::vector<std::s
 	// create the parser and lexer objects
 	Lexer lex(sin_file);
 	Parser parser(lex);
-	
+
 	// get the AST from the parser
 	this->AST = parser.create_ast();
 
