@@ -223,9 +223,6 @@ void SINVM::execute_instruction(int opcode) {
 			break;
 
 		// Comparatives
-
-			// TODO: write comparatives
-
 		case CMPA:
 			this->execute_comparison(REG_A);
 			break;
@@ -246,11 +243,11 @@ void SINVM::execute_instruction(int opcode) {
 		case BRNE:
 			// if the comparison was unequal, the Z flag will be clear
 			if (!this->is_flag_set('Z')) {
-				// if it's set, execute a jump
+				// if it's clear, execute a jump
 				this->execute_jmp();
 			}
 			else {
-				// skip past the addressnig mode and address if it isn't set
+				// skip past the addressing mode and address if it isn't set
 				// we need to skip past 3 bytes
 				this->PC += 3;
 			}
@@ -258,6 +255,7 @@ void SINVM::execute_instruction(int opcode) {
 		case BREQ:
 			// if the comparison was equal, the Z flag will be set
 			if (this->is_flag_set('Z')) {
+				// if it's set, execute a jump
 				this->execute_jmp();
 			}
 			else {
@@ -397,7 +395,7 @@ void SINVM::execute_instruction(int opcode) {
 			this->PC++;
 			int syscall_number = this->get_data_of_wordsize();
 
-			// TODO: implement more syscalls
+			// TODO: implement more syscalls and split them into their own functions
 
 			// If our syscall is for stdin or stdout
 			if (syscall_number == 0x13) {
@@ -573,8 +571,6 @@ int SINVM::execute_load() {
 
 	*/
 
-	// TODO: implement indirect indexed and indexed indirect addressing
-
 	// indirect indexed
 	else if (addressing_mode == addressingmode::indirect_indexed_x) {
 		// indirect indexed addressing with the X register
@@ -646,8 +642,14 @@ void SINVM::execute_store(int reg_to_store) {
 			memory_address = this->get_data_from_memory(memory_address + REG_Y);
 		}
 
-		// use our store_in_memory function
-		this->store_in_memory(memory_address, reg_to_store);
+		// we are not allowed to store data at location 0x00, as the word there is always guaranteed to be 0x00
+		if (memory_address != 0x00) {
+			// use our store_in_memory function
+			this->store_in_memory(memory_address, reg_to_store);
+		}
+		else {
+			throw VMException("Write access violation.", this->PC);
+		}
 
 		return;
 	}
@@ -656,6 +658,7 @@ void SINVM::execute_store(int reg_to_store) {
 		throw VMException("Invalid addressing mode for store instruction.", this->PC);
 	}
 }
+
 
 int SINVM::get_data_from_memory(int address) {
 	// read value of _WORDSIZE in memory and return it in the form of an int

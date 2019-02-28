@@ -28,6 +28,7 @@ const size_t _MEMORY_MIN = 0x0000;
 
 // the zero page will be reserved for use as a table of pointers
 const size_t _POINTER_TABLE_BOTTOM = 0x0002;	// do not start at address 0x00 so that null pointers will point to nothing
+const size_t _LOCAL_DYNAMIC_POINTER = 0x0002;	// this address serves as a temp variable to hold a pointer to dynamic memory during allocation
 const size_t _POINTER_TABLE_TOP = 0x00FF;
 
 // the RS directive, which creates global variables, will allocate variables starting at 0x0100 and have 3 pages

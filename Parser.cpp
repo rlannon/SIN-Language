@@ -345,15 +345,13 @@ std::shared_ptr<Statement> Parser::parse_ite(lexeme current_lex)
 						throw ParserException("Expected '{' after 'else' in conditional", 331, current_lex.line_number);
 					}
 				}
-				// we also do not require an else clause in ITE statements -- so just create the statement with an empty clause if that's the case
-				else {
-					stmt = std::make_shared<IfThenElse>(condition, std::make_shared<StatementBlock>(if_branch));
-					stmt->set_line_number(current_lex.line_number);
-					return stmt;
-				}
 			}
-
-			//return std::make_shared<IfThenElse>(condition, std::make_shared<StatementBlock>(if_branch));
+			else {
+				// if we do not have an else clause, we will return the if clause alone here
+				stmt = std::make_shared<IfThenElse>(condition, std::make_shared<StatementBlock>(if_branch));
+				stmt->set_line_number(current_lex.line_number);
+				return stmt;
+			}
 		}
 		// If our condition is not followed by an opening curly
 		else {
@@ -382,8 +380,15 @@ std::shared_ptr<Statement> Parser::parse_allocation(lexeme current_lex)
 		if (var_type.value == "int" || var_type.value == "float" || var_type.value == "bool" || var_type.value == "string" || var_type.value == "raw" || var_type.value == "ptr" || var_type.value == "const") {
 			// Note: pointers, consts, and RAWs must be treated a little bit differently than other fundamental types
 
-			// in case we have a raw, we need to define these
-			SymbolQuality quality = NO_QUALITY;
+			// set the quality to DYNAMIC if we have a string, or to NO_QUALITY otherwise
+			SymbolQuality quality;
+			if (var_type.value == "string") {
+				quality = DYNAMIC;
+			}
+			else {
+				quality = NO_QUALITY;
+			}
+
 			bool initialized = false;
 			std::shared_ptr<Expression> initial_value = std::make_shared<Expression>();	// empty expression by default
 
@@ -486,7 +491,7 @@ std::shared_ptr<Statement> Parser::parse_allocation(lexeme current_lex)
 			if (var_name.type == "ident") {
 				new_var_name = var_name.value;
 
-				// we must check to see if we have the alloc-define syntax:
+				// we must check to see if we have the allloc-assign syntax:
 				if (this->peek().value == ":") {
 					// the variable was initialized
 					initialized = true;
@@ -503,14 +508,17 @@ std::shared_ptr<Statement> Parser::parse_allocation(lexeme current_lex)
 					stmt->set_line_number(current_lex.line_number);
 				}
 				else {
-					// if it is NOT alloc-define syntax, we have to make sure the variable is not const before allocating it -- all const variables MUST be defined in the allocation
+					// if it is NOT allloc-assign syntax, we have to make sure the variable is not const before allocating it -- all const variables MUST be defined in the allocation
 					if (quality == CONSTANT) {
-						throw ParserException("Const variables must use alloc-define syntax (e.g., 'alloc const int a: 5').", 000, current_lex.line_number);
+						throw ParserException("Const variables must use allloc-assign syntax (e.g., 'alloc const int a: 5').", 000, current_lex.line_number);
 					}
 					else {
 						// Otherwise, if it is not const, return our new variable
-						stmt = std::make_shared<Allocation>(new_var_type, new_var_name, new_var_subtype);
-						stmt->set_line_number(current_lex.line_number);
+						Allocation allocation_statement(new_var_type, new_var_name, new_var_subtype);
+						allocation_statement.set_symbol_quality(DYNAMIC);
+						allocation_statement.set_line_number(current_lex.line_number);
+
+						stmt = std::make_shared<Allocation>(allocation_statement);
 					}
 				}
 			}

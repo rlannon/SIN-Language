@@ -5,6 +5,21 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+2/28 commit to Dynamic-Memory:
+
+- Implemented global and local strings, both of which can be used in function calls.
+	- Currently, the string memory is not freed and there is no mechanism for strings to be reallocated when necessary. Automatic memory reallocation must be expanded and refactored, alongside compiler refactoring, to allow strings to be automatically reallocated when their size expands beyond the space initially allocated for it. Further, the compiler still needs a mechanism to automatically free string memory when they go out of scope.
+	- The compiler and parser also need methods to free memory and dynamically allocate memory beyond strings.
+- Updated the Compiler::call method to be cleaner and more maintainable, in particular in the way function arguments are pushed to the stack, especially differentiating between static/automatic and dynamic memory.
+- Modified the Compiler::incsp_to_stack_frame method to be far more general and flexible; it moves the stack pointer to a particular offset, not just the end of the stack frame.
+- Added a string assignment function to handle initial assignments to strings.
+	- It must be updated so that it does not reallocate memory for each assignment, and only reallocates the string when necessary.
+- Fixed a small bug in the compiler where the string length was not correctly loaded from the heap; it treated certain data as a double-reference pointer when it was only single-reference. The change was from using indirect indexed addressing to plain indexed.
+- The VM now forbids writing data into address 0x00; this is so that null pointers will always be guaranteed to return 0x00.
+- Added more comments, made further minor fixes to code and readability
+
+--------------------------------------------------------------------------------------------
+
 2/21 commit to Dynamic-Memory:
 
 - 'int main(...)' now supports command-line arguments; no longer throws exceptions when they are supplied

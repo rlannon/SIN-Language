@@ -116,6 +116,11 @@ std::shared_ptr<Expression> Allocation::get_initial_value()
 	return this->initial_value;
 }
 
+void Allocation::set_symbol_quality(SymbolQuality new_quality)
+{
+	this->quality = new_quality;
+}
+
 Allocation::Allocation(Type type, std::string value, Type subtype, bool initialized, std::shared_ptr<Expression> initial_value, SymbolQuality quality) : type(type), value(value), subtype(subtype), initialized(initialized), initial_value(initial_value), quality(quality) {
 	Allocation::statement_type = ALLOCATION;
 }
