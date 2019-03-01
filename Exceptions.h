@@ -1,9 +1,20 @@
+/*
+
+SIN Toolchain
+Exceptions.h
+Copyright 2019 Riley Lannon
+
+A class to contain all of our custom exceptions.
+
+*/
+
+
 #pragma once
 
 #include <stdexcept>
 #include <string>
 #include <sstream>
-#include <iostream>
+#include <cinttypes>	// use this instead of iostream for uint_t types
 
 /*
 

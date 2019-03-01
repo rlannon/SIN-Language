@@ -194,3 +194,13 @@ public:
 	InlineAssembly(std::string asm_type, std::string asm_code);
 	InlineAssembly();
 };
+
+class FreeMemory : public Statement
+{
+	LValue to_free;
+public:
+	LValue get_freed_memory();
+
+	FreeMemory(LValue to_free);
+	FreeMemory();
+};

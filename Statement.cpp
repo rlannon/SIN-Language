@@ -301,3 +301,18 @@ InlineAssembly::InlineAssembly(std::string assembly_type, std::string asm_code) 
 InlineAssembly::InlineAssembly() {
 	InlineAssembly::statement_type = INLINE_ASM;
 }
+
+
+/*******************		FREE MEMORY CLASS		********************/
+
+LValue FreeMemory::get_freed_memory() {
+	return this->to_free;
+}
+
+FreeMemory::FreeMemory(LValue to_free) : to_free(to_free) {
+	FreeMemory::statement_type = FREE_MEMORY;
+}
+
+FreeMemory::FreeMemory() {
+	FreeMemory::statement_type = FREE_MEMORY;
+}

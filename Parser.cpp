@@ -226,6 +226,30 @@ std::shared_ptr<Statement> Parser::parse_statement() {
 				}
 			}
 		}
+		// parse a "free" statement
+		else if (current_lex.value == "free") {
+			// TODO: parse a "free" statement
+			// the next character must be a paren
+
+			if (this->peek().type == "ident") {
+				current_lex = this->next();
+					
+				// make sure we end the statement correctly
+				if (this->peek().value == ";") {
+					this->next();
+
+					LValue to_free(current_lex.value, "var");
+					stmt = std::make_shared<FreeMemory>(to_free);
+					return stmt;
+				}
+				else {
+					throw ParserException("Syntax error: expected ';'", 0, current_lex.line_number);
+				}
+			}
+			else {
+				throw ParserException("Expected identifier after 'free'", 0, current_lex.line_number);
+			}
+		}
 		// parse an ITE
 		else if (current_lex.value == "if") {
 			return this->parse_ite(current_lex);

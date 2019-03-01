@@ -1,14 +1,17 @@
-#include "Exceptions.h"
-
 /*
 
+SIN Toolchain
 Exceptions.cpp
+Copyright 2019 Riley Lannon
 
 The implementation of the classes/methods defined in Exceptions.h
 
 Note that all what() messages MUST be constructed in the constructor for the exception (unless we have a const char that does not rely on any variable data).
 
 */
+
+#include "Exceptions.h"
+
 
 // Compiler Exceptions
 

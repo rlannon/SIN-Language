@@ -1,6 +1,6 @@
 /*
 
-SIN Compiler
+SIN Toolchain
 main.cpp
 Copyright 2019 Riley Lannon
 

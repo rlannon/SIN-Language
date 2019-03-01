@@ -49,7 +49,7 @@ Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate,
 			}
 		}
 		else {
-			throw std::runtime_error("Cannot find '" + lvalue_exp->getValue() + "' in symbol table (perhaps it is out of scope?)");
+			throw CompilerException("Cannot find '" + lvalue_exp->getValue() + "' in symbol table (perhaps it is out of scope?)");
 		}
 	}
 
@@ -158,7 +158,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 			}
 		}
 		else {
-			throw std::runtime_error("Types in binary expression do not match! (line " + std::to_string(line_number) + ")");
+			throw CompilerException("Types in binary expression do not match!", 0 , line_number);
 		}
 	} 
 
@@ -238,7 +238,7 @@ std::stringstream Compiler::evaluate_unary_tree(Unary unary_exp, unsigned int li
 				unary_ss << "\tloada #$00" << std::endl;
 			}
 			else {
-				throw std::runtime_error("Invalid boolean literal value.");
+				throw CompilerException("Invalid boolean literal value.", 0, line_number);
 			}
 		}
 		else if (unary_operand->get_type() == INT) {
@@ -299,7 +299,7 @@ std::stringstream Compiler::evaluate_unary_tree(Unary unary_exp, unsigned int li
 	}
 	else {
 		// if it is not one of the aforementioned operators, it is an invalid unary operator
-		throw std::runtime_error("Invalid operator in unary expression.");
+		throw CompilerException("Invalid operator in unary expression.", 0, line_number);
 	}
 
 	return unary_ss;
@@ -362,7 +362,7 @@ void Compiler::include_file(Include include_statement)
 			}
 			// if we cannot open the .sina file
 			else {
-				throw std::runtime_error(("**** Compiled the include file '" + filename_no_extension + ".sina" + "', but could not open the compiled version for assembly.").c_str());
+				throw CompilerException("Compiled the include file '" + filename_no_extension + ".sina" + "', but could not open the compiled version for assembly.", 0, include_statement.get_line_number());
 			}
 		}
 		// if the have another SIN file, we need to compile it and then push it back
@@ -403,7 +403,7 @@ void Compiler::include_file(Include include_statement)
 				}
 				// if we cannot open the .sina file to read
 				else {
-					throw std::runtime_error(("**** Compiled the include file '" + filename_no_extension + ".sina" + "', but could not open the compiled version for assembly.").c_str());
+					throw CompilerException("Compiled the include file '" + filename_no_extension + ".sina" + "', but could not open the compiled version for assembly.", 0, include_statement.get_line_number());
 				}
 
 				included_sin_file.close();
@@ -413,7 +413,7 @@ void Compiler::include_file(Include include_statement)
 			}
 			// if we cannot open the .sin file
 			else {
-				throw std::runtime_error(("**** Could not open included file '" + to_include + "'!").c_str());
+				throw CompilerException("Could not open included file '" + to_include + "'!", 0, include_statement.get_line_number());
 			}
 		}
 
@@ -457,7 +457,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 			}
 			else {
 				// if it isn't "True" or "False", throw an error
-				throw std::runtime_error(("Expected 'True' or 'False' as boolean literal value (case matter!) (line " + literal_expression->get_value() + ")").c_str());
+				throw CompilerException("Expected 'True' or 'False' as boolean literal value (case matters!)", 0, line_number);
 			}
 
 			fetch_ss << "\t" << "loada #$" << std::hex << bool_expression_as_int << std::endl;
@@ -500,19 +500,28 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 
 		// only fetch the value if it has been defined
 		if (variable_symbol->defined) {
+			
 			// check the scope; we need to do different things for global and local scopes
 			if ((variable_symbol->scope_name == "global") && (variable_symbol->scope_level == 0)) {
+				
 				// all we need to do is use the variable name for globals; however, we need to know the type
 				if (variable_symbol->quality == DYNAMIC) {
-					// first, we need to load the length of the string, which is the first word at the address of the string
-					fetch_ss << "\t" << "loady #$00" << std::endl;
-					fetch_ss << "\t" << "loada (" << variable_symbol->name << "), y" << std::endl;
 
-					// we need to get the address in B, but we must also increment B by two so we don't load the length as a character
-					fetch_ss << "\t" << "loadb " << variable_symbol->name << std::endl;
-					fetch_ss << "\t" << "incb" << "\n\t" << "incb" << std::endl;
+					// ensure that the dynamic memory has not been freed
+					if (variable_symbol->freed) {
+						throw CompilerException("Cannot reference dynamic memory that has already been freed", 0, line_number);
+					}
+					else {
+						// first, we need to load the length of the string, which is the first word at the address of the string
+						fetch_ss << "\t" << "loady #$00" << std::endl;
+						fetch_ss << "\t" << "loada (" << variable_symbol->name << "), y" << std::endl;
 
-					// Now we are done; A and B contain the proper information
+						// we need to get the address in B, but we must also increment B by two so we don't load the length as a character
+						fetch_ss << "\t" << "loadb " << variable_symbol->name << std::endl;
+						fetch_ss << "\t" << "incb" << "\n\t" << "incb" << std::endl;
+
+						// Now we are done; A and B contain the proper information
+					}
 				}
 				else {
 					fetch_ss << "\t" << "loada " << variable_symbol->name << std::endl;
@@ -523,19 +532,24 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 				
 				// now, the offsets are the same; get the variable's value
 				if (variable_symbol->quality == DYNAMIC) {
-					// dynamic variables must use pointer dereferencing
-					// so we pull the address of the string into B
-					fetch_ss << "\t" << "plb" << std::endl;
-					(*stack_offset) -= 1;
+					if (variable_symbol->freed) {
+						throw CompilerException("Cannot reference dynamic memory that has already been freed", 0, line_number);
+					}
+					else {
+						// dynamic variables must use pointer dereferencing
+						// so we pull the address of the string into B
+						fetch_ss << "\t" << "plb" << std::endl;
+						(*stack_offset) -= 1;
 
-					// now, we must get the value at the address contained in B -- use the X register for this -- which is our string length
-					fetch_ss << "\t" << "tba" << "\n\t" << "tax" << std::endl;	// simply index -- we _already dereferenced the pointer_, this address does not contain another address to dereference, but rather the data we want
-					fetch_ss << "\t" << "loada $00, X" << std::endl;
-					
-					// now, increment B by 2 so that we point to the correct byte
-					fetch_ss << "\t" << "incb" << "\n\t" << "incb" << std::endl;
+						// now, we must get the value at the address contained in B -- use the X register for this -- which is our string length
+						fetch_ss << "\t" << "tba" << "\n\t" << "tax" << std::endl;	// simply index -- we _already dereferenced the pointer_, this address does not contain another address to dereference, but rather the data we want
+						fetch_ss << "\t" << "loada $00, X" << std::endl;
 
-					// Now, A and B contain the correct values
+						// now, increment B by 2 so that we point to the correct byte
+						fetch_ss << "\t" << "incb" << "\n\t" << "incb" << std::endl;
+
+						// Now, A and B contain the correct values
+					}
 				}
 				else {
 					// pull the value into the A register
@@ -545,7 +559,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 			}
 		}
 		else {
-			throw std::runtime_error(("Variable '" + variable_symbol->name + "' referenced before assignment (line " + std::to_string(line_number) + ")").c_str());
+			throw CompilerException("Variable '" + variable_symbol->name + "' referenced before assignment", 0, line_number);
 		}
 	}
 	else if (to_fetch->get_expression_type() == DEREFERENCED) {
@@ -564,7 +578,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 				fetch_ss << "\t" << "loada (" << referenced_var->name << "), y" << std::endl;
 			}
 			else {
-				throw std::runtime_error("Could not find '" + dereferenced_exp->get_ptr().getValue() + "' in symbol table; perhaps it is out of scope? (line " + std::to_string(line_number) + ")");
+				throw CompilerException("Could not find '" + dereferenced_exp->get_ptr().getValue() + "' in symbol table; perhaps it is out of scope?", 0, line_number);
 			}
 		}
 	}
@@ -579,35 +593,23 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		if (variable_symbol->defined) {
 			if (variable_symbol->quality == DYNAMIC) {
 				// Getting the address of a dynamic variable is easy -- we simply move the stack pointer to the proper byte, pull the value into A
-				// TODO: use addca instead of incsp for larger increments
-				/*while (*stack_offset > variable_symbol->stack_offset + 1) {
-					fetch_ss << "\t" << "incsp" << std::endl;
-					(*stack_offset) -= 1;
+
+				if (variable_symbol->freed) {
+					throw CompilerException("Cannot reference dynamic memory that has already been freed", 0, line_number);
 				}
-				while (*stack_offset < variable_symbol->stack_offset + 1) {
-					fetch_ss << "\t" << "decsp" << std::endl;
-					(*stack_offset) += 1;
-				}*/
+				else {
+					fetch_ss << this->move_sp_to_target_address(stack_offset, variable_symbol->stack_offset + 1).str();
 
-				fetch_ss << this->move_sp_to_target_address(stack_offset, variable_symbol->stack_offset + 1).str();
-
-				// now that the stack pointer is in the right place, we can pull the value into A
-				fetch_ss << "\t" << "pla" << std::endl;
-				*stack_offset -= 1;
+					// now that the stack pointer is in the right place, we can pull the value into A
+					fetch_ss << "\t" << "pla" << std::endl;
+					*stack_offset -= 1;
+				}
 			}
 			else {
 				if (variable_symbol->scope_name == "global") {
 					fetch_ss << "\t" << "loada #" << variable_symbol->name << std::endl;	// using  "loada var" would mean "load the A register with the value at address 'var' " while "loada #var" means "load the A register with the address of 'var' "
 				}
 				else {
-					//while (*stack_offset > variable_symbol->stack_offset + 1) {
-					//	fetch_ss << "\t" << "incsp" << std::endl;	// stack grows downwards, remember, so incrementing the SP decrements the stack offset -- counter-intuitive at first, but logical when you think about how the stack works
-					//	(*stack_offset) -= 1;
-					//}
-					//while (*stack_offset < variable_symbol->stack_offset + 1) {
-					//	fetch_ss << "\t" << "decsp" << std::endl;
-					//	(*stack_offset) += 1;
-					//}
 					fetch_ss << this->move_sp_to_target_address(stack_offset, variable_symbol->stack_offset + 1).str();
 
 					// now that the stack pointer is in the proper place to pull the variable from, increment it by one place and transfer the pointer value to A; that is the address where the variable we want lives
@@ -618,7 +620,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 			}
 		}
 		else {
-			throw std::runtime_error(("Variable '" + variable_symbol->name + "' referenced before assignment (line " + std::to_string(line_number) + ")").c_str());
+			throw CompilerException("Variable '" + variable_symbol->name + "' referenced before assignment", 0, line_number);
 		}
 	}
 	else if (to_fetch->get_expression_type() == UNARY) {
@@ -904,7 +906,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 		}
 		else {
 			// this error should have been caught by the parser, but just to be safe...
-			throw std::runtime_error(("**** Const-qualified variables must be initialized in allocation (error occurred on line " + std::to_string(allocation_statement.get_line_number()) + ")").c_str());
+			throw CompilerException("Const-qualified variables must be initialized in allocation", 0, allocation_statement.get_line_number());
 		}
 	}
 
@@ -938,6 +940,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 			if (to_allocate.defined) {
 				// we must handle dynamic memory differently
 				if (to_allocate.quality == DYNAMIC) {
+					// we don't need to check if the variable has been freed when we are allocating it
 					if (to_allocate.type == STRING) {
 						// allocate a word on the stack for the pointer
 						*stack_offset += 1;
@@ -970,7 +973,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 		}
 		else {
 			// if we forgot to supply the address of our counter, it will throw an exception
-			throw CompilerException("**** Cannot allocate memory for variable; expected pointer to stack offset counter, but found 'nullptr' instead.");
+			throw CompilerException("Cannot allocate memory for variable; expected pointer to stack offset counter, but found 'nullptr' instead.");
 		}
 	}
 
@@ -1097,7 +1100,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 
 		// if the quality is "const" throw an error; we cannot make assignments to const-qualified variables
 		if (fetched->quality == CONSTANT) {
-			throw CompilerException("**** Cannot make an assignment to a const-qualified variable!", 0, assignment_statement.get_line_number());
+			throw CompilerException("Cannot make an assignment to a const-qualified variable!", 0, assignment_statement.get_line_number());
 		}
 		// otherwise, make the assignment
 		else {
@@ -1109,9 +1112,11 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 
 				// dynamic memory must be handled a little differently than automatic memory because under the hood, it is implemented through pointers
 				if (fetched->quality == DYNAMIC) {
+					// we don't need to check if the memory has been freed here -- we do that in string assignment
 					if (fetched->type == STRING) {
 						// set the symbol to "defined" and call our string_assignment function
 						fetched->defined = true;
+						fetched->freed = false;
 						assignment_ss << this->string_assignment(*fetched, assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset, max_offset).str();
 					}
 					// TODO: add support for other dynamic types
@@ -1171,12 +1176,12 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 			}
 			// if the types do not match, we must throw an exception
 			else {
-				throw CompilerException("Type match error: cannot match '" + get_string_from_type(fetched->type) + "' and '" + get_string_from_type(rvalue_data_type) + "'", 0, assignment_statement.get_line_number());
+				throw CompilerException("Cannot match '" + get_string_from_type(fetched->type) + "' and '" + get_string_from_type(rvalue_data_type) + "'", 0, assignment_statement.get_line_number());
 			}
 		}
 	}
 	else {
-		throw CompilerException("**** Error: Could not find '" + var_name + "' in symbol table", 0, assignment_statement.get_line_number());
+		throw CompilerException("Could not find '" + var_name + "' in symbol table", 0, assignment_statement.get_line_number());
 	}
 
 	// return the assignment statement
@@ -1279,7 +1284,7 @@ std::stringstream Compiler::call(Call call_statement, size_t* stack_offset, size
 				}
 				// otherwise, throw an exception
 				else {
-					throw CompilerException("Type error: expected argument of type '" + get_string_from_type(formal_type) + "', but got '" +  get_string_from_type(argument_type) + "' instead", 0, call_statement.get_line_number());
+					throw CompilerException("Expected argument of type '" + get_string_from_type(formal_type) + "', but got '" +  get_string_from_type(argument_type) + "' instead", 0, call_statement.get_line_number());
 				}
 			}
 			else if (argument->get_expression_type() == LVALUE) {
@@ -1295,8 +1300,12 @@ std::stringstream Compiler::call(Call call_statement, size_t* stack_offset, size
 						// dynamic and static/auto memory must be treated differently
 						if (argument_symbol_data.quality == DYNAMIC) {
 							// DYNAMIC MEMORY
-							
-							if (argument_symbol_data.type == STRING) {
+
+							// make sure we haven't freed the memory before we reference it
+							if (argument_symbol_data.freed) {
+								throw CompilerException("Cannot reference dynamic memory that has already been freed", 0, call_statement.get_line_number());
+							}
+							else if (argument_symbol_data.type == STRING) {
 								// if the symbol is in the global scope
 								if (argument_symbol_data.scope_level == 0) {
 									// get the length of the string
@@ -1424,7 +1433,7 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t * stack_offset,
 		// TODO: evaluate binary conditions
 	}
 	else {
-		throw std::runtime_error("**** Compiler Error: Invalid expression type in conditional statement! (line " + std::to_string(ite_statement.get_line_number()) + ")");
+		throw CompilerException("Invalid expression type in conditional statement!", 0, ite_statement.get_line_number());
 	}
 
 	// now that we have evaluated the condition, the result of said evaluation is in A; all we need to do is see whether the result was 0 or not -- if so, jump to the end of the 'if' branch
@@ -1545,7 +1554,7 @@ std::stringstream Compiler::while_loop(WhileLoop while_statement, size_t * stack
 		// TODO: produce binary tree
 	}
 	else {
-		throw std::runtime_error("**** Compiler Error: Invalid expression type in conditional expression (line " + std::to_string(while_statement.get_line_number()) + ")");
+		throw CompilerException("Invalid expression type in conditional expression", 0, while_statement.get_line_number());
 	}
 
 	// now that A holds the result of the expression, use a compare statement; if the condition evaluates to false, we are done
@@ -1643,7 +1652,41 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 			}
 			else {
 				// if the types do not match, throw an exception
-				throw std::runtime_error(("**** Inline ASM in file does not match compiler's ASM version (line " + std::to_string(asm_statement->get_line_number()) + ")").c_str());
+				throw CompilerException("Inline ASM in file does not match compiler's ASM version", 0, asm_statement->get_line_number());
+			}
+		}
+		else if (statement_type == FREE_MEMORY) {
+			// dynamic cast to FreeMemory type
+			FreeMemory* free_statement = dynamic_cast<FreeMemory*>(current_statement);
+
+			// look for a symbol in the table with the same name as is indicated by the free statement
+			Symbol* to_free = this->symbol_table.lookup(free_statement->get_freed_memory().getValue(), this->current_scope_name);
+			// we can only free dynamic memory that hasn't already been freed
+			if (!to_free->freed && (to_free->quality == DYNAMIC)) {
+				/*
+				
+				The SINASM method to free dynamic memory is simply loading the B register with the address where the variable is in the heap, and use the syscall instruction with syscall number 0x20.
+				
+				*/
+
+				// fetch global and local variables differently
+				if (to_free->scope_level == 0) {
+					sinasm_ss << "\t" << "loadb " << to_free->name << std::endl;
+				}
+				else {
+					sinasm_ss << "\t" << this->move_sp_to_target_address(stack_offset, to_free->stack_offset + 1).str();
+					sinasm_ss << "\t" << "plb" << std::endl;
+				}
+
+				// make the syscall
+				sinasm_ss << "\t" << "syscall #$20" << to_free->name << std::endl;
+
+				// mark the variable as freed and undefined
+				to_free->defined = false;
+				to_free->freed = true;
+			}
+			else {
+				throw CompilerException("Cannot free the variable specified; can only free dynamic memory that has not already been freed.", 0, current_statement->get_line_number());
 			}
 		}
 		else if (statement_type == ALLOCATION) {
@@ -1715,6 +1758,7 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 		}
 	}
 
+	// finally, return the assembly we generated for the statement block
 	return sinasm_ss;
 }
 
@@ -1747,7 +1791,7 @@ void Compiler::produce_sina_file(std::string sina_filename, bool include_builtin
 	}
 	// otherwise, throw an exception
 	else {
-		throw std::runtime_error("**** Fatal Error: Compiler could not open the target .sina file.");
+		throw CompilerException("Compiler could not open the target .sina file.");
 	}
 }
 

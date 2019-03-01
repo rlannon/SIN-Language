@@ -49,7 +49,7 @@ class Compiler
 
 	size_t stack_offset;
 
-	unsigned int current_scope;	// tells us what scope level we are currently in
+	size_t current_scope;	// tells us what scope level we are currently in
 	std::string current_scope_name;
 
 	size_t strc_number;	// the next available number for a string constant
