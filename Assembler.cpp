@@ -699,7 +699,7 @@ std::vector<uint8_t> Assembler::assemble()
 
 						int address = 0;
 						// as long as we don't have a symbol, get the integer value of the address
-						if (!isalpha(value[0])) {
+						if (!isalpha(value[0]) && (value[0] != '_')) {
 							address = get_integer_value(value);
 						}
 						// if we do have a symbol, add it to the relocation table
@@ -712,8 +712,8 @@ std::vector<uint8_t> Assembler::assemble()
 						this->current_byte += this->_WORDSIZE / 8;	// increment 1 per byte in the _WORDSIZE
 
 						// now, turn the integer into a series of big-endian bytes
-						for (int i = this->_WORDSIZE / 8; i > 0; i--) {
-							uint8_t byte = address << ((i - 1) * 8);
+						for (size_t i = this->_WORDSIZE / 8; i > 0; i--) {
+							uint8_t byte = address >> ((i - 1) * 8);
 							program_data.push_back(byte);
 						}
 					}

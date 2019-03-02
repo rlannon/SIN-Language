@@ -1,6 +1,6 @@
 #pragma once
 
-#include <iostream>
+#include <cinttypes>
 
 /*
 
@@ -34,11 +34,12 @@ namespace addressingmode {
 
 	const uint8_t immediate = 0x03;
 
-	// currently, addressing mode 0x04 is unused -- make it indirect non-indexed?
-	const uint8_t indirect_indexed_x = 0x05;
+	// currently, 0x04 is unused
+
+	const uint8_t indirect_indexed_x = 0x05;	// syntax is (addr), x
 	const uint8_t indirect_indexed_y = 0x06;
 
-	const uint8_t indexed_indirect_x = 0x07;
+	const uint8_t indexed_indirect_x = 0x07;	// syntax is (addr, x)
 	const uint8_t indexed_indirect_y = 0x08;
 
 	const uint8_t reg_a = 0x09;

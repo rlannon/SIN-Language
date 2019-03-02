@@ -13,7 +13,7 @@
 // #include "Statement.h"	// included in "Parser.h"
 #include "SymbolTable.h"	// for our symbol table object
 #include "Assembler.h"	// so we can assemble our compiled files into .sinc files
-#include "CompilerException.h"	// so that we can use our custom exceptions
+#include "Exceptions.h"	// so that we can use our custom exceptions
 
 /*
 
@@ -49,9 +49,8 @@ class Compiler
 
 	size_t stack_offset;
 
-	unsigned int current_scope;	// tells us what scope level we are currently in
+	size_t current_scope;	// tells us what scope level we are currently in
 	std::string current_scope_name;
-	unsigned int next_available_addr;	// the next available address in the local page
 
 	size_t strc_number;	// the next available number for a string constant
 	size_t branch_number;	// the next available number for a branch ID
@@ -68,18 +67,19 @@ class Compiler
 
 	std::stringstream evaluate_binary_tree(Binary bin_exp, unsigned int line_number, size_t* stack_offset = nullptr, size_t max_offset = 0, Type right_type = NONE);	// writes a binary tree to the file
 	std::stringstream evaluate_unary_tree(Unary unary_exp, unsigned int line_number, size_t* stack_offset = nullptr, size_t max_offset = 0);	// writes the evaluation of a unary value
-	void multiply(Binary mult_exp);	// write a multiplication statement
-	void divide(Binary div_exp);	// write a division statement
 
 	std::vector<std::string>* object_file_names;
 	void include_file(Include include_statement);	// add a file to the solution
 
-	std::stringstream fetch_value(std::shared_ptr<Expression> to_fetch, unsigned int line_number, size_t* stack_offset = nullptr, size_t max_offset = 0);	// produces asm code to put the result of the specified expression in A
-	std::stringstream incsp_to_stack_frame(size_t* stack_offset, size_t max_offset);
+	std::stringstream fetch_value(std::shared_ptr<Expression> to_fetch, unsigned int line_number = 0, size_t* stack_offset = nullptr, size_t max_offset = 0);	// produces asm code to put the result of the specified expression in A
+
+	std::stringstream move_sp_to_target_address(size_t* stack_offset, size_t target_offset, bool preserve_registers = false);
+
+	std::stringstream string_assignment(Symbol target_symbol, std::shared_ptr<Expression> rvalue, unsigned int line_number = 0, size_t* stack_offset = nullptr, size_t max_offset = 0);
 
 	std::stringstream allocate(Allocation allocation_statement, size_t* stack_offset = nullptr, size_t* max_offset = nullptr);	// add a variable to the symbol table (using an allocation statement)
 	std::stringstream define(Definition definition_statement);	// add a function definition (using a definition statement)
-	std::stringstream assign(Assignment assignment_statement, size_t* stack_offset = nullptr);
+	std::stringstream assign(Assignment assignment_statement, size_t* stack_offset = nullptr, size_t max_offset = 0);
 	std::stringstream call(Call call_statement, size_t* stack_offset = nullptr, size_t max_offset = 0);
 	std::stringstream ite(IfThenElse ite_statement, size_t* stack_offset = nullptr, size_t max_offset = 0);
 	std::stringstream while_loop(WhileLoop while_statement, size_t* stack_offset = nullptr, size_t max_offset = 0);

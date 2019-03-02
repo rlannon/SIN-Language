@@ -1,7 +1,7 @@
 ; BUILTINS-SINASM16.SINA
 
-; Copyright 2019 Riley Lannon / truffly
-; github.com/truffly
+; Copyright 2019 Riley Lannon
+; github.com/rlannon
 
 ; 'builtins' is a library to implement all of SIN's built-in functions for compiled SIN in the SIN VM. 
 ; This file is, by default, included in /all/ compiled SIN programs; removing this file from the include will remove access to SIN's I/O functions, and the 'asm' keyword will be required in order to do any sort of standard I/O in a SIN application.
@@ -19,6 +19,40 @@
 @db __INPUT_BUFFER_START_ADDR ($1400)   ; defines where our input buffer should start
 @rs __INPUT_LEN     ; a global variable holding the length of the last input
 @rs __MATH_TEMP     ; a temp variable for mathematical functions 
+@rs __MEMCPY_SRC    ; the source location for memcpy 
+@rs __MEMCPY_DEST   ; the destination for memcpy 
+
+
+
+;;;;;;;;;;      MEMORY TRANSFER     ;;;;;;;;;;
+
+; This is the implementation of the memcpy function, and is often called by the compiler when doing memory transfers --
+; It is particularly useful with dynamic memory allocation
+
+__builtins_memcpy:
+    ; The arguments are pushed in the following order:
+    ;   source
+    ;   destination
+    ;   number of words
+    pla 
+    tax     ; number of words goes into the x register 
+    plb     ; destination goes into the b register 
+    pla     ; source goes into the a register
+    
+    ; Store our source and destination in the appropriate variables 
+    storeb __MEMCPY_DEST 
+    storea __MEMCPY_SRC
+    
+    loady #$00  ; our memory index starts at 0
+.memcpy_loop:
+    loada (__MEMCPY_SRC), y     ; load A with the value at the address indicated by __MEMCPY_SRC, indexed with Y 
+    storea (__MEMCPY_DEST), y 
+    incy 
+    decx 
+    cmpx #$00 
+    brne .memcpy_loop
+
+    rts
 
 
 

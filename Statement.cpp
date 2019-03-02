@@ -116,6 +116,11 @@ std::shared_ptr<Expression> Allocation::get_initial_value()
 	return this->initial_value;
 }
 
+void Allocation::set_symbol_quality(SymbolQuality new_quality)
+{
+	this->quality = new_quality;
+}
+
 Allocation::Allocation(Type type, std::string value, Type subtype, bool initialized, std::shared_ptr<Expression> initial_value, SymbolQuality quality) : type(type), value(value), subtype(subtype), initialized(initialized), initial_value(initial_value), quality(quality) {
 	Allocation::statement_type = ALLOCATION;
 }
@@ -295,4 +300,19 @@ InlineAssembly::InlineAssembly(std::string assembly_type, std::string asm_code) 
 
 InlineAssembly::InlineAssembly() {
 	InlineAssembly::statement_type = INLINE_ASM;
+}
+
+
+/*******************		FREE MEMORY CLASS		********************/
+
+LValue FreeMemory::get_freed_memory() {
+	return this->to_free;
+}
+
+FreeMemory::FreeMemory(LValue to_free) : to_free(to_free) {
+	FreeMemory::statement_type = FREE_MEMORY;
+}
+
+FreeMemory::FreeMemory() {
+	FreeMemory::statement_type = FREE_MEMORY;
 }

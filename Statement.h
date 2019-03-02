@@ -62,7 +62,7 @@ class Allocation : public Statement
 		initialized		:	false
 		initial_value	:	(none) 
 
-	We can also use what is called "alloc-define syntax" in SIN:
+	We can also use what is called "alloc-assign syntax" in SIN:
 		alloc int myInt: 5;
 	which will allocate the variable and make an initial assignment. In this case, the allocation looks like:
 		type			:	INT
@@ -70,7 +70,7 @@ class Allocation : public Statement
 		initialized		:	true
 		initial_value	:	5
 
-	This "alloc-define" syntax is required for all const-qualified data types
+	This "alloc-assign" syntax is required for all const-qualified data types
 
 	*/
 	
@@ -94,6 +94,8 @@ public:
 
 	bool was_initialized();
 	std::shared_ptr<Expression> get_initial_value();
+
+	void set_symbol_quality(SymbolQuality new_quality);
 
 	Allocation(Type type, std::string value, Type subtype = NONE, bool was_initialized = false, std::shared_ptr<Expression> initial_value = std::make_shared<Expression>(), SymbolQuality quality = NO_QUALITY);	// use default parameters to allow us to use alloc-define syntax, but we don't have to
 	Allocation();
@@ -191,4 +193,14 @@ public:
 
 	InlineAssembly(std::string asm_type, std::string asm_code);
 	InlineAssembly();
+};
+
+class FreeMemory : public Statement
+{
+	LValue to_free;
+public:
+	LValue get_freed_memory();
+
+	FreeMemory(LValue to_free);
+	FreeMemory();
 };

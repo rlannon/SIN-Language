@@ -5,6 +5,58 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+2/28 commit (2) to Dynamic-Memory
+
+- Moved the "Symbol" struct to its own file, which is included in the project through the SymbolTable files.
+- Began process of adding comment headers to each of the files with short descriptors of what the files' purposes are.
+- Changed more exceptions from runtime_error to an exception of the appropriate type (currently using error code 0 as a placeholder)
+- Dynamic memory can now be freed using the "free" keyword
+	- 'Statement' now contains a 'FreeMemory' statement type
+	- The Parser can now parse 'free ...' statements
+	- The Compiler can generate assembly for such statements
+	- Note that nothing is automatically freed right now and strings must be freed manually (they are _always_ dynamically allocated)
+- Reserved a few more keywords for things that will be implemented in future commits (such as arrays and structs)
+
+--------------------------------------------------------------------------------------------
+
+2/28 commit to Dynamic-Memory:
+
+- Implemented global and local strings, both of which can be used in function calls.
+	- Currently, the string memory is not freed and there is no mechanism for strings to be reallocated when necessary. Automatic memory reallocation must be expanded and refactored, alongside compiler refactoring, to allow strings to be automatically reallocated when their size expands beyond the space initially allocated for it. Further, the compiler still needs a mechanism to automatically free string memory when they go out of scope.
+	- The compiler and parser also need methods to free memory and dynamically allocate memory beyond strings.
+- Updated the Compiler::call method to be cleaner and more maintainable, in particular in the way function arguments are pushed to the stack, especially differentiating between static/automatic and dynamic memory.
+- Modified the Compiler::incsp_to_stack_frame method to be far more general and flexible; it moves the stack pointer to a particular offset, not just the end of the stack frame.
+- Added a string assignment function to handle initial assignments to strings.
+	- It must be updated so that it does not reallocate memory for each assignment, and only reallocates the string when necessary.
+- Fixed a small bug in the compiler where the string length was not correctly loaded from the heap; it treated certain data as a double-reference pointer when it was only single-reference. The change was from using indirect indexed addressing to plain indexed.
+- The VM now forbids writing data into address 0x00; this is so that null pointers will always be guaranteed to return 0x00.
+- Added more comments, made further minor fixes to code and readability
+
+--------------------------------------------------------------------------------------------
+
+2/21 commit to Dynamic-Memory:
+
+- 'int main(...)' now supports command-line arguments; no longer throws exceptions when they are supplied
+- Began implementation of string support in compiler through the newly-added dynamic memory allocation
+- Added an 'INCB' instruction to the VM's instruction set; there is no corresponding 'DECB' instruction
+- Added a '__builtins_memcpy' subroutine to 'builtins-sinasm16' and a corresponding SIN wrapper for the memcpy(...) function.
+- Fixed an error in the Exceptions wherein error messages from 'what()' were not printed; this was due to a pointer invalidation as a result of using variables in the virtual function, which were destroyed by the time the function was invoked. Moving all message constructions into the constructor for the exception solved this issue.
+
+--------------------------------------------------------------------------------------------
+
+2/20 commit to Dynamic-Memory:
+
+- Added a 'DynamicObject' class, to be used by the VM to store information about dynamic objects, and added a list of such members to the VM
+- Added the syscall instructions necessary for reserving VM Heap memory
+	- See syscall.txt for information on how they work
+- Updated the VM memory map with new address spaces and names
+- Fixed data bug in Assember that caused it to write incorrect data for addresses
+- 'syscall #$14' no longer encloses the output string in double quotes
+- AddressingModeConstants includes <cinttypes>, not <iostream> for the uint__t types
+- Other minor edits, fixes, and commenting
+
+--------------------------------------------------------------------------------------------
+
 2/20 commit to Compiler:
 
 - Changed github username, so made changes in the code to reflect that (where github was mentioned).

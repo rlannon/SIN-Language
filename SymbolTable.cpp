@@ -1,29 +1,20 @@
+/*
+
+SIN Toolchain
+SymbolTable.cpp
+Copyright 2019 Riley Lannon
+
+The implementation of the SymbolTable class.
+
+*/
+
+
 #include "SymbolTable.h"
 
-// Our Symbol object
-
-Symbol::Symbol(std::string name, Type type, std::string scope_name, int scope_level, Type sub_type, SymbolQuality quality, bool defined, std::vector<std::shared_ptr<Statement>> formal_parameters) : name(name), type(type), scope_name(scope_name), scope_level(scope_level), sub_type(sub_type), quality(quality), defined(defined), formal_parameters(formal_parameters) {
-	this->stack_offset = 0;
-}
-
-Symbol::Symbol() {
-	this->name = "";
-	this->type = NONE;
-	this->scope_name = "";
-	this->scope_level = 0;
-	this->quality = NO_QUALITY;
-	this->defined = false;
-	this->formal_parameters = {};
-	this->stack_offset = 0;
-}
-
-Symbol::~Symbol() {
-
-}
 
 // Our SymbolTable object
 
-void SymbolTable::insert(std::string name, Type type, std::string scope_name, int scope_level, Type sub_type, SymbolQuality quality, bool initialized, std::vector<std::shared_ptr<Statement>> formal_parameters)
+void SymbolTable::insert(std::string name, Type type, std::string scope_name, size_t scope_level, Type sub_type, SymbolQuality quality, bool initialized, std::vector<std::shared_ptr<Statement>> formal_parameters)
 {	
 	if (this-> is_in_symbol_table(name, scope_name)) {
 		throw std::runtime_error(("**** Symbol Table Error: '" + name + "'already in symbol table.").c_str());
@@ -53,7 +44,7 @@ void SymbolTable::define(std::string symbol_name, std::string scope_name)
 
 
 
-void SymbolTable::remove(std::string symbol_name, std::string scope_name, int scope_level) {
+void SymbolTable::remove(std::string symbol_name, std::string scope_name, size_t scope_level) {
 	/*
 	
 	Intended for use in local scopes, specifically ITE and While loops to remove any symbols that were declared within. This way, they cannot be accessed in scopes of the same level (or higher) that are not within that block.

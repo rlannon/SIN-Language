@@ -1,6 +1,6 @@
 /*
 
-SIN Compiler
+SIN Toolchain
 main.cpp
 Copyright 2019 Riley Lannon
 
@@ -45,7 +45,7 @@ void help(std::string flag="") {
 
 
 // TODO: make the main function more modular
-int main (int argc, char** argv[]) {
+int main (int argc, char* argv[]) {
 	// first, make a vector of strings to hold **argv 
 	std::vector<std::string> program_arguments;
 
@@ -73,8 +73,9 @@ int main (int argc, char** argv[]) {
 	}
 	// otherwise, just push all of **argv onto program_arguments
 	else {
-		for (int i = 0; i < argc; i++) {
-			program_arguments.push_back(*argv[i]);
+		for (size_t i = 1; i < argc; i++) {
+			std::string current_arg(argv[i]);
+			program_arguments.push_back(current_arg);
 		}
 	}
 

@@ -13,6 +13,8 @@
 // #include "OpcodeConstants.h"	// included in Assembler.h, but commenting here to serve as a reminder that the constants are used in this class so we don't need to use the hex values whenever referencing an instruction
 #include "VMMemoryMap.h"	// contains the constants that define where various blocks of memory begin and end in the VM
 //#include "AddressingModeConstants.h"	// included in Assembler.h
+#include "DynamicObject.h"	// for use in allocating objects on the heap
+#include "Exceptions.h"	// for VMException
 
 /*
 	The virtual machine that will be responsible for interpreting SIN bytecode
@@ -56,11 +58,9 @@ class SINVM
 	// create an array to hold our program memory
 	uint8_t memory[memory_size];
 	size_t program_start_address;
-	uint16_t memory_offset;	// the offset for memory addresses due to include files
-	// TODO: eliminate this? We need it in the assembler but maybe not here...
 
-	// TODO: eliminate memory offsets in SINVM and Assembler -- we will do all address adjustments in the Linker. The only offset we will do here is adding $2600 to our offsets
-	// TODO: always start at memory location $2600; it's ok to have empty space between $2600 and $F000 (i.e. don't start at $F000 and work backwards)
+	// create a list to hold our DynamicObjects
+	std::list<DynamicObject> dynamic_objects;
 
 	// check whether a memory address is legal
 	static const bool address_is_valid(size_t address);
@@ -88,6 +88,10 @@ class SINVM
 	// stack functions; ALWAYS use register A
 	void push_stack(int reg_to_push);
 	int pop_stack();
+
+	// syscall utility
+	void free_heap_memory();
+	void allocate_heap_memory();	// if the "in_bytes" flag is set, we use bytes, not words, for storage
 
 	// status flag utility
 	void set_status_flag(char flag); // set the status flag whose abbreviation is equal to the character 'flag'

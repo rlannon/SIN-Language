@@ -21,7 +21,8 @@ enum stmt_type {
 	WHILE_LOOP,
 	DEFINITION,
 	CALL,
-	INLINE_ASM
+	INLINE_ASM,
+	FREE_MEMORY
 };
 
 // So that the symbol's quality does not need to be stored as a string
