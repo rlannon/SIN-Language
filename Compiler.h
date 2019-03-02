@@ -1,3 +1,13 @@
+/*
+
+SIN Toolchain
+Compiler.h
+Copyright 2019 Riley Lannon
+
+This class defines the SIN Compiler; given an AST produced by the Parser, will produce a .sina file that can execute the given code in the SIN VM.
+
+*/
+
 #pragma once
 
 #include <vector>
@@ -7,22 +17,11 @@
 #include <sstream>
 
 #include "VMMemoryMap.h"	// define where the blocks of memory begin and end in our target VM
-//#include "Lexer.h"	// included in "Parser.h"
 #include "Parser.h"
-// #include "Expression.h"	// included in "Parser.h"
-// #include "Statement.h"	// included in "Parser.h"
 #include "SymbolTable.h"	// for our symbol table object
 #include "Assembler.h"	// so we can assemble our compiled files into .sinc files
 #include "Exceptions.h"	// so that we can use our custom exceptions
 
-/*
-
-The Compiler for the SIN language. Given an AST produced by the Parser, will produce a .sina file that can execute the given code in the SIN VM.
-
-Symbol Table:
-	The symbol table contains the symbol name, the type, and the scope; whenever the symbol is referenced in the program, 
-
-*/
 
 class Compiler
 {

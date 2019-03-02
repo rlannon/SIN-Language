@@ -54,3 +54,12 @@ public:
 	explicit VMException(const std::string& message, const uint16_t& address = 0x0000);
 	virtual const char* what() const noexcept;
 };
+
+
+class SymbolTableException : public std::exception {
+	std::string message;
+	unsigned int line;
+public:
+	explicit SymbolTableException(const std::string& message, const unsigned int& line = 0);
+	virtual const char* what() const noexcept;
+};

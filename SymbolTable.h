@@ -37,14 +37,15 @@ class SymbolTable
 
 	std::vector<Symbol> symbols;
 
-	void insert(std::string name, Type type, std::string scope_name, size_t scope_level, Type sub_type = NONE, SymbolQuality quality = NO_QUALITY, bool intialized = false, std::vector<std::shared_ptr<Statement>> formal_parameters = {});
-	void insert(Symbol to_add);
+	void insert(std::string name, Type type, std::string scope_name, size_t scope_level, Type sub_type = NONE, SymbolQuality quality = NO_QUALITY, bool intialized = false, std::vector<std::shared_ptr<Statement>> formal_parameters = {}, unsigned int line_number = 0);
+	void insert(Symbol to_add, unsigned int line_number = 0);
 	void define(std::string symbol_name, std::string scope_name);	// list the symbol of a given name in a given scope as defined
 
 	void remove(std::string symbol_name, std::string scope_name, size_t scope_level);	// removes a symbol from the table; used to remove symbols from the table in ITE branches and loops
 
-	Symbol* lookup(std::string symbol_name, std::string scope_name="");	// look for the symbol in the supplied scope; if none is supplied, look through whole table
-	bool is_in_symbol_table(std::string symbol_name, std::string scope_name);
+	Symbol* lookup(std::string symbol_name, std::string scope_name="global", size_t scope_level = 0);	// look for the symbol in the supplied scope
+	bool is_in_symbol_table(std::string symbol_name, std::string scope_name);	// checks to see if the symbol exists in the scope specified OR in the global scope
+	bool exists_in_scope(std::string symbol_name, std::string scope_name, size_t scope_level);	// checks to see if the symbol exists in the scope specified at the given scope level (used for the "insert" function)
 public:
 	SymbolTable();
 	~SymbolTable();

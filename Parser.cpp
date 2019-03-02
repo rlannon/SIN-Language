@@ -46,24 +46,25 @@ bool Parser::is_at_end() {
 
 // peek to the next position
 lexeme Parser::peek() {
-	if (position + 1 <= this->tokens.size()) {
+	if (position + 1 < this->tokens.size()) {
 		return this->tokens[this->position + 1];
 	}
 	else {
-		throw ParserException("No more lexemes to parse!", 1);
+		throw ParserException("No more lexemes to parse!", 1, this->tokens[this->position].line_number);
 	}
 }
 
 lexeme Parser::next() {
 	//	increment the position
 	this->position += 1;
-	// return the next token
-	if (position <= this->tokens.size()) {
+	
+	// if we haven't hit the end, return the next token
+	if (position < this->tokens.size()) {
 		return this->tokens[this->position];
 	}
 	// if we have hit the end
 	else {
-		throw ParserException("No more lexemes to parse!", 1);
+		throw ParserException("No more lexemes to parse!", 1, this->tokens[this->position - 1].line_number);
 	}
 }
 
@@ -604,14 +605,21 @@ std::shared_ptr<Statement> Parser::parse_assignment(lexeme current_lex)
 	// get the operator character, make sure it's an equals sign
 	lexeme _operator = this->next();
 	if (_operator.value == "=") {
-		// create a shared_ptr for our rvalue expression
-		std::shared_ptr<Expression> rvalue;
-		this->next();
-		rvalue = this->parse_expression();
+		// if the next lexeme is not a semicolon and the next lexeme's line number is the same as the current lexeme's line number, we are ok
+		if ((this->peek().value != ";") && (this->peek().line_number == current_lex.line_number)) {
+			// create a shared_ptr for our rvalue expression
+			std::shared_ptr<Expression> rvalue;
+			this->next();
+			rvalue = this->parse_expression();
 
-		assign = std::make_shared<Assignment>(lvalue, rvalue);
-		assign->set_line_number(current_lex.line_number);
-		return assign;
+			assign = std::make_shared<Assignment>(lvalue, rvalue);
+			assign->set_line_number(current_lex.line_number);
+			return assign;
+		}
+		// otherwise, we have a syntax error -- we didn't get an expression where we expected it
+		else {
+			throw ParserException("Expected expression", 0, current_lex.line_number);
+		}
 	}
 }
 
@@ -1026,8 +1034,8 @@ void Parser::populate_token_list(std::ifstream* token_stream) {
 			token_stream->get();
 		}
 
+		// ensure that empty tokens are not added to the tokens list
 		current_token = lexeme(type, value, line_number);
-
 		if (current_token.type == "") {
 			continue;
 		}
@@ -1041,8 +1049,16 @@ void Parser::populate_token_list(std::ifstream* token_stream) {
 Parser::Parser(Lexer& lexer) {
 	while (!lexer.eof() && !lexer.exit_flag_is_set()) {
 		lexeme token = lexer.read_next();
-		Parser::tokens.push_back(token);
+
+		// only push back tokens that aren't empty
+		if ((token.type != "") && (token.value != "") && (token.line_number != 0)) {
+			Parser::tokens.push_back(token);
+		}
+		else {
+			continue;
+		}
 	}
+
 	Parser::quit = false;
 	Parser::can_use_include_statement = true;	// include statements must be first in the file
 	Parser::position = 0;

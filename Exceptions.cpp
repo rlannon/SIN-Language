@@ -49,3 +49,21 @@ VMException::VMException(const std::string& message, const uint16_t& address) : 
 	err_ss << "**** SINVM Error: " << this->message << std::endl << "Error was encountered at memory location " << std::hex << this->address << std::dec << std::endl;
 	this->message = err_ss.str();
 }
+
+
+// SymbolTable Exceptions
+
+const char* SymbolTableException::what() const noexcept {
+	return message.c_str();
+}
+
+SymbolTableException::SymbolTableException(const std::string& message, const unsigned int& line) {
+	// construct the message
+	std::string err_message = "**** SymbolTable Error: " + message;
+	// if we have line number data, append it to the error message
+	if (line > 0) {
+		err_message += " (line " + std::to_string(line);
+	}
+	this->line = line;
+	this->message = err_message;
+}

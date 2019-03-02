@@ -417,14 +417,30 @@ void SINVM::execute_instruction(int opcode) {
 				for (std::string::iterator string_character = input.begin(); string_character != input.end(); string_character++) {
 					input_bytes.push_back(*string_character);
 				}
-				// store those bytes in memory
-				// use size() here because we want to index
-				for (int i = 0; i < input_bytes.size(); i++) {
-					this->memory[start_address + i] = input_bytes[i];
-				}
 
-				// finally, store the length of input_bytes (in bytes) in register A
-				this->REG_A = input_bytes.size();
+				// the length of the input buffer is the max - min + 1, as we start at 0x00 and end at 0xFF
+				size_t buffer_length = _INPUT_BUFFER_MAX - _INPUT_BUFFER_START + 1;
+
+				// check to make sure the input data won't overflow the buffer
+				if (input_bytes.size() <= buffer_length) {
+					// store those bytes in memory
+					// use size() here because we want to index
+					for (int i = 0; i < input_bytes.size(); i++) {
+						this->memory[start_address + i] = input_bytes[i];
+					}
+
+					// finally, store the length of input_bytes (in bytes) in register A
+					this->REG_A = input_bytes.size();
+				}
+				// if the data is longer than the input buffer, only copy in as many bytes as we have available in the buffer, truncating the input data; if we don't do this, the data could overflow into the stack
+				else {
+					for (int i = 0; i < buffer_length; i++) {
+						this->memory[start_address + i] = input_bytes[i];
+					}
+
+					// store the length of the memory buffer in register A
+					this->REG_A = buffer_length;
+				}
 			}
 			else if (syscall_number == 0x14) {
 				// If we want to print something to the screen, we must specify the address where it starts

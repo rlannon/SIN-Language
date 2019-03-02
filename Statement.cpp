@@ -1,21 +1,19 @@
-// Statement.cpp
-// Implementation of the "Statement" class
+/*
 
-# include "Statement.h"
+SIN Toolchain
+Statement.cpp
+Copyright 2019 Riley Lannon
+
+The implementation of the Statement parent class and its various child classes
+
+*/
+
+
+#include "Statement.h"
 
 
 stmt_type Statement::get_statement_type() {
 	return Statement::statement_type;
-}
-
-std::string Statement::get_scope_name()
-{
-	return Statement::scope_name;
-}
-
-int Statement::get_scope_level()
-{
-	return Statement::scope_level;
 }
 
 int Statement::get_line_number()

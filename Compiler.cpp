@@ -1,3 +1,14 @@
+/*
+
+SIN Toolchain
+Compiler.cpp
+Copyright 2019 Riley Lannon
+
+The implementation of the class defined in Compiler.h
+
+*/
+
+
 #include "Compiler.h"
 
 
@@ -39,7 +50,7 @@ Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate,
 		// make sure it's in the symbol table
 		if (this->symbol_table.is_in_symbol_table(lvalue_exp->getValue(), this->current_scope_name)) {
 			// get the variable's symbol and return the type
-			Symbol* lvalue_symbol = this->symbol_table.lookup(lvalue_exp->getValue(), this->current_scope_name);
+			Symbol* lvalue_symbol = this->symbol_table.lookup(lvalue_exp->getValue(), this->current_scope_name, this->current_scope);
 
 			if (get_subtype && (lvalue_symbol->sub_type != NONE)) {
 				return lvalue_symbol->sub_type;
@@ -387,7 +398,7 @@ void Compiler::include_file(Include include_statement)
 
 				// iterate through the symbols in that file and add them to our symbol table
 				for (std::vector<Symbol>::iterator it = include_compiler->symbol_table.symbols.begin(); it != include_compiler->symbol_table.symbols.end(); it++) {
-					this->symbol_table.insert(it->name, it->type, it->scope_name, it->scope_level, it->sub_type, it->quality, it->defined, it->formal_parameters);
+					this->symbol_table.insert(it->name, it->type, it->scope_name, it->scope_level, it->sub_type, it->quality, it->defined, it->formal_parameters, include_statement.get_line_number());
 				}
 
 				// now, open the compiled include file as an istream object
@@ -496,7 +507,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 	else if (to_fetch->get_expression_type() == LVALUE) {
 		// get the lvalue's symbol data
 		LValue* variable_to_get = dynamic_cast<LValue*>(to_fetch.get());
-		Symbol* variable_symbol = this->symbol_table.lookup(variable_to_get->getValue(), this->current_scope_name);
+		Symbol* variable_symbol = this->symbol_table.lookup(variable_to_get->getValue(), this->current_scope_name, this->current_scope);
 
 		// only fetch the value if it has been defined
 		if (variable_symbol->defined) {
@@ -573,7 +584,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 			// check to make sure the variable is in the symbol table
 			if (this->symbol_table.is_in_symbol_table(dereferenced_exp->get_ptr().getValue(), this->current_scope_name)) {
 				// if the variable is in the symbol table, only use recursion if the type is still a pointer
-				Symbol* referenced_var = this->symbol_table.lookup(dereferenced_exp->get_ptr().getValue(), this->current_scope_name);
+				Symbol* referenced_var = this->symbol_table.lookup(dereferenced_exp->get_ptr().getValue(), this->current_scope_name, this->current_scope);
 				fetch_ss << "\t" << "loady #$00" << std::endl;
 				fetch_ss << "\t" << "loada (" << referenced_var->name << "), y" << std::endl;
 			}
@@ -587,7 +598,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		// dynamic cast to AddressOf and get the variable's symbol from the symbol table
 		AddressOf* address_of_exp = dynamic_cast<AddressOf*>(to_fetch.get());	// the AddressOf expression
 		LValue address_to_get = address_of_exp->get_target();	// the actual LValue of the address we want
-		Symbol* variable_symbol = this->symbol_table.lookup(address_to_get.getValue(), this->current_scope_name);
+		Symbol* variable_symbol = this->symbol_table.lookup(address_to_get.getValue(), this->current_scope_name, this->current_scope);
 
 		// make sure the variable was defined
 		if (variable_symbol->defined) {
@@ -802,7 +813,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 
 	// if we have a const, we can use the "@db" directive
 	if (to_allocate.quality == CONSTANT) {
-		this->symbol_table.insert(to_allocate);	// constants have no need for the stack; we can add the symbol right away
+		this->symbol_table.insert(to_allocate, allocation_statement.get_line_number());	// constants have no need for the stack; we can add the symbol right away
 
 		// constants must initialized when they are allocated (i.e. they must use alloc-assign syntax)
 		if (to_allocate.defined) {
@@ -827,7 +838,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 				LValue* initializer_lvalue = dynamic_cast<LValue*>(initial_value.get());
 
 				// look through the symbol table to get the symbol
-				Symbol* initializer_symbol = this->symbol_table.lookup(initializer_lvalue->getValue(), this->current_scope_name);	// this will throw an exception if the object isn't in the symbol table
+				Symbol* initializer_symbol = this->symbol_table.lookup(initializer_lvalue->getValue(), this->current_scope_name, this->current_scope);	// this will throw an exception if the object isn't in the symbol table
 
 				// verify the symbol is defined
 				if (initializer_symbol->defined) {
@@ -912,7 +923,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 
 	// handle all non-const global variables
 	else if (current_scope_name == "global" && current_scope == 0) {
-		this->symbol_table.insert(to_allocate);	// global variables do not need the stack, so add to the symbol table right away
+		this->symbol_table.insert(to_allocate, allocation_statement.get_line_number());	// global variables do not need the stack, so add to the symbol table right away
 
 		// reserve the variable itself first -- it may be a pointer to the variable if we need to dynamically allocate it
 		allocation_ss << "@rs " << to_allocate.name << std::endl;	// syntax is "@rs macro_name"
@@ -934,7 +945,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 			allocation_ss << this->move_sp_to_target_address(stack_offset, *max_offset).str();	// make sure the stack pointer is at the end of the stack frame before allocating a local variable (so we don't overwrite anything)
 			
 			to_allocate.stack_offset = *stack_offset;	// the stack offset for the symbol will now be the current stack offset
-			this->symbol_table.insert(to_allocate);	// now that the symbol's stack offset has been added to the symbol, we can insert it in the table
+			this->symbol_table.insert(to_allocate, allocation_statement.get_line_number());	// now that the symbol's stack offset has been added to the symbol, we can insert it in the table
 
 			// If the variable is defined, we can push its initial value
 			if (to_allocate.defined) {
@@ -998,7 +1009,7 @@ std::stringstream Compiler::define(Definition definition_statement) {
 
 	// function definitions have to be in the global scope
 	if (current_scope_name == "global" && current_scope == 0) {
-		this->symbol_table.insert(func_name, return_type, "global", 0, NONE, NO_QUALITY, true, definition_statement.get_args());
+		this->symbol_table.insert(func_name, return_type, "global", 0, NONE, NO_QUALITY, true, definition_statement.get_args(), definition_statement.get_line_number());
 		// next, we will make sure that all of the function code gets written to a stringstream; once we have gone all the way through the AST, we will write our functions as subroutines to the end of the file
 
 		// create a label for the function name
@@ -1015,7 +1026,7 @@ std::stringstream Compiler::define(Definition definition_statement) {
 				Allocation* arg_alloc = dynamic_cast<Allocation*>(arg_iter->get());
 				
 				// add the variable to the symbol table, giving it the function's scope name at scope level 1
-				this->symbol_table.insert(arg_alloc->get_var_name(), arg_alloc->get_var_type(), func_name, 1, arg_alloc->get_var_subtype(), arg_alloc->get_quality(), arg_alloc->was_initialized());	// this variable is only accessible inside this function's scope
+				this->symbol_table.insert(arg_alloc->get_var_name(), arg_alloc->get_var_type(), func_name, 1, arg_alloc->get_var_subtype(), arg_alloc->get_quality(), arg_alloc->was_initialized(), {}, definition_statement.get_line_number());	// this variable is only accessible inside this function's scope
 
 				// TODO: add default parameters
 
@@ -1096,7 +1107,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 
 	if (this->symbol_table.is_in_symbol_table(var_name, this->current_scope_name)) {
 		// get the symbol information
-		Symbol* fetched = this->symbol_table.lookup(var_name, this->current_scope_name);
+		Symbol* fetched = this->symbol_table.lookup(var_name, this->current_scope_name, this->current_scope);
 
 		// if the quality is "const" throw an error; we cannot make assignments to const-qualified variables
 		if (fetched->quality == CONSTANT) {
@@ -1295,7 +1306,7 @@ std::stringstream Compiler::call(Call call_statement, size_t* stack_offset, size
 					// if the lvalue we are passing is accessible
 					if (this->symbol_table.is_in_symbol_table(var_arg_exp->getValue(), this->current_scope_name)) {
 						// then, get the variable
-						Symbol argument_symbol_data = *this->symbol_table.lookup(var_arg_exp->getValue(), this->current_scope_name);
+						Symbol argument_symbol_data = *this->symbol_table.lookup(var_arg_exp->getValue(), this->current_scope_name, this->current_scope);
 
 						// dynamic and static/auto memory must be treated differently
 						if (argument_symbol_data.quality == DYNAMIC) {
@@ -1660,7 +1671,7 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 			FreeMemory* free_statement = dynamic_cast<FreeMemory*>(current_statement);
 
 			// look for a symbol in the table with the same name as is indicated by the free statement
-			Symbol* to_free = this->symbol_table.lookup(free_statement->get_freed_memory().getValue(), this->current_scope_name);
+			Symbol* to_free = this->symbol_table.lookup(free_statement->get_freed_memory().getValue(), this->current_scope_name, this->current_scope);
 			// we can only free dynamic memory that hasn't already been freed
 			if (!to_free->freed && (to_free->quality == DYNAMIC)) {
 				/*

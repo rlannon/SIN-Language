@@ -5,6 +5,22 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+3/2 commit to Compiler
+
+- Merged Dynamic-Memory into Compiler and deleted the former
+- The software is now licensed under the MIT License
+- Removed scope information from the 'Statement' class; they were unused and unnecessary
+- Input data can no longer cause a buffer overflow into the stack; if the input data is larger than the input buffer, the VM will only copy in as many bytes as are available to the buffer.
+- Fixed error where the program threw an std::vector exception when certain lines went unfinished; the Parser::next() and Parser::peek() methods checked to see if the position was <= to the size of the token list when they should have only checked to see if it was <
+- Empty tokens are now deleted from the tokens list when the Parser is initialized with a Lexer object
+- The SymbolTable::lookup(...) and SymbolTable::is_in_symbol_table(...) functions previously only looked for symbols with the same name that were /also/ in the same scope; the functions now look at lower scopes as well
+- Added 'bool SymbolTable::exists_in_scope(...)' to check to see whether a given variable exists in the specified scope at the specified scope level; this is used by the 'SymbolTable::insert(...)' function to check and make sure we don't have duplicates. This is different from SymbolTable::is_in_symbol_table because the latter simply checks to make sure we aren't going to be looking up a symbol that doesn't exist.
+- Added "SymbolTableException" class
+- Added "line number" as a parameter to the SymbolTable::insert functions; added line numbers to calls for SymbolTable::insert(...) in the Compiler class
+- Minor updates to some of the /Doc files
+
+--------------------------------------------------------------------------------------------
+
 2/28 commit (2) to Dynamic-Memory
 
 - Moved the "Symbol" struct to its own file, which is included in the project through the SymbolTable files.

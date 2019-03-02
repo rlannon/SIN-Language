@@ -43,3 +43,6 @@ CONDITIONALS:
 WHILE LOOPS:
 	While loops also require labels for branching purposes. They use a similar naming convention to ITE statements:
 		__<scope name>_<scope level>__WHILE_<branch number>__
+
+	This naming also applies to a generic loop:
+		__<scope name>_<scope level>__LOOP_<branch number>__

@@ -34,12 +34,12 @@ const size_t _POINTER_TABLE_TOP = 0x00FF;
 // the RS directive, which creates global variables, will allocate variables starting at 0x0100 and have 3 pages
 const size_t _RS_START = 0x0100;
 
-const size_t _BUFFER_START = 0x1400;	// a ~1K buffer for input data
-const size_t _BUFFER_MAX = 0x17FF;
-
 // any variables allocated on the heap will be allocated starting at 0x0400 up to the input buffer; this is where all dynamic memory will be stored
 const size_t _HEAP_START = 0x0400;
 const size_t _HEAP_MAX = 0x13FF;
+
+const size_t _INPUT_BUFFER_START = 0x1400;	// a ~1K buffer for input data
+const size_t _INPUT_BUFFER_MAX = 0x17FF;
 
 // the stack -- this is used for all of our scope data, and so it gets quite a bit of memory
 const size_t _STACK = 0x23FF;	// our stack grows downwards
