@@ -13,6 +13,7 @@
 #include "SinObjectFile.h"
 //#include "BinaryIO.h"	// all the functions used to write data to binary files (for SIN bytecode/compiled-SIN (.sinc) files) -- included in "LoadSINC.h"
 #include "OpcodeConstants.h"	// so we can reference opcodes by name rather than using hex values every time
+#include "AddressingModeConstants.h"	// so we can reference addressing modes by name
 
 /*
 
@@ -33,20 +34,9 @@ Quick guide to the assembly (see Doc/sinasm for more information):
 	
 	When decoded, the instructions will take up at least 2 bytes -- one for the instruction opcode, one for the addressing mode, and optional bytes for data. The _WORDSIZE variable will determine how many bytes are allocated for values, and defaults to 16 bits if it is not specified. _WORDSIZE can be 16, 32, or 64 bits.
 
-	The following addressing modes are available
-		Absolute	-	e.g., LOADA $1234		-	Gets the value at the address specified
-		Indexed		-	e.g., LOADA $1234, X	-	Gets the value at the address specified, indexed with x (so here, if x were $02, it would get the value at the address of $1236)
-		Immediate	-	e.g., LOADA #$1234		-	The literal value written; no memory access; 16-bit value
-		8-bit		-	e.g., LOADA $12			-	Like absolute, but only addresses a single byte
-		Indirect	-	e.g., LOADA ($1234, Y)	-	
-		Register	-	e.g., LSR A				-	Can only be used with the A register and the bitshift instructions; operates on the given register
-
-		// TODO: add support for 8-bit addressing (so only write to the single byte specified; not 2 bytes)
+	For the available addressing modes, see "AddressingModeConstants.h"
 
 */
-
-// to maintain the .sinc file standard
-const uint8_t sinc_version = 2;
 
 // to test whether instructions are of particular "classes"
 const bool is_standalone(int opcode);	// tells us whether an opcode needs a value to follow
@@ -63,6 +53,7 @@ class Assembler
 {
 	// allow SINVM access to these functions
 	friend class SINVM;
+	friend class SinObjectFile;
 
 	// tell the assembler our wordsize
 	uint8_t _WORDSIZE;
@@ -123,7 +114,7 @@ class Assembler
 	// get the opcode/mnemonic
 	static int get_opcode(std::string mnemonic);
 	static std::string get_mnemonic(int opcode);
-	static uint8_t get_address_mode(std::string value, std::string offset="");
+	static uint8_t get_addressing_mode(std::string value, std::string offset="");
 
 	// TODO: write more assembler-related functions as needed
 
@@ -133,7 +124,7 @@ class Assembler
 	// get the instructions of a SINASM file and returns them in a vector<int>
 	std::vector<uint8_t> assemble();
 public:
-	// take a SINASM file as input and creates a .sinc file to be used by the SINVM; one of the entry functions for the class
+	// take a SINASM file as input and creates a .sinc file to be used by the SINVM
 	void create_sinc_file(std::string output_file_name);
 
 	// get the list of object files for the linker

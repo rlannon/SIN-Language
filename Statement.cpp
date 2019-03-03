@@ -1,24 +1,36 @@
-// Statement.cpp
-// Implementation of the "Statement" class
+/*
 
-# include "Statement.h"
+SIN Toolchain
+Statement.cpp
+Copyright 2019 Riley Lannon
+
+The implementation of the Statement parent class and its various child classes
+
+*/
 
 
-std::string Statement::get_type() {
+#include "Statement.h"
+
+
+stmt_type Statement::get_statement_type() {
 	return Statement::statement_type;
 }
 
-std::string Statement::get_scope_name()
+int Statement::get_line_number()
 {
-	return Statement::scope_name;
+	return this->line_number;
 }
 
-int Statement::get_scope_level()
+void Statement::set_line_number(int line_number)
 {
-	return Statement::scope_level;
+	this->line_number = line_number;
 }
 
 Statement::Statement() {
+	// create default scope names and levels
+	// TODO: remove scope name and level in symbol?
+	this->scope_level = 0;
+	this->scope_name = "global";
 }
 
 Statement::~Statement() {
@@ -46,11 +58,11 @@ std::string Include::get_filename() {
 }
 
 Include::Include(std::string filename) : filename(filename) {
-	this->statement_type = "include";
+	this->statement_type = INCLUDE;
 }
 
 Include::Include() {
-	this->statement_type = "include";
+	this->statement_type = INCLUDE;
 }
 
 
@@ -58,16 +70,20 @@ Include::Include() {
 /*******************	ALLOCATION CLASS	********************/
 
 
-Type Allocation::getVarType() {
+Type Allocation::get_var_type() {
 	return this->type;
 }
 
-std::string Allocation::getVarTypeAsString() {
+Type Allocation::get_var_subtype() {
+	return this->subtype;
+}
+
+std::string Allocation::get_var_type_as_string(Type to_convert) {
 	std::string types_list[4] = { "int", "float", "string", "bool" };
 	Type _types[4] = { INT, FLOAT, STRING, BOOL };
 
 	for (int i = 0; i < 4; i++) {
-		if (this->type == _types[i]) {
+		if (to_convert == _types[i]) {
 			return types_list[i];
 		}
 		else {
@@ -79,47 +95,65 @@ std::string Allocation::getVarTypeAsString() {
 	return "[unknown type]";
 }
 
-std::string Allocation::getVarName() {
+std::string Allocation::get_var_name() {
 	return this->value;
 }
 
-Allocation::Allocation(Type type, std::string value) : type(type), value(value) {
-	Allocation::statement_type = "alloc";
+SymbolQuality Allocation::get_quality()
+{
+	return this->quality;
+}
+
+bool Allocation::was_initialized()
+{
+	return this->initialized;
+}
+
+std::shared_ptr<Expression> Allocation::get_initial_value()
+{
+	return this->initial_value;
+}
+
+void Allocation::set_symbol_quality(SymbolQuality new_quality)
+{
+	this->quality = new_quality;
+}
+
+Allocation::Allocation(Type type, std::string value, Type subtype, bool initialized, std::shared_ptr<Expression> initial_value, SymbolQuality quality) : type(type), value(value), subtype(subtype), initialized(initialized), initial_value(initial_value), quality(quality) {
+	Allocation::statement_type = ALLOCATION;
 }
 
 Allocation::Allocation() {
-	Allocation::statement_type = "alloc";
+	Allocation::type = NONE;
+	Allocation::subtype = NONE;	// will remain 'NONE' unless 'type' is a ptr or array
+	Allocation::initialized = false;
+	Allocation::statement_type = ALLOCATION;
+	Allocation::quality = NO_QUALITY;
 }
 
 
 
 /*******************	ASSIGNMENT CLASS	********************/
 
-
-std::string Assignment::getLvalueName() {
-	return this->lvalue.getValue();
-}
-
-std::string Assignment::getRValueType() {
-	Expression* _rval = dynamic_cast<Expression*>(rvalue_ptr.get());
-	return _rval->getExpType();
-}
-
-LValue Assignment::getLValue() {
+std::shared_ptr<Expression> Assignment::get_lvalue() {
 	return this->lvalue;
 }
 
-std::shared_ptr<Expression> Assignment::getRValue() {
+std::shared_ptr<Expression> Assignment::get_rvalue() {
 	return this->rvalue_ptr;
 }
 
-Assignment::Assignment(LValue lvalue, std::shared_ptr<Expression> rvalue) : lvalue(lvalue) {
-	Assignment::statement_type = "assign";
-	Assignment::rvalue_ptr = rvalue;
+Assignment::Assignment(std::shared_ptr<Expression> lvalue, std::shared_ptr<Expression> rvalue) : lvalue(lvalue), rvalue_ptr(rvalue) {
+	Assignment::statement_type = ASSIGNMENT;
+}
+
+Assignment::Assignment(LValue lvalue, std::shared_ptr<Expression> rvalue) : rvalue_ptr(rvalue) {
+	this->lvalue = std::make_shared<LValue>(lvalue);
+	this->statement_type = ASSIGNMENT;
 }
 
 Assignment::Assignment() {
-	Assignment::statement_type = "assign";
+	Assignment::statement_type = ASSIGNMENT;
 }
 
 
@@ -133,12 +167,12 @@ std::shared_ptr<Expression> ReturnStatement::get_return_exp() {
 
 
 ReturnStatement::ReturnStatement(std::shared_ptr<Expression> exp_ptr) {
-	ReturnStatement::statement_type = "return";
+	ReturnStatement::statement_type = RETURN_STATEMENT;
 	ReturnStatement::return_exp = exp_ptr;
 }
 
 ReturnStatement::ReturnStatement() {
-	ReturnStatement::statement_type = "return";
+	ReturnStatement::statement_type = RETURN_STATEMENT;
 }
 
 
@@ -146,7 +180,7 @@ ReturnStatement::ReturnStatement() {
 /*******************	ITE CLASS		********************/
 
 std::shared_ptr<Expression> IfThenElse::get_condition() {
-	return IfThenElse::condition;
+	return this->condition;
 }
 
 std::shared_ptr<StatementBlock> IfThenElse::get_if_branch() {
@@ -157,23 +191,22 @@ std::shared_ptr<StatementBlock> IfThenElse::get_else_branch() {
 	return this->else_branch;
 }
 
-
 IfThenElse::IfThenElse(std::shared_ptr<Expression> condition_ptr, std::shared_ptr<StatementBlock> if_branch_ptr, std::shared_ptr<StatementBlock> else_branch_ptr) {
-	IfThenElse::statement_type = "ite";
+	IfThenElse::statement_type = IF_THEN_ELSE;
 	IfThenElse::condition = condition_ptr;
 	IfThenElse::if_branch = if_branch_ptr;
 	IfThenElse::else_branch = else_branch_ptr;
 }
 
 IfThenElse::IfThenElse(std::shared_ptr<Expression> condition_ptr, std::shared_ptr<StatementBlock> if_branch_ptr) {
-	IfThenElse::statement_type = "ite";
+	IfThenElse::statement_type = IF_THEN_ELSE;
 	IfThenElse::condition = condition_ptr;
 	IfThenElse::if_branch = if_branch_ptr;
 	IfThenElse::else_branch = NULL;
 }
 
 IfThenElse::IfThenElse() {
-	IfThenElse::statement_type = "ite";
+	IfThenElse::statement_type = IF_THEN_ELSE;
 }
 
 
@@ -191,7 +224,7 @@ std::shared_ptr<StatementBlock> WhileLoop::get_branch()
 }
 
 WhileLoop::WhileLoop(std::shared_ptr<Expression> condition, std::shared_ptr<StatementBlock> branch) : condition(condition), branch(branch) {
-	WhileLoop::statement_type = "while";
+	WhileLoop::statement_type = WHILE_LOOP;
 }
 
 WhileLoop::WhileLoop() {
@@ -221,11 +254,11 @@ Definition::Definition(std::shared_ptr<Expression> name_ptr, Type return_type_pt
 	Definition::args = args_ptr;
 	Definition::procedure = procedure_ptr;
 	Definition::return_type = return_type_ptr;
-	Definition::statement_type = "def";
+	Definition::statement_type = DEFINITION;
 }
 
 Definition::Definition() {
-	Definition::statement_type = "def";
+	Definition::statement_type = DEFINITION;
 }
 
 
@@ -244,9 +277,40 @@ std::shared_ptr<Expression> Call::get_arg(int num) {
 }
 
 Call::Call(std::shared_ptr<LValue> func, std::vector<std::shared_ptr<Expression>> args) : func(func), args(args) {
-	Call::statement_type = "call";
+	Call::statement_type = CALL;
 }
 
 Call::Call() {
-	Call::statement_type = "call";
+	Call::statement_type = CALL;
+}
+
+
+/*******************		INLINE ASM CLASS		********************/
+
+std::string InlineAssembly::get_asm_type()
+{
+	return this->asm_type;
+}
+
+InlineAssembly::InlineAssembly(std::string assembly_type, std::string asm_code) : asm_type(assembly_type), asm_code(asm_code) {
+	InlineAssembly::statement_type = INLINE_ASM;
+}
+
+InlineAssembly::InlineAssembly() {
+	InlineAssembly::statement_type = INLINE_ASM;
+}
+
+
+/*******************		FREE MEMORY CLASS		********************/
+
+LValue FreeMemory::get_freed_memory() {
+	return this->to_free;
+}
+
+FreeMemory::FreeMemory(LValue to_free) : to_free(to_free) {
+	FreeMemory::statement_type = FREE_MEMORY;
+}
+
+FreeMemory::FreeMemory() {
+	FreeMemory::statement_type = FREE_MEMORY;
 }

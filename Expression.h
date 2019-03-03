@@ -5,59 +5,18 @@
 #include <tuple>
 #include <exception>
 
+#include "EnumeratedTypes.h"
 
-// Define our custom types for expressions and statements
 
-enum exp_operator {
-	PLUS,
-	MINUS,
-	MULT,
-	DIV,
-	EQUAL,
-	NOT_EQUAL,
-	GREATER,
-	LESS,
-	GREATER_OR_EQUAL,
-	LESS_OR_EQUAL,
-	AND,
-	NOT,
-	OR,
-	NO_OP
-};
+const exp_operator translate_operator(std::string op_string);	// given the string name for an exp_operator, returns that exp_operator
 
-const exp_operator translate_operator(std::string op_string);
-
-enum Type {
-	INT,
-	FLOAT,
-	STRING,
-	BOOL,
-	VOID,
-	INTPTR,
-	FLOATPTR,
-	STRINGPTR,
-	BOOLPTR,
-	VOIDPTR,
-	PTRPTR,
-	RAW8,
-	RAW16,
-	RAW32,
-	NONE
-};
-
-const int num_types = 14;
+const int num_types = 11;
 
 const bool is_literal(std::string candidate_type);
 
 const Type get_type_from_string(std::string candidate);
 
 const std::string get_string_from_type(Type candidate);
-
-const Type get_ptr_type(Type candidate);	// returns the appropriate pointer type for a given type (e.g., INT returns INTPTR, FLOAT -> FLOATPTR)
-
-const bool is_ptr_type(Type candidate);	// returns true if the type is a pointer type
-
-const bool match_ptr_types(Type ptr_type, Type pointed_type);
 
 const Type get_raw_type(int _size);
 
@@ -67,10 +26,11 @@ const bool is_raw(Type _t);
 class Expression
 {
 protected:
-	std::string type;
+	exp_type expression_type;	// replace "string type" with "exp_type expression_type"
 public:
-	std::string getExpType();
-	Expression(std::string type);
+	exp_type get_expression_type();	// tells us whether it's a literal, lvalue, binary...
+	//Expression(std::string type);
+	Expression(exp_type expression_type);
 	Expression();
 
 	virtual ~Expression();
@@ -81,19 +41,20 @@ public:
 class Literal : public Expression
 {
 	Type data_type;
+	Type subtype;
 	std::string value;
 public:
 	Type get_type();
 	std::string get_value();
-	Literal(Type data_type, std::string value);
+	Literal(Type data_type, std::string value, Type subtype = NONE);
 	Literal();
 };
 
 // LValue -- a variable
 class LValue : public Expression
 {
-	std::string value;
-	std::string LValue_Type;
+	std::string value;	// the name of the variable
+	std::string LValue_Type;	// the type -- var, var_dereferenced, or var_address
 public:
 	std::string getValue();
 	std::string getLValueType();

@@ -4,6 +4,190 @@ A list of changes made since last git commit. This file will go into more detail
 This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
+
+3/2 commit to Compiler
+
+- Merged Dynamic-Memory into Compiler and deleted the former
+- The software is now licensed under the MIT License
+- Removed scope information from the 'Statement' class; they were unused and unnecessary
+- Input data can no longer cause a buffer overflow into the stack; if the input data is larger than the input buffer, the VM will only copy in as many bytes as are available to the buffer.
+- Fixed error where the program threw an std::vector exception when certain lines went unfinished; the Parser::next() and Parser::peek() methods checked to see if the position was <= to the size of the token list when they should have only checked to see if it was <
+- Empty tokens are now deleted from the tokens list when the Parser is initialized with a Lexer object
+- The SymbolTable::lookup(...) and SymbolTable::is_in_symbol_table(...) functions previously only looked for symbols with the same name that were /also/ in the same scope; the functions now look at lower scopes as well
+- Added 'bool SymbolTable::exists_in_scope(...)' to check to see whether a given variable exists in the specified scope at the specified scope level; this is used by the 'SymbolTable::insert(...)' function to check and make sure we don't have duplicates. This is different from SymbolTable::is_in_symbol_table because the latter simply checks to make sure we aren't going to be looking up a symbol that doesn't exist.
+- Added "SymbolTableException" class
+- Added "line number" as a parameter to the SymbolTable::insert functions; added line numbers to calls for SymbolTable::insert(...) in the Compiler class
+- Minor updates to some of the /Doc files
+
+--------------------------------------------------------------------------------------------
+
+2/28 commit (2) to Dynamic-Memory
+
+- Moved the "Symbol" struct to its own file, which is included in the project through the SymbolTable files.
+- Began process of adding comment headers to each of the files with short descriptors of what the files' purposes are.
+- Changed more exceptions from runtime_error to an exception of the appropriate type (currently using error code 0 as a placeholder)
+- Dynamic memory can now be freed using the "free" keyword
+	- 'Statement' now contains a 'FreeMemory' statement type
+	- The Parser can now parse 'free ...' statements
+	- The Compiler can generate assembly for such statements
+	- Note that nothing is automatically freed right now and strings must be freed manually (they are _always_ dynamically allocated)
+- Reserved a few more keywords for things that will be implemented in future commits (such as arrays and structs)
+
+--------------------------------------------------------------------------------------------
+
+2/28 commit to Dynamic-Memory:
+
+- Implemented global and local strings, both of which can be used in function calls.
+	- Currently, the string memory is not freed and there is no mechanism for strings to be reallocated when necessary. Automatic memory reallocation must be expanded and refactored, alongside compiler refactoring, to allow strings to be automatically reallocated when their size expands beyond the space initially allocated for it. Further, the compiler still needs a mechanism to automatically free string memory when they go out of scope.
+	- The compiler and parser also need methods to free memory and dynamically allocate memory beyond strings.
+- Updated the Compiler::call method to be cleaner and more maintainable, in particular in the way function arguments are pushed to the stack, especially differentiating between static/automatic and dynamic memory.
+- Modified the Compiler::incsp_to_stack_frame method to be far more general and flexible; it moves the stack pointer to a particular offset, not just the end of the stack frame.
+- Added a string assignment function to handle initial assignments to strings.
+	- It must be updated so that it does not reallocate memory for each assignment, and only reallocates the string when necessary.
+- Fixed a small bug in the compiler where the string length was not correctly loaded from the heap; it treated certain data as a double-reference pointer when it was only single-reference. The change was from using indirect indexed addressing to plain indexed.
+- The VM now forbids writing data into address 0x00; this is so that null pointers will always be guaranteed to return 0x00.
+- Added more comments, made further minor fixes to code and readability
+
+--------------------------------------------------------------------------------------------
+
+2/21 commit to Dynamic-Memory:
+
+- 'int main(...)' now supports command-line arguments; no longer throws exceptions when they are supplied
+- Began implementation of string support in compiler through the newly-added dynamic memory allocation
+- Added an 'INCB' instruction to the VM's instruction set; there is no corresponding 'DECB' instruction
+- Added a '__builtins_memcpy' subroutine to 'builtins-sinasm16' and a corresponding SIN wrapper for the memcpy(...) function.
+- Fixed an error in the Exceptions wherein error messages from 'what()' were not printed; this was due to a pointer invalidation as a result of using variables in the virtual function, which were destroyed by the time the function was invoked. Moving all message constructions into the constructor for the exception solved this issue.
+
+--------------------------------------------------------------------------------------------
+
+2/20 commit to Dynamic-Memory:
+
+- Added a 'DynamicObject' class, to be used by the VM to store information about dynamic objects, and added a list of such members to the VM
+- Added the syscall instructions necessary for reserving VM Heap memory
+	- See syscall.txt for information on how they work
+- Updated the VM memory map with new address spaces and names
+- Fixed data bug in Assember that caused it to write incorrect data for addresses
+- 'syscall #$14' no longer encloses the output string in double quotes
+- AddressingModeConstants includes <cinttypes>, not <iostream> for the uint__t types
+- Other minor edits, fixes, and commenting
+
+--------------------------------------------------------------------------------------------
+
+2/20 commit to Compiler:
+
+- Changed github username, so made changes in the code to reflect that (where github was mentioned).
+- Changed SINVM registers from 'int' to 'uint16_t' -- this more accurately reflects how the inner workings of this processor are supposed to be.
+- Removed old 'Assembler::disassemble()' code, as the .sinc format has changed since that code was written and the disassemble code was never updated. The function will be rewritten in a future commit.
+- Refactored some of the code to make initial assignments to constants. It is still incomplete but will be completed in future commits.
+- Added a 'CompilerException' class; all compiler exceptions will be modified to this type in future.
+- Began implementation of a 32-bit (single precicion) float type, though this may be changed to 16 bits (half-precision) depending on how it is ultimately implemented in the VM.
+- Moved the various enumerated types into their own file for better maintainability / overall organization.
+
+--------------------------------------------------------------------------------------------
+
+2/17 commit to Compiler:
+
+- Fixed more bugs in the builtins mathematical functions and implemented signed multiplication
+	(bugs being not getting the correct number when multiplying)
+- Fixed a bug in the SINVM code that resulted in an incorrect number being outputted in the load_data_from_memory() function -- switched from a for loop with one index variable to a while loop with 2, which solved the issue
+- Fixed some bugs relating to pointers in the compiler -- specifically:
+	1) the compiler would report a type match error when the rvalue of an assignment had a pointer in it (specifically in binary rvalue expressions)
+	2) the compiler could not properly use dereferenced pointer values as it did not distinguish between pointers and non-pointer lvalues; it can now properly make such references as the indirect addressing modes exist in the assembler
+- Fixed pointer dereferences in Parser -- double-ref pointers ended up breaking in the Parser; this is no longer the case, as the method implemented here seems to be more robust than the previous way
+- Refactored the Parser to use many functions instead of a single large one to parse statements
+- Changed the "lvalue" variable under Statement::Assignment to be a shared pointer rather than an LValue; this allows the left hand expression to be a dereferenced pointer
+- Implemented indexed indirect and indirect indexed addressing modes in the VM
+- Added an 'f' flag in the STATUS register to indicate a floating point number
+- Cleaned up code, added more comments
+- Addressed some of the compiler warnings, particularly those about signed/unsigned mismatches (there was a discrepancy between types -- most notably, comparing size_t and int)
+
+Notes:
+	- The code currently cannot handle double ref pointers; this is something that will be added in future. Single ref pointers are OK so far
+	- There are yet more bugs to fix and there will always be more code to clean up; future commits will include more fixes, refactoring, and comments
+	- The 'builtins' functions for mathematics are not yet complete; the library will be expanded in future commits
+	- The main function is inefficient and the current methods for use of flags do not work if you wish to use multiple at a time; the main function will therefore be refactored in a future commit to be more modular and efficient.
+
+--------------------------------------------------------------------------------------------
+
+2/15 commit to Compiler:
+
+- Began process of implementing mathematical functions via the 'builtins' library
+- There was previously a bug where labels were not given the correct address upon assembly; this was due to an oversight in the code where using a register addressing mode would increment the byte counter too far (instead of incrementing it two bytes for 'ADDCA B', it would add the wordsize on top, resulting in overshooting the destination by 2 bytes per register-operand instruction). This has been fixed.
+- Began process of implementing binary tree evaluation, though it is far from complete. There are still many known bugs and incomplete sections of the code.
+
+--------------------------------------------------------------------------------------------
+
+2/13 commit to Compiler:
+
+- Implemented preliminary code to compile if/then/else (ITE) statements
+- Added a routine to handle unary expression evaluation
+- Added 'sen' and 'cln' (set negative and clear negative) opcodes into SINASM
+- Modified some operations within the SINVM to set flags when said operations are performed (e.g., addition can now set the N flag)
+- Local variables are now assigned correctly in the assign function -- rather than using the symbol name, it uses the stack (as it is supposed to)
+- Branching to an ITE now updates the scope name to be __ITE_<branch number>
+- If branches can now be created without an accompanying else branch in the compiler
+- More comments and minor other fixes
+
+--------------------------------------------------------------------------------------------
+
+1/21 commit to Compiler:
+
+- There was a previously unknown bug in the Parser wherein dereferenced pointers would result in errors if they were a part of a binary tree. This has been resolved; in parseExpression, we were returning the dereference object directly rather than passing it into maybeBinary, which is what we should have been doing.
+- Refactored the compiler's assignment routine to use our new function to fetch values. Note that pointers and dynamic memory types have not yet been implemented.
+- More comments and minor other fixes.
+
+--------------------------------------------------------------------------------------------
+
+1/17 commit to Compiler:
+
+- Because gcc/g++ does not support 'std::exception' initialized with a string or char*, all instances of "throw std::exception(" ... ")" were changed to "throw std::runtime_error("...")" for cross-compiler support.
+
+--------------------------------------------------------------------------------------------
+
+1/16 commit to Compiler:
+
+- Added support in assembler for indexed indirect addressing modes alongside indirect indexed; syntax is the same as in 6502 assembly
+- Refactored the data type system to support primary- and sub- types alike; this included major changes to the Interpreter as well as some changes in the Expression and Statement classes
+- Changed Interpreter's symbol table system to use a 'typedef struct' for symbols instead of 'std::tuple'
+- Made some changes to begin the project of dynamic memory management in the compiler/assembler/etc.; non-const-qualified strings will require dynamic memory on the heap, whereas the current system supports only static/const memory
+- Removed some old and unnecessary code
+
+--------------------------------------------------------------------------------------------
+
+1/14 commit to Compiler:
+
+- Renamed the namespace 'addressmode' to 'addressingmode' as it is more accurate/consistent
+- Refactored statement::type and expression::type to use enums instead of strings; this allows for code that makes much more sense to read, as well as a much more limited range of choices for the types of statements and expressions we can use (e.g., no more wondering if it is "lvalue" or "LValue", as it is LVALUE)
+- Began adding in support for a "builtins" library in the compiler (built-in functions will not be hard-coded in the compiler, but use assembly implementations in separate files that are included in projects)
+- Added a vector of already-included libraries so we can avoid duplicate dependencies, though it is not yet fully implemented or well-tested
+- Added more compilation routines, though they are nowhere close to finished and the compiler remains largely incomplete
+- Many more comments
+- Began work to make the functions more modular and maintainable
+- Fixed typos
+- Removed some unnecessary stuff
+- Changed comments from # to // in SIN
+- Added "asm<>" keyword for inline ASM; note this is NOT protected and the compiler essentially ignores what you do inside
+- Updated the included "BinaryIO" library to its latest version
+
+According to "cloc", the project now contains approximately:
+	- 5600 lines of code
+	- 1700 comment lines
+	- 1600 blank lines
+
+--------------------------------------------------------------------------------------------
+1/5 commit to Compiler:
+
+- Added constants for the addressing modes in assembler/SINVM. Now, address modes can be referenced by addressmode::___ instead of a number. This makes for less obfuscated and more maintainable code.
+
+- Added beginning to the compiler. Currently capable of producing simple allocations and assignments (literals only) as well as function definitions.
+
+- Modified the 'lexeme' typedef to be a 'typedef struct' instead of an alias for tuple<string, string>. As such, all references to lexemes were modified (and are now much more readable and maintainable). Further, 'int line_number' was added so that the line number where the lexeme was found is included.
+
+- Added a line counter to the Lexer; every time we call next(), if the character is \n, the counter is incremented.
+
+- Added a line number variable to the Statement class, which uses the line number of the first lexeme in the statement to determine the line on which the statement occurred. This allows the compiler to show what line errors occurred on.
+
+--------------------------------------------------------------------------------------------
 12/31 commit to Assembler-Directives:
 
 - Changed assembler labels; they no longer begin with "." unless it is a sublabel. Sublabels are always in reference to the most recent "global-level" loop above them. For example:

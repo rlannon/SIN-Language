@@ -17,14 +17,21 @@ A lexeme may be returned from the stream using the read_next() function.
 
 Note that the Lexer class does /not/ parse source files; it simply puts those files in a format that is usable by the language's parser, which is contained within the Parser class.
 
-NOTE:
-	Add in a function to allow this to be saved to a json file
-
 */
 
 
 // Our lexeme data
-typedef std::tuple<std::string, std::string> lexeme;
+typedef struct lexeme {
+	std::string type;
+	std::string value;
+	int line_number;
+	
+	// overload the == operator
+	bool operator==(const lexeme& b);
+
+	lexeme();
+	lexeme(std::string type, std::string value, int line_number);
+};
 
 class Lexer
 {
@@ -32,9 +39,8 @@ class Lexer
 	int position;
 	bool exit_flag;
 
-	int stream_length;	// the length of ifstream* stream, without the ultimate \n character (if present)
-
 	lexeme current_lexeme;
+	unsigned int current_line;	// track what line we are on in the file
 
 	static const std::vector<std::string> keywords;	// our keyword vector
 
@@ -47,29 +53,30 @@ class Lexer
 	// character access functions
 	char peek();
 	char next();
-	void croak(char token, int position);	// something went wrong; print an error message quit the lexer
 
 	static bool match_character(char ch, std::string expression);	// match a single character with regex (including an exception handler)
 
 	/*
 
-		Character test functions
-		The following functions test to see whether a character is of a particular type to help evaluate the type of the whole token.
-		Tokens all have a type and value, and are a member of one of the following classes:
+	Character test functions
+	The following functions test to see whether a character is of a particular type to help evaluate the type of the whole token.
+	Tokens all have a type and value, and are a member of one of the following classes:
 		float	-	a floating point decimal number
 		int		-	an integer
 		string	-	any string of characters that is not an identifier or a keyword
-		must be enclosed in double quotes for it to be read as a string
+			must be enclosed in double quotes for it to be read as a string
 		bool	-	a boolean type
-		values can be true or false
-		iden	-	identifier
-		variable names, function names, etc.
-		kw		-	keyword
-		let, alloc, if, etc.
+			values can be True or False
+		ident	-	identifier
+			variable names, function names, etc.
+		kwd		-	keyword
+			let, alloc, if, etc.
 		punc	-	punctuation
-		. , ; () {} []
+			. , : ; () {} []
 		op		-	mathematical, logical, and other important operators
-		+ * - / & | ^ % < > = ! @ ? $
+			+ * - / & | ^ % < > = ! @ ? $
+		escape	-	escaped characters
+			\n, \t, etc.
 
 	*/
 
@@ -122,7 +129,7 @@ class LexerException : public std::exception {
 	char ch_;
 public:
 	explicit LexerException(const std::string& err_message, const int& err_position, const char& ch);
-	virtual const char* what() const;
+	virtual const char* what() const noexcept;
 	char get_char();
 	int get_pos();
 };

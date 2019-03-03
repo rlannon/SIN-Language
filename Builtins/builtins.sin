@@ -1,0 +1,81 @@
+////////////////////      BUILTINS.SIN        ////////////////////
+
+// Copyright 2019 Riley Lannon
+// github.com/rlannon
+
+// A wrapper for all of SIN's built-in functions (such as I/O). All of the assembly implementation is contained within an included file "builtins-sinasm16.sina', a SINASM file containing the implementation for the SIN VM. This file simply allows the compiler to use the assembly functions through allowing it to access its symbols. If we did not have a wrapper, using these functions would be a lot more of a headache -- having a SIN file wrapper allows us to 
+
+
+// include the asm implementation of builtins
+include "builtins-sinasm16.sina"
+
+
+////////////////////            MEMCPY          ////////////////////
+
+def void memcpy(alloc ptr<int> source, alloc ptr<int> destination, alloc int size) {
+    // copies 'size' words at 'source' into 'destination'
+
+    // arguments will automatically be pushed onto the stack, so we just need to call the asm function
+
+    asm<sinasm16> {
+        jsr __builtins_memcpy
+
+        ;; we already popped back the stack pointer in the function, but the compiler doesn't know
+        ;; As a result, we must decrement it as many words as we popped from the stack so the unwinding doesn't screw up the stack pointer 
+        decsp 
+        decsp 
+        decsp 
+    }
+}
+
+
+////////////////////      PRINT (STDOUT)        ////////////////////
+
+def void print(alloc string to_print) {
+    // prints the given message to the standard output
+
+    // string_to_print will automatically be pushed onto the stack
+
+    asm<sinasm16> {
+        ;; push the output format to the stack
+        loada #$14
+        pha
+
+        jsr __builtins_print
+
+        ;; note that we already popped back our stack pointer, but the compiler doesn't know
+        ;; using asm<> is essentially injecting assembly right in the middle of what the compiler is doing without it checking to see if what you are doing makes any sense
+        ;; as such, we need to decrement the stack pointer twice -- the compiler thinks there are two words of arguments (there are technically three -- one for the length, one for the address, and one for the format specifier -- but since the format specifier is hidden within this implementation, we do not need to decrement the SP again for it; if we do, we will lose 1 byte every time we call print), and so we need to move back the SP when we are finished with what we are doing because otherwise, the compiler will try and move back the SP and it will cause an underflow because the SP will already have been moved in this code
+
+        decsp
+        decsp
+
+        ;; now we are done with our ASM
+    }
+}
+
+
+
+////////////////////      INPUT (STDIN)      ////////////////////
+
+//def string input(alloc int message_string) {
+    
+    // gets a series of ASCII-encoded bytes from the keyboard and returns them
+    
+//    asm<sinasm16>{
+//        ;; code here...
+//    }
+    
+//}
+
+
+
+////////////////////////////////////////////////////////////
+////////////////////      FILE I/O      ////////////////////
+////////////////////////////////////////////////////////////
+
+// SIN file I/O uses a series of syscalls and reserved areas of memory (located in the last page) for file addresses.
+// If there are no command-line arguments or other data in reserved memory, the hypervisor allows for as many as 32 files to be open at one time. The hypervisor allows 8 bytes per file address to support 64-bit operating systems.
+// This function will include the SIN definitions for the FILE type and for its members. The functions will be implemented both here and in builtins-sinasm16.sina
+
+// File Struct

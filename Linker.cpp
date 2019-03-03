@@ -14,11 +14,11 @@ void Linker::get_metadata() {
 	// if they match, continue; if they don't, throw an error and die
 	for (std::vector<SinObjectFile>::iterator file_iter = this->object_files.begin(); file_iter != this->object_files.end(); file_iter++) {
 		if (file_iter->_wordsize != wordsize_compare) {
-			throw std::exception("**** Word sizes in all object files must match.");
+			throw std::runtime_error("**** Word sizes in all object files must match.");
 		}
 
 		if (file_iter->_sinvm_version != version_compare) {
-			throw std::exception("**** SINVM Version must be the same between all object files.");
+			throw std::runtime_error("**** SINVM Version must be the same between all object files.");
 		}
 	}
 
@@ -31,10 +31,8 @@ void Linker::get_metadata() {
 		this->_rs_start = _RS_START;
 	}
 	else {
-		throw std::exception("**** Currently, only SINVM version 1 is supported (it is the highest version!).");
+		throw std::runtime_error("**** Specified SIN VM version is not currently supported by this toolchain");
 	}
-
-	// TODO: devise better algorithm for object file validation
 }
 
 
@@ -86,17 +84,24 @@ void Linker::create_sml_file(std::string file_name) {
 					std::get<1>(*symbol_iter) += offset_from_text_end;
 				}
 				else {
-					throw std::exception("Could not find the constant specified in the constants table!");
+					throw std::runtime_error("Could not find the constant specified in the constants table!");
 				}
 			}
 
 			// if the symbol class is "R", we need to allocate space in memory for it
 			if (std::get<2>(*symbol_iter) == "R") {
-				// we will change the value of the symbol to the next available memory address based on "current_rs_address"
-				std::get<1>(*symbol_iter) = current_rs_address;
-				// update current_rs_address; advance by one word
-				size_t wordsize_bytes = this->_wordsize / 8;
-				current_rs_address += wordsize_bytes;
+				// first, make sure "current_rs_address" is not beyond the memory we are allowed to use; it cannot move beyond the heap
+				if (current_rs_address >= _INPUT_BUFFER_START) {
+					throw std::runtime_error("**** Memory Exception: Global variable limit exceeded.");
+				}
+				// if we are still within our bounds
+				else {
+					// we will change the value of the symbol to the next available memory address based on "current_rs_address"
+					std::get<1>(*symbol_iter) = current_rs_address;
+					// update current_rs_address; advance by one word
+					size_t wordsize_bytes = this->_wordsize / 8;
+					current_rs_address += wordsize_bytes;
+				}
 			}
 
 			// the "U" class will be updated later, so ignore it here
@@ -164,7 +169,7 @@ void Linker::create_sml_file(std::string file_name) {
 
 				// if the symbol was NOT found in the table
 				if (!found) {
-					throw std::exception(("**** Symbol table error: Could not find '" + std::get<0>(*symbol_iter) + "' in symbol table!").c_str());
+					throw std::runtime_error(("**** Symbol table error: Could not find '" + std::get<0>(*symbol_iter) + "' in symbol table!").c_str());
 				}
 			}
 			else {
@@ -216,7 +221,7 @@ void Linker::create_sml_file(std::string file_name) {
 
 					// if we didn't find it, throw an error
 					if (!found) {
-						throw std::exception(("**** Relocation error: Could not find '" + std::get<0>(*relocation_iter) + "' in symbol table!").c_str());
+						throw std::runtime_error(("**** Relocation error: Could not find '" + std::get<0>(*relocation_iter) + "' in symbol table!").c_str());
 					}
 
 					// finally, write "value" to the relocation table
@@ -265,13 +270,13 @@ void Linker::create_sml_file(std::string file_name) {
 	std::ofstream sml_file;
 	sml_file.open(file_name + ".sml", std::ios::out | std::ios::binary);	// TODO: get a final program name
 
-	writeU8(sml_file, this->object_files[0]._wordsize);	// TODO: get a better wordsize deciding algorithm
+	BinaryIO::writeU8(sml_file, this->object_files[0]._wordsize);	// TODO: get a better wordsize deciding algorithm
 
-	writeU32(sml_file, sml_data.size());
+	BinaryIO::writeU32(sml_file, sml_data.size());
 
 	// write the byte to the file
 	for (std::vector<uint8_t>::iterator it = sml_data.begin(); it != sml_data.end(); it++) {
-		writeU8(sml_file, *it);
+		BinaryIO::writeU8(sml_file, *it);
 	}
 
 	sml_file.close();
@@ -279,12 +284,19 @@ void Linker::create_sml_file(std::string file_name) {
 
 
 Linker::Linker() {
+	this->_start_offset = 0;	// default to 0
+	this->_wordsize = 16;	// default to 16 bit words
+	this->_rs_start = _RS_START;	// default to "_RS_START" as defined in "VMMemoryMap.h" 
 }
 
 
 Linker::Linker(std::vector<SinObjectFile> object_files) : object_files(object_files)
 {
-	this->get_metadata();	// get our metadata so we can form the sml file
+	this->_start_offset = 0;	// default to 0
+	this->_wordsize = 16;	// default to 16 bit words
+	this->_rs_start = _RS_START;	// default to "_RS_START" as defined in "VMMemoryMap.h" 
+
+	this->get_metadata();	// get our metadata so we can form the sml file; this may overwrite the initial values established above
 }
 
 

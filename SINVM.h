@@ -12,6 +12,9 @@
 // #include "BinaryIO.h"	// included in Assembler.h, but commenting here to denote that functions from it are being used in this class
 // #include "OpcodeConstants.h"	// included in Assembler.h, but commenting here to serve as a reminder that the constants are used in this class so we don't need to use the hex values whenever referencing an instruction
 #include "VMMemoryMap.h"	// contains the constants that define where various blocks of memory begin and end in the VM
+//#include "AddressingModeConstants.h"	// included in Assembler.h
+#include "DynamicObject.h"	// for use in allocating objects on the heap
+#include "Exceptions.h"	// for VMException
 
 /*
 	The virtual machine that will be responsible for interpreting SIN bytecode
@@ -30,19 +33,20 @@ class SINVM
 	uint16_t CALL_SP;	// the call stack pointer -- return addresses are not held on the regular stack; modified only by JSR and RTS
 
 	// create objects for our registers
-	int REG_A;
-	int REG_B;
-	int REG_X;
-	int REG_Y;
+	uint16_t REG_A;
+	uint16_t REG_B;
+	uint16_t REG_X;
+	uint16_t REG_Y;
 
 	/*
 	The status register has the following layout:
 		7	6	5	4	3	2	1	0
-		N	V	0	H	0	E	Z	C
+		N	V	0	H	0	F	Z	C
 	Flag meanings:
 		N: Negative
 		V: Overflow
 		H: HALT instruction executed
+		F: Floating-point
 		Z: Zero
 		C: Carry
 	Notes:
@@ -54,11 +58,9 @@ class SINVM
 	// create an array to hold our program memory
 	uint8_t memory[memory_size];
 	size_t program_start_address;
-	uint16_t memory_offset;	// the offset for memory addresses due to include files
-	// TODO: eliminate this? We need it in the assembler but maybe not here...
 
-	// TODO: eliminate memory offsets in SINVM and Assembler -- we will do all address adjustments in the Linker. The only offset we will do here is adding $2600 to our offsets
-	// TODO: always start at memory location $2600; it's ok to have empty space between $2600 and $F000 (i.e. don't start at $F000 and work backwards)
+	// create a list to hold our DynamicObjects
+	std::list<DynamicObject> dynamic_objects;
 
 	// check whether a memory address is legal
 	static const bool address_is_valid(size_t address);
@@ -84,8 +86,12 @@ class SINVM
 	void execute_jmp();
 
 	// stack functions; ALWAYS use register A
-	void push_stack();
-	void pop_stack();
+	void push_stack(int reg_to_push);
+	int pop_stack();
+
+	// syscall utility
+	void free_heap_memory();
+	void allocate_heap_memory();	// if the "in_bytes" flag is set, we use bytes, not words, for storage
 
 	// status flag utility
 	void set_status_flag(char flag); // set the status flag whose abbreviation is equal to the character 'flag'

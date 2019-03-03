@@ -40,7 +40,7 @@ PROGRAM HEADER:
 		
 		For each symbol:
 			0x00 - 0x01	-	_sy_val			-	symbol value
-			0x02		-	_class			-	1 = defined; 2 = constant; 3 = bss; 4 = undefined
+			0x02		-	_class			-	1 = Undefined; 2 = Defined; 3 = Constant; 4 = Reserved; 5 = Macro
 			0x03 - 0x04 -	_sn_len			-	length of symbol name
 			0x05 +		-	_sy_name		-	symbol name (of length specified in _sn_len)
 
@@ -83,4 +83,10 @@ PROGRAM HEADER:
 			0x00 - 0x03	-	_bss_data		-	data in the bss
 				OR
 			0x00 - 0x07
-			
+
+
+
+
+Note:
+	"hello, world" =
+		34 104 101 108 108 111 44 32 119 111 114 108 100 33 34
