@@ -13,7 +13,7 @@ include "builtins-sinasm16.sina"
 ////////////////////            MEMCPY          ////////////////////
 
 def void memcpy(alloc ptr<int> source, alloc ptr<int> destination, alloc int size) {
-    // copies 'size' words at 'source' into 'destination'
+    // copies 'size' bytes at 'source' into 'destination'
 
     // arguments will automatically be pushed onto the stack, so we just need to call the asm function
 
@@ -26,6 +26,24 @@ def void memcpy(alloc ptr<int> source, alloc ptr<int> destination, alloc int siz
         decsp 
         decsp 
     }
+}
+
+
+////////////////////            STOI            ////////////////////
+
+def int stoi(alloc string to_convert) {
+    // converts a string of integer characters into the integer they are supposed to represent
+    // TODO: implement stoi
+    return 0;
+}
+
+
+////////////////////            ITOS            ////////////////////
+
+def string itos(alloc int to_convert) {
+    // converts an integer into a string that represents that integer
+    // TODO: implement itos
+    return "123";
 }
 
 

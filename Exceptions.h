@@ -63,3 +63,12 @@ public:
 	explicit SymbolTableException(const std::string& message, const unsigned int& line = 0);
 	virtual const char* what() const noexcept;
 };
+
+
+class AssemblerException : public std::exception {
+	std::string message;
+	unsigned int line;
+public:
+	explicit AssemblerException(const std::string& message, const unsigned int& line = 0);
+	virtual const char* what() const noexcept;
+};

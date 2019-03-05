@@ -32,8 +32,8 @@ const bool is_literal(std::string candidate_type) {
 const Type get_type_from_string(std::string candidate) {
 	// if it can, this function gets the proper type of an input string
 	// an array of the valid types as strings
-	std::string string_types[] = { "int", "float", "string", "bool", "void", "ptr", "raw8", "raw16", "raw32" };
-	Type _types[] = { INT, FLOAT, STRING, BOOL, VOID, PTR, RAW8, RAW16, RAW32 };
+	std::string string_types[] = { "int", "float", "string", "bool", "void", "ptr", "raw" };
+	Type _types[] = { INT, FLOAT, STRING, BOOL, VOID, PTR, RAW };
 
 	// for test our candidate against each item in the array of string_types; if we have a match, return the Type at the same position
 	for (int i = 0; i < num_types; i++) {
@@ -52,8 +52,8 @@ const Type get_type_from_string(std::string candidate) {
 
 const std::string get_string_from_type(Type candidate) {
 	// reverse of the above function
-	std::string string_types[] = { "int", "float", "string", "bool", "void", "ptr", "raw8", "raw16", "raw32" };
-	Type _types[] = { INT, FLOAT, STRING, BOOL, VOID, PTR, RAW8, RAW16, RAW32 };
+	std::string string_types[] = { "int", "float", "string", "bool", "void", "ptr", "raw" };
+	Type _types[] = { INT, FLOAT, STRING, BOOL, VOID, PTR, RAW };
 
 	// for test our candidate against each item in the array of string_types; if we have a match, return the string at the same position
 	for (int i = 0; i < num_types; i++) {
@@ -70,24 +70,7 @@ const std::string get_string_from_type(Type candidate) {
 	return "none (error occurred)";
 }
 
-const Type get_raw_type(int _size) {
-	if (_size == 8) {
-		return RAW8;
-	}
-	else if (_size == 16) {
-		return RAW16;
-	}
-	else if (_size == 32) {
-		return RAW32;
-	}
-	else {
-		return NONE;
-	}
-}
 
-const bool is_raw(Type _t) {
-	return (_t == RAW8 || _t == RAW16 || _t == RAW32);
-}
 
 exp_type Expression::get_expression_type()
 {
@@ -269,4 +252,20 @@ ValueReturningFunctionCall::ValueReturningFunctionCall(std::shared_ptr<LValue> n
 
 ValueReturningFunctionCall::ValueReturningFunctionCall() {
 	ValueReturningFunctionCall::expression_type = VALUE_RETURNING_CALL;
+}
+
+
+
+// sizeof expressions
+
+std::string SizeOf::get_type() {
+	return this->to_check;
+}
+
+SizeOf::SizeOf(std::string to_check) : to_check(to_check) {
+	this->expression_type = SIZE_OF;
+}
+
+SizeOf::SizeOf() {
+	this->expression_type = SIZE_OF;
 }

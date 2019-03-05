@@ -24,7 +24,7 @@
 
 
 
-;;;;;;;;;;      MEMORY TRANSFER     ;;;;;;;;;;
+;;;;;;;;;;          MEMCPY       ;;;;;;;;;;
 
 ; This is the implementation of the memcpy function, and is often called by the compiler when doing memory transfers --
 ; It is particularly useful with dynamic memory allocation
@@ -33,9 +33,9 @@ __builtins_memcpy:
     ; The arguments are pushed in the following order:
     ;   source
     ;   destination
-    ;   number of words
-    pla 
-    tax     ; number of words goes into the x register 
+    ;   number of bytes
+    pla
+    tax     ; number of bytes goes into the x register 
     plb     ; destination goes into the b register 
     pla     ; source goes into the a register
     
@@ -45,10 +45,10 @@ __builtins_memcpy:
     
     loady #$00  ; our memory index starts at 0
 .memcpy_loop:
-    loada (__MEMCPY_SRC), y     ; load A with the value at the address indicated by __MEMCPY_SRC, indexed with Y 
-    storea (__MEMCPY_DEST), y 
-    incy 
-    decx 
+    loada S (__MEMCPY_SRC), y     ; load A with the value at the address indicated by __MEMCPY_SRC, indexed with Y 
+    storea S (__MEMCPY_DEST), y 
+    incy
+    decx
     cmpx #$00 
     brne .memcpy_loop
 

@@ -66,19 +66,19 @@ class SINVM
 	static const bool address_is_valid(size_t address);
 
 	// read a value in memory
-	int get_data_of_wordsize();
+	uint16_t get_data_of_wordsize();
 	std::vector<uint8_t> get_properly_ordered_bytes(int value);
 
 	// execute a single instruction
 	void execute_instruction(int opcode);
 
 	// instruction-specific load/store functions
-	int execute_load();
-	void execute_store(int reg_to_store);
+	uint16_t execute_load();
+	void execute_store(uint16_t reg_to_store);
 
 	// generic load/store functions
-	int get_data_from_memory(int address);
-	void store_in_memory(int address, int new_value);
+	int get_data_from_memory(uint16_t address, bool is_short = false);
+	void store_in_memory(uint16_t address, uint16_t new_value, bool is_short = false);
 
 	void execute_bitshift(int opcode);
 

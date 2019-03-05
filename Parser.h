@@ -37,6 +37,7 @@ class Parser
 	lexeme previous();	// similar to peek; get previous token without moving back
 	lexeme back();	// move backward one
 	void skipPunc(char punc);	// skips the specified punctuation mark
+	bool is_type(std::string lex_value);
 
 	// Parsing statements
 	std::shared_ptr<Statement> parse_statement();	// entry function to parse a statement

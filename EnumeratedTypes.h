@@ -36,7 +36,8 @@ enum exp_type {
 	DEREFERENCED,
 	BINARY,
 	UNARY,
-	VALUE_RETURNING_CALL
+	VALUE_RETURNING_CALL,
+	SIZE_OF
 };
 
 // So that the symbol's quality does not need to be stored as a string
@@ -74,7 +75,7 @@ enum Type {
 	BOOL,
 	VOID,
 	PTR,
-	RAW8,
-	RAW16,
-	RAW32,
+	RAW,
+	ARRAY,
+	STRUCT
 };

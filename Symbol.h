@@ -50,11 +50,13 @@ typedef struct Symbol
 
 	size_t stack_offset;	// used for local symbols to determine the offset (in words) from the initial address of the SP
 
-	// TODO: change the way formal parameters are handled? could iterate through that symbol scope to look for variables instead...
+	// TODO: use struct inheritance so these are only members of FunctionSymbol, ArraySymbol, and StructSymbol?
 	std::vector<std::shared_ptr<Statement>> formal_parameters;	// used only for function symbols
+	size_t array_size;	// used only for arrays; contains the size of the array
+	std::string struct_name;	// used only for structs; contains the name of the struct
 
 	// constructor/destructor
-	Symbol(std::string name, Type type, std::string scope_name, size_t scope_level, Type sub_type = NONE, SymbolQuality quality = NO_QUALITY, bool defined = false, std::vector<std::shared_ptr<Statement>> formal_parameters = {});
+	Symbol(std::string name, Type type, std::string scope_name, size_t scope_level, Type sub_type = NONE, SymbolQuality quality = NO_QUALITY, bool defined = false, std::vector<std::shared_ptr<Statement>> formal_parameters = {}, size_t array_size = 0, std::string struct_name = "");
 	Symbol();
 	~Symbol();
 };

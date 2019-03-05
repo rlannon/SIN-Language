@@ -191,7 +191,7 @@ int Assembler::get_integer_value(std::string value) {
 			}
 			// if it's not $ or %, it's not a valid operator; throw an exception
 			else {
-				throw std::runtime_error(("The character '" + std::to_string(value[0]) + "' is not a valid value operator. Options are $ (hex) or % (binary).").c_str());
+				throw AssemblerException("The character '" + std::to_string(value[0]) + "' is not a valid value operator. Options are $ (hex) or % (binary).");
 			}
 		}
 		// if it is a digit, then just use stoi and return the value
@@ -200,7 +200,7 @@ int Assembler::get_integer_value(std::string value) {
 		}
 	}
 	else {
-		throw std::runtime_error("Cannot get the value of an empty string.");
+		throw AssemblerException("Cannot get the value of an empty string.");
 	}
 }
 
@@ -344,7 +344,7 @@ void Assembler::construct_symbol_table() {
 						included_sina.close();
 					}
 					else {
-						throw std::runtime_error("**** Cannot locate included file '" + filename + "'");
+						throw AssemblerException("Cannot locate included file '" + filename + "'", this->line_counter);
 					}
 
 				}
@@ -356,7 +356,7 @@ void Assembler::construct_symbol_table() {
 				}
 				// all other formats are unsupported at this time
 				else {
-					throw std::runtime_error("**** Format for included file '" + filename + "' is not supported by the assembler.");
+					throw AssemblerException("Format for included file '" + filename + "' is not supported by the assembler.", this->line_counter);
 				}
 			}
 			// if we have an assembler directive
@@ -429,9 +429,13 @@ void Assembler::construct_symbol_table() {
 				this->symbol_table.push_back(std::make_tuple(macro_name, 0, "C"));
 			}
 		}
-		// if it's not a label, directive, or mnemonic, but it isalpha(), then it must be a macro
-		else if (isalpha(line_data[0]) || (line_data[0] == '_')) {
-			// macros skipped in pass 1
+		//// if it's not a label, directive, or mnemonic, but it isalpha(), then it must be a macro
+		//else if (isalpha(line_data[0]) || (line_data[0] == '_')) {
+		//	// macros skipped in pass 1
+		//	continue;
+		//}
+		// everything else will be skipped in pass 1
+		else {
 			continue;
 		}
 	}
@@ -498,7 +502,7 @@ int Assembler::get_opcode(std::string mnemonic) {
 	}
 	// otherwise, throw an exception; the instruction they want was not recognized
 	else {
-		throw std::runtime_error("Unrecognized instruction '" + mnemonic + "'");
+		throw AssemblerException("Unrecognized instruction '" + mnemonic + "'");
 	}
 }
 
@@ -531,7 +535,7 @@ std::string Assembler::get_mnemonic(int opcode)
 	else {
 		std::stringstream hex_number;
 		hex_number << std::hex << opcode;	// format the decimal number as hex
-		throw std::runtime_error("Unrecognized instruction opcode '$" + hex_number.str() + "'");
+		throw AssemblerException("Unrecognized instruction opcode '$" + hex_number.str() + "'");
 	}
 }
 
@@ -565,8 +569,11 @@ uint8_t Assembler::get_addressing_mode(std::string value, std::string offset) {
 			}
 			// if it's not X or Y, it's not proper; throw exception
 			else {
-				throw std::runtime_error("Must use register X or Y when using indirect addressing modes.");
+				throw AssemblerException("Must use register X or Y when using indirect addressing modes.");
 			}
+		}
+		else {
+			throw AssemblerException("Invalid addressing mode");
 		}
 	}
 }
@@ -585,6 +592,9 @@ std::vector<uint8_t> Assembler::assemble()
 	Note macros are all parsed on the second pass; labels must be parsed in an initial pass so we can discern their location for whent they are forward-referenced.
 
 	*/
+
+
+	// TODO: clean up the assemble() function
 
 
 	// Pass 1
@@ -637,14 +647,26 @@ std::vector<uint8_t> Assembler::assemble()
 					program_data.push_back(opcode);
 
 					this->current_byte++;	// increment the current byte for the addressing mode
-					uint8_t addressing_mode;	// our addressing mode is only 1 byte
+					uint8_t addressing_mode = 0;	// our addressing mode is only 1 byte
 
 					// the second value should be our value
 					value = string_delimited[1];
 
-					// first, check to see if we have parens -- if so, we will adjust accordingly
+					// first, we need to see if we have to add 0x10 for a single addressing mode
+					if (value == "S" || value == "s") {
+						// check to make sure that's not the end, that string_delimited has at least a size of 3
+						if ((string_delimited.size() >= 3) && (!is_comment(string_delimited[2][0]))) {
+							addressing_mode = addressingmode::absolute_short;	// if we are on the short addressing mode, use absolute_short as the baseline instead of absolute
+							value = string_delimited[2];
+						}
+						else {
+							throw AssemblerException("Incomplete addressing mode", this->line_counter);
+						}
+					}
+
+					// next, check to see if we have parens -- if so, we will adjust accordingly
 					if (value[0] == '(') {
-						uint8_t to_add_to_addressing_mode;	// the number we will add to our addressing mode based on whether it's indexed indirect or indirect indexed
+						uint8_t to_add_to_addressing_mode = 0;	// the number we will add to our addressing mode based on whether it's indexed indirect or indirect indexed
 						if (string_delimited.size() >= 3) {
 							/*
 							
@@ -662,36 +684,60 @@ std::vector<uint8_t> Assembler::assemble()
 							*/
 
 							// get the value we need to add to the addressing mode (assuming we get x indexed or y indexed and not an error); this is +4 for indirect indexed ( ($00), y ) and +6 for indexed indirect ( ($00, y) )
-							char last_value_char = string_delimited[2][string_delimited[2].length() - 1];	// get the last character of the second string in string_delimited
-							if (last_value_char == ')') {
-								// if the last character is ')', we have indexed indirect, so we need +6
-								to_add_to_addressing_mode = 6;
-							}
-							else if (last_value_char == 'x' || last_value_char == 'X' || last_value_char == 'y' || last_value_char == 'Y') {
-								// if the last character is a register name, we have indirect indexed, so we need +4
-								to_add_to_addressing_mode = 4;
+							char last_value_char;
+							if (!std::regex_match(string_delimited[1], std::regex("[slSL]"))) {
+								// if we aren't using the short or long addressing modes, then we should use string_delimited[2] as the baseline
+								last_value_char = string_delimited[2][string_delimited[2].length() - 1];	// get the last character of the second string in string_delimited
 							}
 							else {
-								throw std::runtime_error("Invalid character in value expression (line " + std::to_string(line_counter) + ")");
+								// otherwise, we should use string_delimited[3] as the baseline; if there are not 4 or more elements the line, or if the 4th element is a comment, then throw an exception
+								if (string_delimited.size() >= 4 && string_delimited[3][0] != ';') {
+									last_value_char = string_delimited[3][string_delimited[3].length() - 1];	// get the last character of the third string in string_delimited
+								}
+								else {
+									throw AssemblerException("Unexpected end of instruction", this->line_counter);
+								}
 							}
 
-							addressing_mode = get_addressing_mode(value.substr(1), string_delimited[2]);	// get the substring of 'value' starting at position 1 (ignoring paren)
+							if (last_value_char == ')') {
+								// if the last character is ')', we have indexed indirect, so we need to add the difference between indexed indirect and indexed
+								to_add_to_addressing_mode = addressingmode::indexed_indirect_x - addressingmode::x_index;
+							}
+							else if (last_value_char == 'x' || last_value_char == 'X' || last_value_char == 'y' || last_value_char == 'Y') {
+								// if the last character is a register name, we have indirect indexed, so we need the difference between indirect_indexed and indexed
+								to_add_to_addressing_mode = addressingmode::indirect_indexed_x - addressingmode::x_index;
+							}
+							else {
+								throw AssemblerException("Invalid character in value expression", this->line_counter);
+							}
+
+							if (addressing_mode >= addressingmode::absolute_short) {
+								if (string_delimited.size() >= 4 && string_delimited[3][0] != ';') {
+									addressing_mode += get_addressing_mode(value.substr(1), string_delimited[3]);
+								}
+								else {
+									throw AssemblerException("Unexpected end of instruction", this->line_counter);
+								}
+							}
+							else {
+								addressing_mode += get_addressing_mode(value.substr(1), string_delimited[2]);	// get the substring of 'value' starting at position 1 (ignoring paren)
+							}
 
 							// just to make our lives easier, erase the paren right now
 							value.erase(0, 1);
 						}
 						else {
 							// there MUST be another string in string_delimited if we have indirect addressing
-							throw std::runtime_error("Indirect addressing requires a second string; however, one was not found (line " + std::to_string(this->line_counter) + ")");
+							throw AssemblerException("Indirect addressing requires a second string; however, one was not found", this->line_counter);
 						}
 
 						// if the addressing mode is x/y indexed, add 4 to it to get to the indirect/indexed (they are 4 apart)
-						if (addressing_mode == addressingmode::x_index || addressing_mode == addressingmode::y_index) {
+						if (addressing_mode == addressingmode::x_index || addressing_mode == addressingmode::y_index || addressing_mode == addressingmode::x_index_short || addressing_mode == addressingmode::y_index_short) {
 							addressing_mode += to_add_to_addressing_mode;
 						}
 						// if neither, it's improper syntax -- cannot use parens with any other mode
 						else {
-							throw std::runtime_error("Unrecognized addressing mode (line " + std::to_string(this->line_counter) + ")");
+							throw AssemblerException("Unrecognized addressing mode", this->line_counter);
 						}
 
 						// now that we have the addressing mode, push it to program data
@@ -718,10 +764,10 @@ std::vector<uint8_t> Assembler::assemble()
 						}
 					}
 					// if the value is a label
-					else if ((isalpha(value[0]) || (value[0] == '.') || (value[0] == '_')) && !std::regex_match(value, std::regex("[abAB]", std::regex_constants::icase))) {
+					else if ((isalpha(value[0]) || (value[0] == '.') || (value[0] == '_')) && !std::regex_match(value, std::regex("[absABS]", std::regex_constants::icase))) {
 						// first, make sure that the label does not end with a colon; throw an error if it does
 						if (value[value.size() - 1] == ':') {
-							throw std::runtime_error("Labels must not be followed by colons when referenced (line " + std::to_string(this->line_counter) + ")");
+							throw AssemblerException("Labels must not be followed by colons when referenced", this->line_counter);
 						}
 
 						// next, check to see if it is a sublabel or not
@@ -732,14 +778,34 @@ std::vector<uint8_t> Assembler::assemble()
 						// we must first note that we have a reference in the relocation table
 						this->relocation_table.push_back(std::make_tuple(value, this->current_byte));
 
-						// addressing mode must be absolute
-						addressing_mode = addressingmode::absolute;
+						// addressing mode could be absolute OR indexed if the mode begins with a label
+						if (value[value.length() - 1] == ',') {
+							// if we have "label," then we know we need an index
+							// we should pass in $0000 as the value and an index of string_delimited as the offset
+							if (string_delimited.size() >= 3 && string_delimited[2][0] != ';') {
+								// if we have 'S' in there, 'value' will equal 'string_delimited[2]'
+								if (value != string_delimited[2]) {
+									addressing_mode += get_addressing_mode("$0000,", string_delimited[2]);
+								}
+								else if (string_delimited.size() >= 4 && string_delimited[3][0] != ';') {
+									addressing_mode += get_addressing_mode("$0000,", string_delimited[3]);
+								}
+								// if we have something like "loada S label," (with no index), throw an exception 
+								else {
+									throw AssemblerException("Expected index value after label", this->line_counter);
+								}
+							}
+							else {
+								throw AssemblerException("Expected index value after label", this->line_counter);
+							}
+						}
+						else {
+							// otherwise, if we just have "label", we need absolute addressing
+							addressing_mode += addressingmode::absolute;
+						}
 
 						// push_back the addressing mode
 						program_data.push_back(addressing_mode);
-
-						//// get the value at 'value' (a label)
-						//int label_value = get_value_of(value);
 
 						// increment the current byte according to _WORDSIZE
 						this->current_byte += (this->_WORDSIZE / 8);	// increment 1 per byte in the _WORDSIZE
@@ -760,7 +826,7 @@ std::vector<uint8_t> Assembler::assemble()
 						}
 						// if it's not a bitshift instruction, throw an exception
 						else {
-							throw std::runtime_error("Cannot use 'A' as an operand unless with a bitshift instruction (line " + std::to_string(this->line_counter) + ")");
+							throw AssemblerException("Cannot use 'A' as an operand unless with a bitshift instruction", this->line_counter);
 						}
 					}
 					// if the value is 'B'
@@ -772,7 +838,7 @@ std::vector<uint8_t> Assembler::assemble()
 						}
 						// if it's not, throw an exception
 						else {
-							throw std::runtime_error("May only use 'B' as an operand with ADDCA, SUBCA, and CMPA instructions (line " + std::to_string(this->line_counter) + ")");
+							throw AssemblerException("May only use 'B' as an operand with ADDCA, SUBCA, and CMPA instructions", this->line_counter);
 						}
 					}
 					// otherwise, carry on normally
@@ -781,20 +847,27 @@ std::vector<uint8_t> Assembler::assemble()
 						// check to see if the last character in the second operand is a comma; if so, and there is no third operand or the third operand begins with a semicolon, throw an exception
 						if (string_delimited[1][string_delimited[1].size() - 1] == ',') {
 							if ((string_delimited.size() < 3) || (string_delimited[2][0] == ';')) {
-								throw std::runtime_error("Expected register for index but found nothing (line " + std::to_string(this->line_counter) + ")");
+								throw AssemblerException("Expected register for index but found nothing", this->line_counter);
 							}
 						}
 
 						// further, if we made it this far without an exception, make sure that if we find a third string that the first character is NOT a semicolon; if so, the program should behave as if there were only two strings
+						// Therefore, if the addressing mode needs multiple parts, but is not in parens, we will go here
 						if (string_delimited.size() >= 3 && (string_delimited[2][0] != ';')) {
-							addressing_mode = get_addressing_mode(value, string_delimited[2]);
+							// if we have 'S' in the addressing mode, string_delimited[2] will be equal to value
+							if (value != string_delimited[2]) {
+								addressing_mode += get_addressing_mode(value, string_delimited[2]);	// if they're not equal, pass string_delimited[2] in; it might contain "X" or "Y"
+							}
+							else {
+								addressing_mode += get_addressing_mode(value, ""); // otherwise, pass it an empty string for the second part of the addressing mode
+							}
 						}
 						else {
-							addressing_mode = get_addressing_mode(value);
+							addressing_mode += get_addressing_mode(value);
 						}
 
 						if (addressing_mode == 3 && !can_use_immediate_addressing(opcode)) {
-							throw std::runtime_error("Cannot use this addressing mode on an instruction of this type (line " + std::to_string(this->line_counter) + ")");
+							throw AssemblerException("Cannot use this addressing mode on an instruction of this type", this->line_counter);
 						}
 
 						// push_back the addressing mode and turn 'value' into a series of big_endian bytes
@@ -843,7 +916,7 @@ std::vector<uint8_t> Assembler::assemble()
 				}
 				// otherwise, we must throw an exception
 				else {
-					throw std::runtime_error("Expected a value following instruction mnemonic (line " + std::to_string(this->line_counter) + ")");
+					throw AssemblerException("Expected a value following instruction mnemonic", this->line_counter);
 				}
 			}
 			// if we have an assembler directive, skip it; these were assessed in the first pass
@@ -901,11 +974,11 @@ std::vector<uint8_t> Assembler::assemble()
 						}
 					}
 					else {
-						throw std::runtime_error("Leading macros must be followed by an equals sign. (line " + std::to_string(this->line_counter) + ")");
+						throw AssemblerException("Leading macros must be followed by an equals sign", this->line_counter);
 					}
 				}
 				else {
-					throw std::runtime_error("Non-opcode identifiers must be labels, macros, or assembler directive instructions (line " + std::to_string(this->line_counter) + ")");
+					throw AssemblerException("Non-opcode identifiers must be labels, macros, or assembler directive instructions", this->line_counter);
 				}
 			}
 			else if (is_comment(opcode_or_symbol[0])) {
@@ -913,7 +986,7 @@ std::vector<uint8_t> Assembler::assemble()
 				continue;
 			}
 			else {
-				throw std::runtime_error("Unknown symbol in file (line " + std::to_string(this->line_counter) + ")");
+				throw AssemblerException("Unknown symbol in file", this->line_counter);
 			}
 		}
 		// we have an empty string
@@ -999,7 +1072,7 @@ Assembler::Assembler(std::istream& asm_file, uint8_t _WORDSIZE) : asm_file(&asm_
 
 	// ensure it was actually a valid size
 	if (_WORDSIZE != 16 && _WORDSIZE != 32 && _WORDSIZE != 64) {
-		throw std::runtime_error("Cannot initialize machine word size to a value of " + std::to_string(_WORDSIZE) + "; must be 16, 32, or 64");
+		throw AssemblerException("Cannot initialize machine word size to a value of " + std::to_string(_WORDSIZE) + "; must be 16, 32, or 64");
 	}
 }
 

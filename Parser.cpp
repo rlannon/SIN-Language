@@ -97,6 +97,23 @@ void Parser::skipPunc(char punc) {
 	}
 }
 
+bool Parser::is_type(std::string lex_value)
+{
+	std::string type_strings[] = { "int", "bool", "string", "float", "raw", "ptr", "array", "struct" };
+	
+	// iterate through our list of type names
+	size_t i = 0;
+	bool found = false;
+
+	while (i < type_strings->size() && !found) {
+		if (lex_value == type_strings[i]) {
+			found = true;
+		}
+	}
+
+	return found;
+}
+
 
 /*
 
@@ -433,50 +450,8 @@ std::shared_ptr<Statement> Parser::parse_allocation(lexeme current_lex)
 				quality = STATIC;
 				var_type = this->next();
 			}
-
-			// if we have a RAW
-			if (var_type.value == "raw") {
-				// 'raw' must be followed by '<'
-				if (this->peek().value == "<") {
-					// skip the angle bracket
-					this->next();
-
-					// angle bracketsmust be followed by an integer
-					if (this->peek().value == "int") {
-						// get the next token
-						int _size = std::stoi(this->next().value);
-
-						Type _raw_t = get_raw_type(_size);
-
-						if (_raw_t == NONE) {
-							throw ParserException("RAW size was invalid", 240, current_lex.line_number);
-						}
-
-						// TODO: finishing parsing RAW statement
-
-						// next character must be a closing angle bracket
-						if (this->peek().value == ">") {
-							// skip closing angle bracket
-							this->next();
-
-							new_var_type = _raw_t;
-						}
-						else {
-							throw ParserException("'raw' size must be enclosed in angle brackets", 212, current_lex.line_number);
-						}
-
-					}
-					else {
-						throw ParserException("'raw' must be followed by an integer size expression", 111, current_lex.line_number);
-					}
-				}
-				else {
-					throw ParserException("'raw' size must be enclosed in angle brackets", 212, current_lex.line_number);
-				}
-			}
-			// if we have a pointer,
-
-			else if (var_type.value == "ptr") {
+			
+			if (var_type.value == "ptr") {
 				// set the type
 				new_var_type = PTR;
 
@@ -532,7 +507,8 @@ std::shared_ptr<Statement> Parser::parse_allocation(lexeme current_lex)
 					stmt = std::make_shared<Allocation>(new_var_type, new_var_name, new_var_subtype, initialized, initial_value, quality);
 					stmt->set_line_number(current_lex.line_number);
 				}
-				else {
+				// we can only ever have a semicolon, comma, or end paren at the end of an allocation statement
+				else if (this->peek().value == ";" || this->peek().value == "," || this->peek().value == ")") {
 					// if it is NOT allloc-assign syntax, we have to make sure the variable is not const before allocating it -- all const variables MUST be defined in the allocation
 					if (quality == CONSTANT) {
 						throw ParserException("Const variables must use allloc-assign syntax (e.g., 'alloc const int a: 5').", 000, current_lex.line_number);
@@ -540,11 +516,14 @@ std::shared_ptr<Statement> Parser::parse_allocation(lexeme current_lex)
 					else {
 						// Otherwise, if it is not const, return our new variable
 						Allocation allocation_statement(new_var_type, new_var_name, new_var_subtype);
-						allocation_statement.set_symbol_quality(DYNAMIC);
+						allocation_statement.set_symbol_quality(quality);
 						allocation_statement.set_line_number(current_lex.line_number);
 
 						stmt = std::make_shared<Allocation>(allocation_statement);
 					}
+				}
+				else {
+					throw ParserException("Unrecognized token.", 0, current_lex.line_number);
 				}
 			}
 			else {
@@ -620,6 +599,9 @@ std::shared_ptr<Statement> Parser::parse_assignment(lexeme current_lex)
 		else {
 			throw ParserException("Expected expression", 0, current_lex.line_number);
 		}
+	}
+	else {
+		throw ParserException("Unrecognized token.", 0, current_lex.line_number);
 	}
 }
 
@@ -811,6 +793,36 @@ std::shared_ptr<Expression> Parser::parse_expression(int prec) {
 	}
 	else if (current_lex.type == "ident") {
 		left = std::make_shared<LValue>(current_lex.value);
+	}
+	// if we have a keyword to begin an expression, parse it (could be a sizeof expression)
+	else if (current_lex.type == "kwd") {
+		if (current_lex.value == "sizeof") {
+			// expression must be enclosed in parens
+			if (this->peek().value == "(") {
+				this->next();
+				// valid words in sizeof are idents and types, so long as the type is not a struct or an array
+				if (this->peek().type == "ident" || (is_type(this->peek().value) && this->peek().value != "struct" && this->peek().value != "array")) {
+					lexeme to_check = this->next();
+
+					if (this->peek().value == ")") {
+						this->next();	// eat the end paren
+						left = std::make_shared<SizeOf>(to_check.value);
+					}
+					else {
+						throw ParserException("Syntax error; expected ')'", 0, current_lex.line_number);
+					}
+				}
+				else {
+					throw ParserException("Invalid 'sizeof' argument", 0, current_lex.line_number);
+				}
+			}
+			else {
+				throw ParserException("Syntax error; expected '('", 0, current_lex.line_number);
+			}
+		}
+		else {
+			throw ParserException("Invalid keyword in expression", 0, current_lex.line_number);
+		}
 	}
 	// if we have an op_char to begin an expression, parse it (could be a pointer or a function call)
 	else if (current_lex.type == "op_char") {

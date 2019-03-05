@@ -33,8 +33,8 @@ const bool Interpreter::are_compatible_types(Type a, Type b) {
 	if (a == b) {
 		return true;
 	}
-	else if (is_raw(a) || is_raw(b)) {
-		return true;
+	else if (a == RAW || b == RAW) {
+		return true;	// RAW is compatible with all types
 	}
 	else {
 		return false;
@@ -107,7 +107,7 @@ void Interpreter::setVarValue(LValue variable, std::tuple<Type, std::string> new
 					// update the value
 					
 					// currently, RAW is not supported in Interpreted SIN
-					if (is_raw(var_iter->data_type) || is_raw(std::get<0>(new_value))) {
+					if (var_iter->data_type == RAW || std::get<0>(new_value) == RAW) {
 						throw InterpreterException("Interpreted SIN does not support the use of the RAW type", 1234);
 					}
 					var_iter->value = std::get<1>(new_value);

@@ -67,3 +67,16 @@ SymbolTableException::SymbolTableException(const std::string& message, const uns
 	this->line = line;
 	this->message = err_message;
 }
+
+
+// Assembler Exceptions
+
+const char* AssemblerException::what() const noexcept {
+	return message.c_str();
+}
+
+AssemblerException::AssemblerException(const std::string& message, const unsigned int& line) {
+	std::string err_message = "**** Assembler Error: " + message + " (line " + std::to_string(line) + ")";
+	this->line = line;
+	this->message = err_message;
+}

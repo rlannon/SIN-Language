@@ -18,9 +18,7 @@ const Type get_type_from_string(std::string candidate);
 
 const std::string get_string_from_type(Type candidate);
 
-const Type get_raw_type(int _size);
 
-const bool is_raw(Type _t);
 
 // Base class for all expressions
 class Expression
@@ -136,4 +134,17 @@ public:
 
 	ValueReturningFunctionCall(std::shared_ptr<LValue> name, std::vector<std::shared_ptr<Expression>> args);
 	ValueReturningFunctionCall();
+};
+
+
+// sizeof expressions
+
+class SizeOf : public Expression
+{
+	std::string to_check;	// because the sizeof expression could be a struct, the typename will be stored as a string
+public:
+	std::string get_type();
+
+	SizeOf(std::string to_check);
+	SizeOf();
 };

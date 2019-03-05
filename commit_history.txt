@@ -5,6 +5,20 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+3/4 commit to Compiler
+
+- The parser will now throw exceptions when:
+	- It doesn't see an = sign in an assignment
+	- The ends of allocation statements don't end with a semicolon, comma, or closing paren (the latter are for function definitions)
+- Added an 'AssemblerException' class; replaced runtime_error in Assembler class with this exception
+- The 'RAW' type no longer requires (or accepts, for that matter) the size of the raw variable; it defaults to the word size of the machine. In future, it will accept "short" and "short short" (or "long" and "long long") to modify its size
+- Added a 'sizeof' expression type to return the size (in bytes) of a type
+- Implemented the 'short' addressing mode in the Assembler and SINVM to address a single byte of the memory, rather than a whole word (used for load/store instructions only at the moment)
+	- Updated the __builtins_memcpy subroutine to use _bytes_ rather than _words_ for length of memory to copy
+	- Added mirrored addressing modes for the short types (i.e., absolute is 0x00, short absolute is 0x10; x indexed is 0x01, short x indexed is 0x11)
+
+--------------------------------------------------------------------------------------------
+
 3/2 commit to Compiler
 
 - Merged Dynamic-Memory into Compiler and deleted the former

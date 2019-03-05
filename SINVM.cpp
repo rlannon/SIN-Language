@@ -11,7 +11,7 @@ const bool SINVM::address_is_valid(size_t address) {
 }
 
 
-int SINVM::get_data_of_wordsize() {
+uint16_t SINVM::get_data_of_wordsize() {
 	/*
 	
 	Since we might have a variable wordsize, we need to be able to handle numbers of various word sizes. As such, have a function to do this for us (since we will be doing it a lot).
@@ -302,7 +302,7 @@ void SINVM::execute_instruction(int opcode) {
 
 			// get the value
 			this->PC++;
-			int address_to_jump = this->get_data_of_wordsize();
+			uint16_t address_to_jump = this->get_data_of_wordsize();
 
 			int return_address = this->PC;
 
@@ -393,7 +393,7 @@ void SINVM::execute_instruction(int opcode) {
 
 			// increment the PC to point at the data and get the syscall number
 			this->PC++;
-			int syscall_number = this->get_data_of_wordsize();
+			uint16_t syscall_number = this->get_data_of_wordsize();
 
 			// TODO: implement more syscalls and split them into their own functions
 
@@ -500,7 +500,7 @@ void SINVM::execute_instruction(int opcode) {
 }
 
 
-int SINVM::execute_load() {
+uint16_t SINVM::execute_load() {
 	/*
 	
 	Execute a LOAD_ instruction. This function takes a pointer to the register we want to load and executes the load instruction accordingly, storing the ultimate fetched result in the register we passed into the function.
@@ -523,12 +523,27 @@ int SINVM::execute_load() {
 	this->PC++;
 
 	// load the appropriate number of bytes according to our wordsize
-	unsigned int data_to_load = this->get_data_of_wordsize();
+	uint16_t data_to_load = this->get_data_of_wordsize();
+
+	/*
+	
+	If we are using short addressing, we will set a flag and subtract 0x10 (base for short addressing) from the addressing mode before proceeding. We will then pass our flag into the SINVM::get_data_from_memory(...) function; said function will operate appropriately for the short addressing mode
+
+	*/
+
+	bool is_short;
+	if (addressing_mode >= addressingmode::absolute_short) {
+		is_short = true;
+		addressing_mode -= addressingmode::absolute_short;
+	}
+	else {
+		is_short = false;
+	}
 
 	// check our addressing mode and decide how to interpret our data
 	if ((addressing_mode == addressingmode::absolute) || (addressing_mode == addressingmode::x_index) || (addressing_mode == addressingmode::y_index)) {
 		// if we have absolute or x/y indexed-addressing, we will be reading from memory
-		int data_in_memory = 0;
+		uint16_t data_in_memory = 0;
 
 		// however, we need to make sure that if it is indexed, we add the register values to data_to_load, which contains the memory address, so we actually perform the indexing
 		if (addressing_mode == addressingmode::x_index) {
@@ -549,7 +564,7 @@ int SINVM::execute_load() {
 		}
 
 		// now, data_to_load definitely contains the correct start address
-		data_in_memory = this->get_data_from_memory(data_to_load);
+		data_in_memory = this->get_data_from_memory(data_to_load, is_short);
 
 		// load our target register with the data we fetched
 		return data_in_memory;
@@ -592,38 +607,54 @@ int SINVM::execute_load() {
 		// indirect indexed addressing with the X register
 
 		// get the data at the address indicated by data_to_load
-		int data_in_memory = this->get_data_from_memory(data_to_load);
+		uint16_t data_in_memory = this->get_data_from_memory(data_to_load);	// get the whole word (as it's an address), so don't use short addressing
 		// now go to that address + reg_x and return the data there
-		return this->get_data_from_memory(data_in_memory + REG_X);
+		return this->get_data_from_memory(data_in_memory + REG_X, is_short);	// we _may_ want short addressing here, so pass the is_short flag
 	}
 	else if (addressing_mode == addressingmode::indirect_indexed_y) {
 		// indirect indexed addressing with the Y register
-		int data_in_memory = this->get_data_from_memory(data_to_load);
-		return this->get_data_from_memory(data_in_memory + REG_Y);
+		uint16_t data_in_memory = this->get_data_from_memory(data_to_load);	// get the whole word (as it's an address), so don't use short addressing
+		return this->get_data_from_memory(data_in_memory + REG_Y, is_short);	// we _may_ want short addressing here, so pass the is_short flag
 	}
 
 	// indexed indirect
 	else if (addressing_mode == addressingmode::indexed_indirect_x) {
 		// go to data_to_load + X, get the value there, go to that address, and return the value stored there
-		int data_in_memory = this->get_data_from_memory(data_to_load + REG_X);
-		return this->get_data_from_memory(data_in_memory);
+		uint16_t data_in_memory = this->get_data_from_memory(data_to_load + REG_X);	// get the whole word (as it's an address), so don't use short addressing
+		return this->get_data_from_memory(data_in_memory, is_short);	// we _may_ want short addressing here, so pass the is_short flag
 	}
 	else if (addressing_mode == addressingmode::indexed_indirect_y) {
-		int data_in_memory = this->get_data_from_memory(data_to_load + REG_Y);
-		return this->get_data_from_memory(data_in_memory);
+		uint16_t data_in_memory = this->get_data_from_memory(data_to_load + REG_Y);	// get the whole word (as it's an address), so don't use short addressing
+		return this->get_data_from_memory(data_in_memory, is_short);	// we _may_ want short addressing here, so pass the is_short flag
 	}
 }
 
 
-void SINVM::execute_store(int reg_to_store) {
+void SINVM::execute_store(uint16_t reg_to_store) {
 	// our next byte is the addressing mode
 	this->PC++;
 	uint8_t addressing_mode = this->memory[this->PC];
 
+	// increment the program counter
 	this->PC++;
 
 	// next, get the memory location
-	unsigned int memory_address = this->get_data_of_wordsize();
+	uint16_t memory_address = this->get_data_of_wordsize();
+
+	/*
+	
+	Now, check to see if we are using short addressing. If so, subtract 0x10 (base for short addressing) from the addressing mode, set the is_short flag, and proceed. We will then pass is_short into the actual memory store function
+	
+	*/
+
+	bool is_short;
+	if (addressing_mode >= addressingmode::absolute_short) {
+		is_short = true;
+		addressing_mode -= addressingmode::absolute_short;
+	}
+	else {
+		is_short = false;
+	}
 
 	// validate the memory location
 	// TODO: decide whether writing to an invalid location will wrap around or simply throw an exception
@@ -658,13 +689,13 @@ void SINVM::execute_store(int reg_to_store) {
 			memory_address = this->get_data_from_memory(memory_address + REG_Y);
 		}
 
-		// we are not allowed to store data at location 0x00, as the word there is always guaranteed to be 0x00
-		if (memory_address != 0x00) {
+		// we are not allowed to store data in the word at location 0x00, as the word there is always guaranteed to be 0x00 (so that null pointers are always invalid)
+		if (memory_address != 0x00 && memory_address != 0x01) {
 			// use our store_in_memory function
-			this->store_in_memory(memory_address, reg_to_store);
+			this->store_in_memory(memory_address, reg_to_store, is_short);
 		}
 		else {
-			throw VMException("Write access violation.", this->PC);
+			throw VMException("Write access violation; cannot write data to 0x00.", this->PC);
 		}
 
 		return;
@@ -676,33 +707,46 @@ void SINVM::execute_store(int reg_to_store) {
 }
 
 
-int SINVM::get_data_from_memory(int address) {
+int SINVM::get_data_from_memory(uint16_t address, bool is_short) {
 	// read value of _WORDSIZE in memory and return it in the form of an int
 	// different from "execute_load()" in that it doesn't affect the program counter and does not take addressing mode into consideration
 
-	int data = 0;
-	int wordsize_bytes = this->_WORDSIZE / 8;
-
-	size_t memory_index = 0;
-	size_t bitshift_index = (wordsize_bytes - 1);
-
-	while (memory_index < (wordsize_bytes - 1)) {
-		data += this->memory[address + memory_index];
-		data <<= (bitshift_index * 8);
-
-		memory_index++;
-		bitshift_index--;
+	uint16_t data = 0;
+	
+	// if we are using the short addressing mode, get the individual byte
+	if (is_short) {
+		data = this->memory[address];
 	}
-	data += this->memory[address + memory_index];
+	// otherwise, get the whole word
+	else {
+		size_t wordsize_bytes = this->_WORDSIZE / 8;
+
+		size_t memory_index = 0;
+		size_t bitshift_index = (wordsize_bytes - 1);
+
+		while (memory_index < (wordsize_bytes - 1)) {
+			data += this->memory[address + memory_index];
+			data <<= (bitshift_index * 8);
+
+			memory_index++;
+			bitshift_index--;
+		}
+		data += this->memory[address + memory_index];
+	}
 
 	return data;
 }
 
-void SINVM::store_in_memory(int address, int new_value) {
+void SINVM::store_in_memory(uint16_t address, uint16_t new_value, bool is_short) {
 	// stores value "new_value" in memory address starting at "high_byte_address"
 	
 	/*
+
 	Make the assignment and return
+	
+	If we are using short addressing, we set the individual address to the new value and return
+
+	Otherwise, if we are using the whole word:
 	We can't do this quite the same way here as we did in the assembler; because our memory address needs to start low, and our bit shift needs to start high, we have to do a little trickery to get it right -- let's use 32-bit wordsize assigning to location $00 as an example:
 	- First, we iterate from i=_WORDSIZE/8, so i=4
 	- Now, we assign the value at address [memory_address + (wordsize_bytes - i)], so we assign to value memory_address, or $00
@@ -711,11 +755,17 @@ void SINVM::store_in_memory(int address, int new_value) {
 	- On the next iteration, i = 2; so we assign to location [$00 + (4 - 2)], or $02, and we assign the value bitshifted by 8 bits
 	- On the final iteration, i = 1; so we assign to location [$00 + (4 - 1)], $03, and we assign the value bitshifted by (1 - 1); the value to assign is then reg_to_store >> 0, which is the low byte
 	- That means we have the bytes ordered correctly in big-endian format
+
 	*/
 
-	int wordsize_bytes = this->_WORDSIZE / 8;
-	for (int i = wordsize_bytes; i > 0; i--) {
-		this->memory[address + (wordsize_bytes - i)] = new_value >> ((i - 1) * 8);
+	if (is_short) {
+		this->memory[address] = new_value;
+	}
+	else {
+		size_t wordsize_bytes = this->_WORDSIZE / 8;
+		for (size_t i = wordsize_bytes; i > 0; i--) {
+			this->memory[address + (wordsize_bytes - i)] = new_value >> ((i - 1) * 8);
+		}
 	}
 
 	return;
@@ -740,7 +790,7 @@ void SINVM::execute_bitshift(int opcode)
 
 		// increment PC so we can use get_data_of_wordsize()
 		this->PC++;
-		int address = this->get_data_of_wordsize();
+		uint16_t address = this->get_data_of_wordsize();
 
 		// if we have absolute addressing
 		if (addressing_mode == addressingmode::absolute) {
@@ -937,7 +987,7 @@ void SINVM::execute_jmp() {
 
 	// get the memory address to which we want to jump
 	this->PC++;
-	int memory_address = this->get_data_of_wordsize();
+	uint16_t memory_address = this->get_data_of_wordsize();
 
 	// check our addressing mode to see how we need to handle the data we just received
 	if (addressing_mode == addressingmode::absolute) {

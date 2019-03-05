@@ -63,7 +63,6 @@ Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate,
 			throw CompilerException("Cannot find '" + lvalue_exp->getValue() + "' in symbol table (perhaps it is out of scope?)");
 		}
 	}
-
 	// the next ones will require recursion, as they have a shared_ptr as a class member
 	else if (to_evaluate->get_expression_type() == ADDRESS_OF) {
 		AddressOf* address_of_exp = dynamic_cast<AddressOf*>(to_evaluate.get());
@@ -86,6 +85,12 @@ Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate,
 		Dereferenced* dereferenced_exp = dynamic_cast<Dereferenced*>(to_evaluate.get());
 
 		return this->get_expression_data_type(dereferenced_exp->get_ptr_shared(), true);
+	}
+	else if (to_evaluate->get_expression_type() == SIZE_OF) {
+		return INT;	// sizeof(...) always returns an unsigned int
+	}
+	else {
+		return NONE;
 	}
 }
 
@@ -642,6 +647,48 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		Binary* binary_expression = dynamic_cast<Binary*>(to_fetch.get());
 		fetch_ss << this->evaluate_binary_tree(*binary_expression, line_number, stack_offset, max_offset).str();
 	}
+	else if (to_fetch->get_expression_type() == VALUE_RETURNING_CALL) {
+		ValueReturningFunctionCall* val_ret = dynamic_cast<ValueReturningFunctionCall*>(to_fetch.get());
+
+		// now, search through the symbol table for the function so we can get its return type
+		Symbol* function_symbol = this->symbol_table.lookup(val_ret->get_name()->getValue());
+
+		// increment the stack pointer to the stack frame
+		fetch_ss << this->move_sp_to_target_address(stack_offset, max_offset).str();
+
+		// call the function
+		Call to_call(val_ret->get_name(), val_ret->get_args());	// create a 'call' object from val_ret
+		fetch_ss << this->call(to_call, stack_offset, max_offset).str();	// add that to the asm
+
+		// now, the returned value will be on the stack; if the type is of variable length (array or struct), handle it separately
+		if (function_symbol->type != ARRAY && function_symbol->type != STRUCT) {
+			// the size of the return symbol is only one word; pull it from the stack
+			fetch_ss << "\t" << "pla" << std::endl;
+		}
+		else if (function_symbol->type == STRUCT) {
+			// TODO: implement structs
+		}
+		else {
+			// TODO: implement arrays
+		}
+	}
+	else if (to_fetch->get_expression_type() == SIZE_OF) {
+		// cast to SizeOf type
+		SizeOf* size_of = dynamic_cast<SizeOf*>(to_fetch.get());
+		std::string to_check = size_of->get_type();
+
+		// if it's an int, bool, float, string, raw, or pointer, we know the size
+		if (to_check == "int" || to_check == "bool" || to_check == "float" || to_check == "string" || to_check == "ptr" || to_check == "raw") {
+			fetch_ss << "loada #$02" << std::endl;
+		}
+		// otherwise, it's a struct, and we must check our structs to see what the size is
+		else {
+			// TODO: struct implementation
+		}
+	}
+	else {
+		throw CompilerException("Cannot fetch expression", 0, line_number);
+	}
 
 	return fetch_ss;
 }
@@ -725,7 +772,7 @@ std::stringstream Compiler::string_assignment(Symbol target_symbol, std::shared_
 
 	string_assign_ss << "\t" << "phb" << std::endl;	// push the address of the string variable
 
-		// add some padding to the string length
+	// add some padding to the string length
 	string_assign_ss << "\t" << "pha" << std::endl;
 	string_assign_ss << "\t" << "addca #$10" << std::endl;
 
@@ -738,7 +785,7 @@ std::stringstream Compiler::string_assignment(Symbol target_symbol, std::shared_
 	if (target_symbol.scope_level == 0) {
 		string_assign_ss << "\t" << "storeb " << target_symbol.name << std::endl;	// store the address in our pointer variable
 
-		// get the original value of A back
+		// get the original value of A -- the actual string length -- back
 		string_assign_ss << "\t" << "pla" << std::endl;
 
 		// next, store the length in the heap
@@ -856,7 +903,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 							Usage for memcpy is as follows:
 								- Push source
 								- Push destination
-								- Push number of _words_ to copy
+								- Push number of bytes to copy
 
 							After fetch_value is called, A will contain the number of _bytes_, B will contain the address of the string
 
@@ -1034,9 +1081,14 @@ std::stringstream Compiler::define(Definition definition_statement) {
 				// so, they will be on the stack already when we jump to the label
 
 				// however, we do need to increment the position in the stack according to what was pushed so we know how to navigate through our local variables, which will be on the stack for the function's lifetime; note we are not actually incrementing the pointer, we are just incrementing the variable that the compiler itself uses to track where we are in the stack
-				if (arg_alloc->get_var_type() == STRING) {
-					// strings take two words; one for the length, one for the start address
-					// TODO: refactor strings in function definitions
+				if (arg_alloc->get_var_type() == ARRAY) {
+					// TODO: implement arrays
+				}
+				else if (arg_alloc->get_var_type() == STRUCT) {
+					// TODO: implement structs
+				}
+				else if (arg_alloc->get_var_type() == STRING) {
+					// One word for length, one for address
 					current_stack_offset += 2;
 				}
 				else {
