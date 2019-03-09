@@ -50,12 +50,12 @@ void Linker::create_sml_file(std::string file_name) {
 
 		// add this offset to every "value" field in the symbol table where the symbol class is "D", or "C"
 		// symbols with class "M" will not be updated; the address defined will remain
-		for (std::list<std::tuple<std::string, int, std::string>>::iterator symbol_iter = file_iter->symbol_table.begin(); symbol_iter != file_iter->symbol_table.end(); symbol_iter++) {
+		for (std::list<AssemblerSymbol>::iterator symbol_iter = file_iter->symbol_table.begin(); symbol_iter != file_iter->symbol_table.end(); symbol_iter++) {
 			
 			// if our symbol is defined
-			if ((std::get<2>(*symbol_iter) == "D") || (std::get<2>(*symbol_iter) == "C")) {
+			if ((symbol_iter->symbol_class == D) || (symbol_iter->symbol_class == C)) {
 				// update the value stored in the symbol table to be the current value plus the offset
-				std::get<1>(*symbol_iter) = std::get<1>(*symbol_iter) + current_offset;
+				symbol_iter->value = symbol_iter->value + current_offset;
 			}
 
 			/*
@@ -64,12 +64,12 @@ void Linker::create_sml_file(std::string file_name) {
 				b) the offset from the /end/ of the .text section
 			*/
 
-			if (std::get<2>(*symbol_iter) == "C") {
+			if (symbol_iter->symbol_class == C) {
 				// iterate through the file's constants list to find the constant's data
 				std::list<std::tuple<std::string, int, std::vector<uint8_t>>>::iterator data_iter = file_iter->data_table.begin();
 				bool found_constant = false;
 				while (!found_constant && (data_iter != file_iter->data_table.end())) {
-					if (std::get<0>(*data_iter) == std::get<0>(*symbol_iter)) {
+					if (std::get<0>(*data_iter) == symbol_iter->name) {
 						found_constant = true;
 					}
 					else {
@@ -81,7 +81,7 @@ void Linker::create_sml_file(std::string file_name) {
 					int offset_from_text_end = std::get<1>(*data_iter);
 
 					// add the total offset to <1>(symbol_iter), which is the offset for the current symbol in the symbol table; this symbol is class "C"
-					std::get<1>(*symbol_iter) += offset_from_text_end;
+					symbol_iter->value += offset_from_text_end;
 				}
 				else {
 					throw std::runtime_error("Could not find the constant specified in the constants table!");
@@ -89,7 +89,7 @@ void Linker::create_sml_file(std::string file_name) {
 			}
 
 			// if the symbol class is "R", we need to allocate space in memory for it
-			if (std::get<2>(*symbol_iter) == "R") {
+			if (symbol_iter->symbol_class == R) {
 				// first, make sure "current_rs_address" is not beyond the memory we are allowed to use; it cannot move beyond the heap
 				if (current_rs_address >= _INPUT_BUFFER_START) {
 					throw std::runtime_error("**** Memory Exception: Global variable limit exceeded.");
@@ -97,10 +97,10 @@ void Linker::create_sml_file(std::string file_name) {
 				// if we are still within our bounds
 				else {
 					// we will change the value of the symbol to the next available memory address based on "current_rs_address"
-					std::get<1>(*symbol_iter) = current_rs_address;
-					// update current_rs_address; advance by one word
-					size_t wordsize_bytes = this->_wordsize / 8;
-					current_rs_address += wordsize_bytes;
+					symbol_iter->value = current_rs_address;
+
+					// update current_rs_address; advance by the size of the symbol (usually one word, but not necessarily)
+					current_rs_address += symbol_iter->width;
 				}
 			}
 
@@ -124,15 +124,14 @@ void Linker::create_sml_file(std::string file_name) {
 	// now that our initial offsets and defined label offsets have been adjusted, we can construct the master symbol table
 
 	// first, create the vector to hold the table
-	std::vector<std::tuple<std::string, int, std::string>> master_symbol_table;
+	std::vector<AssemblerSymbol> master_symbol_table;
 	// iterate through our object files' symbol tables to add to the master table
 
 	for (std::vector<SinObjectFile>::iterator file_iter = this->object_files.begin(); file_iter != this->object_files.end(); file_iter++) {
 		// only add defined references to the table
 		// find them by iterating through each symbol table and adding the defined symbols to the master table
-		for (std::list<std::tuple<std::string, int, std::string>>::iterator symbol_iter = file_iter->symbol_table.begin(); symbol_iter != file_iter->symbol_table.end(); symbol_iter++) {
-			std::string class_symbol = std::get<2>(*symbol_iter);
-			if ((class_symbol == "D") || (class_symbol == "C") || (class_symbol == "R") || (class_symbol == "M")) {
+		for (std::list<AssemblerSymbol>::iterator symbol_iter = file_iter->symbol_table.begin(); symbol_iter != file_iter->symbol_table.end(); symbol_iter++) {
+			if (symbol_iter->symbol_class == D || symbol_iter->symbol_class == C || symbol_iter->symbol_class == R || symbol_iter->symbol_class == M) {
 				master_symbol_table.push_back(*symbol_iter);
 			}
 			else {
@@ -144,19 +143,18 @@ void Linker::create_sml_file(std::string file_name) {
 	// now, go through each object file and locate any undefined symbol references
 	for (std::vector<SinObjectFile>::iterator file_iter = this->object_files.begin(); file_iter != this->object_files.end(); file_iter++) {
 		// look for undefined symbols
-		for (std::list<std::tuple<std::string, int, std::string>>::iterator symbol_iter = file_iter->symbol_table.begin(); symbol_iter != file_iter->symbol_table.end(); symbol_iter++) {
+		for (std::list<AssemblerSymbol>::iterator symbol_iter = file_iter->symbol_table.begin(); symbol_iter != file_iter->symbol_table.end(); symbol_iter++) {
 			// if it is a constant, the symbol should now have the proper address
 			// if it's undefined, a constant, or a reserved macro
-			std::string class_symbol = std::get<2>(*symbol_iter);
-			if ((class_symbol == "U") || (class_symbol == "C") || (class_symbol == "R")) {
+			if (symbol_iter->symbol_class == U || symbol_iter->symbol_class == C || symbol_iter->symbol_class == R) {
 				// iterate through the master table and find the symbol referenced
-				std::vector<std::tuple<std::string, int, std::string>>::iterator master_table_iter = master_symbol_table.begin();
+				std::vector<AssemblerSymbol>::iterator master_table_iter = master_symbol_table.begin();
 				bool found = false;
 				while ((master_table_iter != master_symbol_table.end()) && !found) {
 					// if the symbol names are the same
-					if (std::get<0>(*master_table_iter) == std::get<0>(*symbol_iter)) {
+					if (master_table_iter->name == symbol_iter->name) {
 						// copy over the value from the master table iterator to our local symbol table
-						std::get<1>(*symbol_iter) = std::get<1>(*master_table_iter);
+						symbol_iter->value = master_table_iter->value;
 
 						// update our found variable so we can abort
 						found = true;
@@ -169,7 +167,7 @@ void Linker::create_sml_file(std::string file_name) {
 
 				// if the symbol was NOT found in the table
 				if (!found) {
-					throw std::runtime_error(("**** Symbol table error: Could not find '" + std::get<0>(*symbol_iter) + "' in symbol table!").c_str());
+					throw std::runtime_error("**** Symbol table error: Could not find '" + symbol_iter->name + "' in symbol table!");
 				}
 			}
 			else {
@@ -180,11 +178,11 @@ void Linker::create_sml_file(std::string file_name) {
 		// now, go through each file individually and update all values pointed to in the relocations table
 		for (std::vector<SinObjectFile>::iterator file_iter = this->object_files.begin(); file_iter != this->object_files.end(); file_iter++) {
 			// iterate through the relocation table
-			for (std::list<std::tuple<std::string, int>>::iterator relocation_iter = file_iter->relocation_table.begin(); relocation_iter != file_iter->relocation_table.end(); relocation_iter++) {
+			for (std::list<RelocationSymbol>::iterator relocation_iter = file_iter->relocation_table.begin(); relocation_iter != file_iter->relocation_table.end(); relocation_iter++) {
 				// if the symbol is "_NONE", we add the file's offset to the value pointed to by the relocator
-				if (std::get<0>(*relocation_iter) == "_NONE") {
+				if (relocation_iter->name == "_NONE") {
 					// the start address is the value in the relocation iter
-					size_t value_start_address = std::get<1>(*relocation_iter);
+					size_t value_start_address = relocation_iter->value;
 
 					int data = 0;
 					size_t wordsize_bytes = (size_t)file_iter->_wordsize / 8;
@@ -203,14 +201,14 @@ void Linker::create_sml_file(std::string file_name) {
 				}
 				else {
 					// retrieve "value" from the master symbol table
-					std::vector<std::tuple<std::string, int, std::string>>::iterator master_table_iter = master_symbol_table.begin();
+					std::vector<AssemblerSymbol>::iterator master_table_iter = master_symbol_table.begin();
 					bool found = false;
 					int value = 0;
 					while ((master_table_iter != master_symbol_table.end()) && !found) {
 						// if the names are the same
-						if (std::get<0>(*master_table_iter) == std::get<0>(*relocation_iter)) {
+						if (master_table_iter->name == relocation_iter->name) {
 							// get the value
-							value = std::get<1>(*master_table_iter);
+							value = master_table_iter->value;
 							// set the found variable and exit the loop
 							found = true;
 						}
@@ -221,12 +219,12 @@ void Linker::create_sml_file(std::string file_name) {
 
 					// if we didn't find it, throw an error
 					if (!found) {
-						throw std::runtime_error(("**** Relocation error: Could not find '" + std::get<0>(*relocation_iter) + "' in symbol table!").c_str());
+						throw std::runtime_error("**** Relocation error: Could not find '" + relocation_iter->name + "' in symbol table!");
 					}
 
 					// finally, write "value" to the relocation table
 					// get the start address and the number of bytes in our wordsize
-					size_t value_start_address = std::get<1>(*relocation_iter);
+					size_t value_start_address = relocation_iter->value;
 					size_t wordsize_bytes = (size_t)file_iter->_wordsize / 8;
 					for (size_t i = wordsize_bytes; i > 0; i--) {
 						file_iter->program_data[value_start_address + (wordsize_bytes - i)] = value >> ((i - 1) * 8);

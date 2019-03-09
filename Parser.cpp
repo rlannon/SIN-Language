@@ -114,6 +114,33 @@ bool Parser::is_type(std::string lex_value)
 	return found;
 }
 
+std::string Parser::get_closing_grouping_symbol(std::string beginning_symbol)
+{
+	/*
+	
+	Returns the appropriate closing symbol for some opening grouping symbol 'beginning_symbol'; e.g., if beginning_symbol is '(', the function will return ')'
+
+	Operates with strings because that's what lexemes use
+	
+	*/
+
+	if (beginning_symbol == "(") {
+		return ")";
+	}
+	else if (beginning_symbol == "[") {
+		return "]";
+	}
+	else {
+		throw ParserException("Invalid grouping symbol in expression!", 0);
+		return 0;
+	}
+}
+
+bool Parser::is_opening_grouping_symbol(std::string to_test)
+{
+	return (to_test == "(" || to_test == "[");
+}
+
 
 /*
 
@@ -419,11 +446,29 @@ std::shared_ptr<Statement> Parser::parse_allocation(lexeme current_lex)
 	// check our next token; it must be a keyword
 	lexeme var_type = this->next();
 	if (var_type.type == "kwd") {
-		if (var_type.value == "int" || var_type.value == "float" || var_type.value == "bool" || var_type.value == "string" || var_type.value == "raw" || var_type.value == "ptr" || var_type.value == "const") {
+
+		// check our quality, if any
+		SymbolQuality quality;
+		if (var_type.value == "const") {
+			// change the variable quality
+			quality = CONSTANT;
+
+			// get the actual variable type
+			var_type = this->next();
+		}
+		else if (var_type.value == "dynamic") {
+			quality = DYNAMIC;
+			var_type = this->next();
+		}
+		else if (var_type.value == "static") {
+			quality = STATIC;
+			var_type = this->next();
+		}
+
+		if (var_type.value == "int" || var_type.value == "float" || var_type.value == "bool" || var_type.value == "string" || var_type.value == "raw" || var_type.value == "ptr") {
 			// Note: pointers, consts, and RAWs must be treated a little bit differently than other fundamental types
 
 			// set the quality to DYNAMIC if we have a string, or to NO_QUALITY otherwise
-			SymbolQuality quality;
 			if (var_type.value == "string") {
 				quality = DYNAMIC;
 			}
@@ -433,23 +478,6 @@ std::shared_ptr<Statement> Parser::parse_allocation(lexeme current_lex)
 
 			bool initialized = false;
 			std::shared_ptr<Expression> initial_value = std::make_shared<Expression>();	// empty expression by default
-
-			// check our quality, if any
-			if (var_type.value == "const") {
-				// change the variable quality
-				quality = CONSTANT;
-
-				// get the actual variable type
-				var_type = this->next();
-			}
-			else if (var_type.value == "dynamic") {
-				quality = DYNAMIC;
-				var_type = this->next();
-			}
-			else if (var_type.value == "static") {
-				quality = STATIC;
-				var_type = this->next();
-			}
 			
 			if (var_type.value == "ptr") {
 				// set the type
@@ -530,6 +558,84 @@ std::shared_ptr<Statement> Parser::parse_allocation(lexeme current_lex)
 				throw ParserException("Expected an identifier", 111, current_lex.line_number);
 			}
 		}
+		else if (var_type.value == "array") {
+			// TODO: parse array allocation
+			// set the variable type
+			new_var_type = ARRAY;
+			// check to make sure we have the size and type in angle brackets
+			if (this->peek().value == "<") {
+				this->next();	// eat the angle bracket
+
+				// we must see the size next; must be an int
+				if (this->peek().type == "int") {
+					size_t array_length = (size_t)std::stoi(this->next().value);	// get the array length
+
+					// a comma should follow the size
+					if (this->peek().value == ",") {
+						this->next();
+						std::shared_ptr<LValue> new_var_struct_name;	// in case we have a struct
+
+						// next, we should see a keyword or an identifier (we can have an array of structs, which the lexer would see as an ident)
+						if (this->peek().type == "kwd") {
+							// new_var_subtype will be the type indicated
+							new_var_subtype = get_type_from_string(this->next().value);
+						}
+						else if (this->peek().type == "ident") {
+							// the subtype will be struct, and we should set the struct type as the identifier
+							new_var_subtype = STRUCT;
+							new_var_struct_name = std::make_shared<LValue>(this->next().value);
+						}
+						else {
+							throw ParserException("Invalid subtype in array allocation", 0, this->peek().line_number);
+						}
+
+						// now, we should see a closing angle bracket and the name of the array
+						if (this->peek().value == ">") {
+							this->next();	// eat the angle bracket
+
+							if (this->peek().type == "ident") {
+								new_var_name = this->next().value;	// get the name
+							}
+							else {
+								throw ParserException("Invalid name for a struct", 0, this->peek().line_number);
+							}
+
+							bool initialized = false;
+							std::shared_ptr<Expression> initial_value;
+							// now, check to see if we have alloc-assign syntax
+							if (this->peek().value == ":") {
+								initialized = true;
+							}
+							else {
+								initial_value = std::make_shared<Expression>();
+							}
+
+							// check to make sure the next character is a semicolon
+							if (this->peek().value != ";") {
+								throw ParserException("Syntax error; expected ';'", 0, current_lex.line_number);
+							}
+							else {
+								// finally, create the allocation statement
+								stmt = std::make_shared<Allocation>(new_var_type, new_var_name, new_var_subtype, initialized, initial_value, quality, array_length);
+								stmt->set_line_number(current_lex.line_number);
+							}
+						}
+						else {
+							throw ParserException("Syntax error; expected '>'", 0, this->peek().line_number);
+						}
+					}
+					else {
+						throw ParserException("Syntax error; expected ','", 0, this->peek().line_number);
+					}
+				}
+				else {
+					throw ParserException("Invalid syntax; array allocation must specify <size, type>", 0, this->peek().line_number);
+				}
+			}
+			else {
+				throw ParserException("You must specify the size and type of array in its allocation", 0, var_type.line_number);
+			}
+		}
 		else {
 			throw ParserException("Expected a variable type; must be int, float, bool, or string", 211, current_lex.line_number);
 		}
@@ -572,7 +678,16 @@ std::shared_ptr<Statement> Parser::parse_assignment(lexeme current_lex)
 
 		// ensure it's an identifier
 		if (_lvalue_lex.type == "ident") {
-			lvalue = std::make_shared<LValue>(_lvalue_lex.value);
+			// the lvalue might be a dereferenced value; check to see if that's the case
+			std::shared_ptr<Expression> index_number;
+			if (this->peek().value == "[") {
+				this->next();
+				index_number = this->parse_expression(0, "[", true);	// set the not_binary flag to true
+				lvalue = std::make_shared<Indexed>(_lvalue_lex.value, "var", index_number);
+			}
+			else {
+				lvalue = std::make_shared<LValue>(_lvalue_lex.value);
+			}
 		}
 		// if it isn't a valid LValue, then we can't continue
 		else {
@@ -763,24 +878,38 @@ PARSE EXPRESSIONS
 
 */
 
-std::shared_ptr<Expression> Parser::parse_expression(int prec) {
+std::shared_ptr<Expression> Parser::parse_expression(size_t prec, std::string grouping_symbol, bool not_binary) {
 	lexeme current_lex = this->current_token();
 
 	// Create a pointer to our first value
 	std::shared_ptr<Expression> left;
 
 	// Check if our expression begins with parens; if so, only return what is inside them
-	if (current_lex.value == "(") {
+	if (is_opening_grouping_symbol(current_lex.value)) {
+		grouping_symbol = current_lex.value;
 		this->next();
-		left = this->parse_expression();
+		left = this->parse_expression(0, grouping_symbol);
 		this->next();
+
+		/*
+		
+		if we are getting the expression within an indexed expression, we don't want to parse out a binary (otherwise it might parse:
+			let myArray[3] = 0;
+		as having the expression 3 = 0, which is not correct
+		
+		*/
+		if (this->current_token().value == "]" && not_binary) {
+			return left;
+		}
+		
+		// Otherwise, carry on parsing
 		// if our next character is a semicolon or closing paren, then we should just return the expression we just parsed
-		if (this->peek().value == ";" || this->peek().value == ")" || this->peek().value == "{") {
+		if (this->peek().value == ";" || this->peek().value == get_closing_grouping_symbol(grouping_symbol) || this->peek().value == "{") {
 			return left;
 		}
 		// if our next character is an op_char, returning the expression would skip it, so we need to parse a binary using the expression in parens as our left expression
 		else if (this->peek().value == "op_char") {
-			return this->maybe_binary(left, prec);
+			return this->maybe_binary(left, prec, grouping_symbol);
 		}
 	}
 	else if (current_lex.value == ",") {
@@ -792,19 +921,27 @@ std::shared_ptr<Expression> Parser::parse_expression(int prec) {
 		left = std::make_shared<Literal>(get_type_from_string(current_lex.type), current_lex.value);
 	}
 	else if (current_lex.type == "ident") {
-		left = std::make_shared<LValue>(current_lex.value);
+		// check to see if we have the identifier alone, or whether we have an index
+		if (this->peek().value == "[") {
+			this->next();
+			left = std::make_shared<Indexed>(current_lex.value, "var", this->parse_expression(0, "[", true));
+		}
+		else {
+			left = std::make_shared<LValue>(current_lex.value);
+		}
 	}
 	// if we have a keyword to begin an expression, parse it (could be a sizeof expression)
 	else if (current_lex.type == "kwd") {
 		if (current_lex.value == "sizeof") {
 			// expression must be enclosed in parens
 			if (this->peek().value == "(") {
+				grouping_symbol = "(";
 				this->next();
 				// valid words in sizeof are idents and types, so long as the type is not a struct or an array
 				if (this->peek().type == "ident" || (is_type(this->peek().value) && this->peek().value != "struct" && this->peek().value != "array")) {
 					lexeme to_check = this->next();
 
-					if (this->peek().value == ")") {
+					if (this->peek().value == get_closing_grouping_symbol(grouping_symbol)) {
 						this->next();	// eat the end paren
 						left = std::make_shared<SizeOf>(to_check.value);
 					}
@@ -835,7 +972,7 @@ std::shared_ptr<Expression> Parser::parse_expression(int prec) {
 				std::vector<std::shared_ptr<Expression>> args;
 				this->next();
 				this->next();
-				while (this->current_token().value != ")") {
+				while (this->current_token().value != get_closing_grouping_symbol(grouping_symbol)) {
 					args.push_back(this->parse_expression());
 					this->next();
 				}
@@ -911,7 +1048,7 @@ std::shared_ptr<Expression> Parser::parse_expression(int prec) {
 	// Use the maybe_binary function to determine whether we need to return a binary expression or a simple expression
 
 	// always start it at 0; the first time it is called, it will be 0, as nothing will have been passed to parse_expression, but will be updated to the appropriate precedence level each time after. This results in a binary tree that shows the proper order of operations
-	return this->maybe_binary(left, prec);
+	return this->maybe_binary(left, prec, grouping_symbol);
 }
 
 
@@ -970,14 +1107,14 @@ LValue Parser::getDereferencedLValue(Dereferenced to_eval) {
 	}
 }
 
-std::shared_ptr<Expression> Parser::maybe_binary(std::shared_ptr<Expression> left, int my_prec) {
+std::shared_ptr<Expression> Parser::maybe_binary(std::shared_ptr<Expression> left, size_t my_prec, std::string grouping_symbol) {
 
 	// Determines whether to wrap the expression in a binary or return as is
 
 	lexeme next = this->peek();
 
 	// if the next character is a semicolon, another end paren, or a comma, return
-	if (next.value == ";" || next.value == ")" || next.value == ",") {
+	if (next.value == ";" || next.value == get_closing_grouping_symbol(grouping_symbol) || next.value == ",") {
 		return left;
 	}
 	// Otherwise, if we have an op_char...

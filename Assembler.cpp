@@ -305,7 +305,7 @@ void Assembler::construct_symbol_table() {
 			}
 
 			// push back the line_data as the symbol's name and "current_byte" as the current byte in memory; this will serve as the memory address
-			this->symbol_table.push_back(std::make_tuple(label_name, this->current_byte, "D"));	// name, value, and class
+			this->symbol_table.push_back(AssemblerSymbol(label_name, this->current_byte, (this->_WORDSIZE / 8), D));	// name, value, and class
 			
 			// continue on to the next loop iteration
 			continue;
@@ -364,13 +364,36 @@ void Assembler::construct_symbol_table() {
 				/*
 				Note:
 				Syntax is:
-				@rs _macro_name
+				@rs <number of bytes> <macro_name>
 				*/
 
-				// the macro's name will come immediately after the directive
-				std::string macro_name = line_data_vector[1];
+				// get the number of bytes to reserve
+				try {
+					short int num_bytes = std::stoi(line_data_vector[1]);
 
-				this->symbol_table.push_back(std::make_tuple(macro_name, 0, "R"));
+					if (num_bytes > 0) {
+						// the macro's name will come immediately after the directive
+						std::string macro_name = line_data_vector[2];
+
+						this->symbol_table.push_back(AssemblerSymbol(macro_name, 0, (size_t)num_bytes, R));
+					}
+					else {
+						throw AssemblerException("Number of bytes to reserve must be positive.");
+					}
+				}
+				catch (std::exception& e) {
+					// print the error message
+					std::cout << "\n\n********************" << std::endl;
+					std::cout << "The program had to abort because the following exception occurred during execution:" << std::endl;
+					std::cout << "\t" << e.what() << std::endl;
+					std::cout << "\nPress enter to exit..." << std::endl;
+
+					// wait for user input before exiting
+					std::cin.get();
+
+					// exit with exit code 2 (exception thrown in execution)
+					exit(2);
+				}
 			}
 			else if (line_data == "@db") {
 				/*
@@ -414,7 +437,7 @@ void Assembler::construct_symbol_table() {
 						uint8_t to_add = value >> ((i - 1) * 8);
 						data_array.push_back(to_add);
 					}
-					this->data_table.push_back(std::make_tuple(macro_name, data_array));
+					this->data_table.push_back(DataSymbol(macro_name, data_array));
 				}
 				// if we can't use stoi, just push back the ASCII-encoded bytes
 				catch (std::exception& e) {
@@ -422,11 +445,12 @@ void Assembler::construct_symbol_table() {
 					for (std::string::iterator it = constant_data.begin(); it != constant_data.end(); it++) {
 						data_array.push_back(*it);
 					}
-					this->data_table.push_back(std::make_tuple(macro_name, data_array));
+					this->data_table.push_back(DataSymbol(macro_name, data_array));
 				}
 
 				// add it to the symbol table as well so we can reference it from other files; we will not give its address, as it will live in the _DATA section and so its address will be unknown to us until link time
-				this->symbol_table.push_back(std::make_tuple(macro_name, 0, "C"));
+				//this->symbol_table.push_back(std::make_tuple(macro_name, 0, "C"));
+				this->symbol_table.push_back(AssemblerSymbol(macro_name, 0, (this->_WORDSIZE / 8), C));
 			}
 		}
 		//// if it's not a label, directive, or mnemonic, but it isalpha(), then it must be a macro
@@ -444,12 +468,12 @@ void Assembler::construct_symbol_table() {
 // Look into the symbol table and get the value stored there for the symbol we want
 int Assembler::get_value_of(std::string symbol) {
 	
-	std::list<std::tuple<std::string, int, std::string>>::iterator symbol_table_iter = this->symbol_table.begin();
+	std::list<AssemblerSymbol>::iterator symbol_table_iter = this->symbol_table.begin();
 	bool found = false;
 
 	while (!found && (symbol_table_iter != this->symbol_table.end())) {
 		// if the names are the same, mark that we have found it
-		if (std::get<0>(*symbol_table_iter) == symbol) {
+		if (symbol_table_iter->name == symbol) {
 			found = true;
 		}
 		// if we have not yet found it, increment the iterator
@@ -461,15 +485,15 @@ int Assembler::get_value_of(std::string symbol) {
 	// if it's in the symbol table, return the value
 	if (found) {
 		// classes of C and R are technically defined but they still need to be added to the relocation table
-		if ((std::get<2>(*symbol_table_iter) == "C") || (std::get<2>(*symbol_table_iter) == "R")) {
-			this->relocation_table.push_back(std::make_tuple(std::get<0>(*symbol_table_iter), this->current_byte));
+		if (symbol_table_iter->symbol_class == C || symbol_table_iter->symbol_class == R) {
+			this->relocation_table.push_back(RelocationSymbol(symbol_table_iter->name, this->current_byte));
 		}
-		return std::get<1>(*symbol_table_iter);
+		return symbol_table_iter->value;
 	}
 	// if it's NOT in the symbol table, add it with the class "U" and return 0
 	// note it will be added to the relocation table before the value is ever retrieved
 	else {
-		this->symbol_table.push_back(std::make_tuple(symbol, 0x00, "U"));
+		this->symbol_table.push_back(AssemblerSymbol(symbol, 0x00, (this->_WORDSIZE / 8), U));
 		return 0;
 	}
 }
@@ -743,7 +767,7 @@ std::vector<uint8_t> Assembler::assemble()
 						// now that we have the addressing mode, push it to program data
 						program_data.push_back(addressing_mode);
 
-						int address = 0;
+						size_t address = 0;
 						// as long as we don't have a symbol, get the integer value of the address
 						if (!isalpha(value[0]) && (value[0] != '_')) {
 							address = get_integer_value(value);
@@ -751,7 +775,14 @@ std::vector<uint8_t> Assembler::assemble()
 						// if we do have a symbol, add it to the relocation table
 						else {
 							std::string symbol_name = value.substr(0, value.find(')'));
-							this->relocation_table.push_back(std::make_tuple(symbol_name, this->current_byte));
+
+							// if we have a comma at the end of the symbol name, we have to remove it; otherwise, the linker will throw an error when it goes through the files to resolve relocations
+							if (symbol_name[symbol_name.length() - 1] == ',') {
+								symbol_name = symbol_name.substr(0, symbol_name.length() - 1);	// removes the comma
+							}
+
+							// push back the symbol name
+							this->relocation_table.push_back(RelocationSymbol(symbol_name, this->current_byte));
 						}
 
 						// increment the current byte according to _WORDSIZE
@@ -775,9 +806,6 @@ std::vector<uint8_t> Assembler::assemble()
 							value = this->current_scope + value;
 						}
 
-						// we must first note that we have a reference in the relocation table
-						this->relocation_table.push_back(std::make_tuple(value, this->current_byte));
-
 						// addressing mode could be absolute OR indexed if the mode begins with a label
 						if (value[value.length() - 1] == ',') {
 							// if we have "label," then we know we need an index
@@ -798,10 +826,24 @@ std::vector<uint8_t> Assembler::assemble()
 							else {
 								throw AssemblerException("Expected index value after label", this->line_counter);
 							}
+
+							/*
+							
+							Add 'value' into the symbol table. Note, however, that we must do this _after_ we update the addressing mode
+							If we do it before, the function will look for a comma for an indexed addressing mode, will not see one, and then throw an error because we are trying to use indexed addressing with improper syntax
+							However, if we push the symbol _with_ the comma, the relocation table will have an entry for "var," but a symbol for "var"; since they don't match, it will throw an exception when we try to link
+							
+							*/
+							
+							value = value.substr(0, value.length() - 1);	// remove the comma from 'value
+							this->relocation_table.push_back(RelocationSymbol(value, this->current_byte));	// note that we have a reference in the relocation table
 						}
 						else {
 							// otherwise, if we just have "label", we need absolute addressing
 							addressing_mode += addressingmode::absolute;
+
+							// and add value to the relocation table
+							this->relocation_table.push_back(RelocationSymbol(value, this->current_byte));
 						}
 
 						// push_back the addressing mode
@@ -883,7 +925,7 @@ std::vector<uint8_t> Assembler::assemble()
 
 						// if it is a symbol or label, add an entry to the relocation table
 						if (isalpha(value[0]) || (value[0] == '.') || (value[0] == '_')) {
-							this->relocation_table.push_back(std::make_tuple(value, this->current_byte));
+							this->relocation_table.push_back(RelocationSymbol(value, this->current_byte));
 						}
 						else {
 							converted_value = get_integer_value(value);
@@ -952,10 +994,10 @@ std::vector<uint8_t> Assembler::assemble()
 
 						// if the macro name is already in the symbol table, update the value
 						bool is_in_symbol_table = false;
-						std::list<std::tuple<std::string, int, std::string>>::iterator iter = this->symbol_table.begin();
+						std::list<AssemblerSymbol>::iterator iter = this->symbol_table.begin();
 
 						while (iter != this->symbol_table.end() && !is_in_symbol_table) {
-							if (macro_name == std::get<0>(*iter)) {
+							if (macro_name == iter->name) {
 								is_in_symbol_table = true;
 							}
 							else {
@@ -966,11 +1008,11 @@ std::vector<uint8_t> Assembler::assemble()
 						// if it's not in the symbol table, add it
 						// also, add it to the relocation table (and its address)
 						if (!is_in_symbol_table) {
-							this->symbol_table.push_back(std::make_tuple(macro_name, macro_value, "M"));
+							this->symbol_table.push_back(AssemblerSymbol(macro_name, macro_value, (this->_WORDSIZE / 8), M));
 						}
 						// otherwise, update the reference
 						else {
-							*iter = std::make_tuple(macro_name, macro_value, "M");
+							*iter = AssemblerSymbol(macro_name, macro_value, (this->_WORDSIZE / 8) , M);
 						}
 					}
 					else {

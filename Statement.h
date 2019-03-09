@@ -71,6 +71,7 @@ class Allocation : public Statement
 		value			:	myInt
 		initialized		:	false
 		initial_value	:	(none) 
+		length			:	0
 
 	We can also use what is called "alloc-assign syntax" in SIN:
 		alloc int myInt: 5;
@@ -88,10 +89,13 @@ class Allocation : public Statement
 	Type subtype;	// the subtype
 	std::string value;
 
+	size_t array_length;	// arrays need to specify their length
 	SymbolQuality quality;	// the "quality" of the variable (defaults to "none", but can be const, etc)
 
 	// If we have an alloc-define statement, we will need:
 	bool initialized;	// whether the variable was defined upon allocation
+
+	std::shared_ptr<LValue> struct_name;	// structs will require a name
 
 	std::shared_ptr<Expression> initial_value;
 public:
@@ -100,6 +104,7 @@ public:
 	static std::string get_var_type_as_string(Type to_convert);
 	std::string get_var_name();
 
+	size_t get_array_length();
 	SymbolQuality get_quality();
 
 	bool was_initialized();
@@ -107,7 +112,7 @@ public:
 
 	void set_symbol_quality(SymbolQuality new_quality);
 
-	Allocation(Type type, std::string value, Type subtype = NONE, bool was_initialized = false, std::shared_ptr<Expression> initial_value = std::make_shared<Expression>(), SymbolQuality quality = NO_QUALITY);	// use default parameters to allow us to use alloc-define syntax, but we don't have to
+	Allocation(Type type, std::string value, Type subtype = NONE, bool was_initialized = false, std::shared_ptr<Expression> initial_value = std::make_shared<Expression>(), SymbolQuality quality = NO_QUALITY, size_t length = 0);	// use default parameters to allow us to use alloc-define syntax, but we don't have to
 	Allocation();
 };
 

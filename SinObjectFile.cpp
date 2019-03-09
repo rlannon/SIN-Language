@@ -66,28 +66,28 @@ void SinObjectFile::load_sinc_file(std::istream & file)
 				std::string _sy_name = BinaryIO::readString(file);	// _sn_len is automatically retrieved from BianryIO::BinaryIO::readString
 
 				// get the symbol class as a string from the uint8_t we read in
-				std::string symbol_class;
+				SymbolClass symbol_class;
 				if (_class == 1) {
-					symbol_class = "U";
+					symbol_class = U;
 				}
 				else if (_class == 2) {
-					symbol_class = "D";
+					symbol_class = D;
 				}
 				else if (_class == 3) {
-					symbol_class = "C";
+					symbol_class = C;
 				}
 				else if (_class == 4) {
-					symbol_class = "R";
+					symbol_class = R;
 				}
 				else if (_class == 5) {
-					symbol_class = "M";
+					symbol_class = M;
 				}
 				else {
 					throw std::runtime_error("**** Error: bad number in symbol class specifier.");
 				}
 
 				// create the tuple and push it onto "symbol_table"
-				this->symbol_table.push_back(std::make_tuple(_sy_name, _sy_val, symbol_class));
+				this->symbol_table.push_back(AssemblerSymbol(_sy_name, _sy_val, 2, symbol_class));
 			}
 
 
@@ -103,7 +103,7 @@ void SinObjectFile::load_sinc_file(std::istream & file)
 				std::string _sy_name = BinaryIO::readString(file);	// _rs_len is automatically retrieved by BinaryIO::BinaryIO::readString
 
 				// create the tuple and push it onto "relocation_table"
-				this->relocation_table.push_back(std::make_tuple(_sy_name, _addr));
+				this->relocation_table.push_back(RelocationSymbol(_sy_name, _addr));
 			}
 
 
@@ -215,31 +215,31 @@ void SinObjectFile::write_sinc_file(std::string output_file_name, AssemblerData 
 	BinaryIO::writeU32(sinc_file, num_symbols);
 
 	// write data in for each symbol in the table
-	for (std::list<std::tuple<std::string, int, std::string>>::iterator symbol_iter = assembler_obj._symbol_table.begin(); symbol_iter != assembler_obj._symbol_table.end(); symbol_iter++) {
-		// get the various values so we don't need to use std::get<> every time
-		std::string symbol_name = std::get<0>(*symbol_iter);
-		int symbol_value = std::get<1>(*symbol_iter);
-		std::string symbol_class_string = std::get<2>(*symbol_iter);
+	for (std::list<AssemblerSymbol>::iterator symbol_iter = assembler_obj._symbol_table.begin(); symbol_iter != assembler_obj._symbol_table.end(); symbol_iter++) {
+		// get the various values
+		std::string symbol_name = symbol_iter->name;
+		size_t symbol_value = symbol_iter->value;
+		SymbolClass symbol_class_string = symbol_iter->symbol_class;
 		uint8_t symbol_class;
 
 		// set the symbol class
-		if (symbol_class_string == "U") {
+		if (symbol_class_string == U) {
 			symbol_class = 1;
 		}
-		else if (symbol_class_string == "D") {
+		else if (symbol_class_string == D) {
 			symbol_class = 2;
 		}
-		else if (symbol_class_string == "C") {
+		else if (symbol_class_string == C) {
 			symbol_class = 3;
 		}
-		else if (symbol_class_string == "R") {
+		else if (symbol_class_string == R) {
 			symbol_class = 4;
 		}
-		else if (symbol_class_string == "M") {
+		else if (symbol_class_string == M) {
 			symbol_class = 5;
 		}
 		else {
-			throw std::runtime_error(("Cannot understand classifier in symbol table. Expected 'D', 'C', 'R', 'U', or 'M', but found '" + std::get<2>(*symbol_iter) + "'").c_str());
+			throw std::runtime_error("Invalid symbol class specifier");
 		}
 
 		// write the symbol value and class
@@ -258,16 +258,12 @@ void SinObjectFile::write_sinc_file(std::string output_file_name, AssemblerData 
 	BinaryIO::writeU32(sinc_file, num_relocation_entries);
 
 	// write the data for each symbol in the relocation table
-	for (std::list<std::tuple<std::string, int>>::iterator relocation_iter = assembler_obj._relocation_table.begin(); relocation_iter != assembler_obj._relocation_table.end(); relocation_iter++) {
-		// like before, get the various values so we don't need to use std::get<> every time
-		std::string relocation_name = std::get<0>(*relocation_iter);
-		uint16_t relocation_pointer = std::get<1>(*relocation_iter);
-
+	for (std::list<RelocationSymbol>::iterator relocation_iter = assembler_obj._relocation_table.begin(); relocation_iter != assembler_obj._relocation_table.end(); relocation_iter++) {
 		// write the address it points to in the program
-		BinaryIO::writeU16(sinc_file, relocation_pointer);
+		BinaryIO::writeU16(sinc_file, relocation_iter->value);
 
 		// write the name of the symbol
-		BinaryIO::writeString(sinc_file, relocation_name);
+		BinaryIO::writeString(sinc_file, relocation_iter->name);
 	}
 
 
@@ -295,15 +291,15 @@ void SinObjectFile::write_sinc_file(std::string output_file_name, AssemblerData 
 
 	// write in all of the constants
 	// iterate through the data_table and write data accordingly
-	for (std::list<std::tuple<std::string, std::vector<uint8_t>>>::iterator it = assembler_obj._data_table.begin(); it != assembler_obj._data_table.end(); it++) {
+	for (std::list<DataSymbol>::iterator it = assembler_obj._data_table.begin(); it != assembler_obj._data_table.end(); it++) {
 		// 0x00 - 0x01	->	number of bytes in the constant
-		BinaryIO::writeU16(sinc_file, std::get<1>(*it).size());
+		BinaryIO::writeU16(sinc_file, it->data.size());
 
 		// symbol name
-		BinaryIO::writeString(sinc_file, std::get<0>(*it));
+		BinaryIO::writeString(sinc_file, it->name);
 
 		// the data
-		for (std::vector<uint8_t>::iterator data_iter = std::get<1>(*it).begin(); data_iter != std::get<1>(*it).end(); data_iter++) {
+		for (std::vector<uint8_t>::iterator data_iter = it->data.begin(); data_iter != it->data.end(); data_iter++) {
 			BinaryIO::writeU8(sinc_file, *data_iter);
 		}
 	}
@@ -334,7 +330,7 @@ std::vector<uint8_t> SinObjectFile::get_program_data() {
 	return this->program_data;
 }
 
-std::list<std::tuple<std::string, int, std::string>>* SinObjectFile::get_symbol_table()
+std::list<AssemblerSymbol>* SinObjectFile::get_symbol_table()
 {
 	return &this->symbol_table;
 }
@@ -344,7 +340,7 @@ std::list<std::tuple<std::string, int, std::vector<uint8_t>>>* SinObjectFile::ge
 	return &this->data_table;
 }
 
-std::list<std::tuple<std::string, int>>* SinObjectFile::get_relocation_table()
+std::list<RelocationSymbol>* SinObjectFile::get_relocation_table()
 {
 	return &this->relocation_table;
 }

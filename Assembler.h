@@ -15,6 +15,7 @@
 #include "OpcodeConstants.h"	// so we can reference opcodes by name rather than using hex values every time
 #include "AddressingModeConstants.h"	// so we can reference addressing modes by name
 #include "Exceptions.h"
+#include "LinkerSymbols.h"
 
 /*
 
@@ -82,7 +83,7 @@ class Assembler
 	std::vector<std::string> get_line_data(std::string line);
 
 	// track what byte of memory we are on in the program so we know what addresses to store for labels
-	int current_byte;
+	size_t current_byte;
 
 	// track the current scope we are in for relative labels
 	std::string current_scope;
@@ -98,13 +99,14 @@ class Assembler
 	// we need a symbol table to keep track of addresses when macros are used; we will use a list of tuples
 	// tuple is (symbol_name, symbol_value, class)
 	// class of "D" = defined, "U" = undefined, "R" = space reserved, "C" = constant
-	std::list<std::tuple<std::string, int, std::string>> symbol_table;
+	std::list<AssemblerSymbol> symbol_table;
+
 	// we also need a list for our "_DATA" section
 	// this is simply a bytearray, and will convert string numbers where it can
-	// it goes (symbol_name, data)
-	std::list<std::tuple<std::string, std::vector<uint8_t>>> data_table;
+	std::list<DataSymbol> data_table;
+
 	// we also need a relocation table for all addresses used in control flow instructions
-	std::list<std::tuple<std::string, int>> relocation_table;
+	std::list<RelocationSymbol> relocation_table;
 
 	// we also need a function to construct the symbol table in the first pass of our code
 	void construct_symbol_table();

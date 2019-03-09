@@ -44,7 +44,7 @@ Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate,
 
 		return literal_exp->get_type();
 	}
-	else if (to_evaluate->get_expression_type() == LVALUE) {
+	else if (to_evaluate->get_expression_type() == LVALUE || to_evaluate->get_expression_type() == INDEXED) {
 		LValue* lvalue_exp = dynamic_cast<LValue*>(to_evaluate.get());
 
 		// make sure it's in the symbol table
@@ -123,9 +123,10 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 	}
 
 	// once we reach this, the right expression is not binary
-	if (right_exp->get_expression_type() == LVALUE || right_exp->get_expression_type() == LITERAL || right_exp->get_expression_type() == DEREFERENCED) {
+	if (right_exp->get_expression_type() == LVALUE || right_exp->get_expression_type() == INDEXED || right_exp->get_expression_type() == LITERAL || right_exp->get_expression_type() == DEREFERENCED) {
 		// update right_type
-		right_type = this->get_expression_data_type(current_tree.get_right());
+		bool get_sub = right_exp->get_expression_type() == INDEXED;
+		right_type = this->get_expression_data_type(current_tree.get_right(), get_sub);
 
 		binary_ss << this->fetch_value(bin_exp.get_right(), line_number, stack_offset, max_offset).str();
 		binary_ss << "\t" << "tab" << std::endl;
@@ -509,10 +510,23 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		}
 	}
 	// TODO: fetch other types like lvalues, dereferenced values, etc.
-	else if (to_fetch->get_expression_type() == LVALUE) {
+	else if (to_fetch->get_expression_type() == LVALUE || to_fetch->get_expression_type() == INDEXED) {
 		// get the lvalue's symbol data
-		LValue* variable_to_get = dynamic_cast<LValue*>(to_fetch.get());
-		Symbol* variable_symbol = this->symbol_table.lookup(variable_to_get->getValue(), this->current_scope_name, this->current_scope);
+		Symbol* variable_symbol;
+
+		if (to_fetch->get_expression_type() == LVALUE) {
+			LValue* variable_to_get = dynamic_cast<LValue*>(to_fetch.get());
+			variable_symbol = this->symbol_table.lookup(variable_to_get->getValue(), this->current_scope_name, this->current_scope);
+		}
+		else {
+			Indexed* variable_to_get = dynamic_cast<Indexed*>(to_fetch.get());
+			variable_symbol = this->symbol_table.lookup(variable_to_get->getValue(), this->current_scope_name, this->current_scope);
+
+			// now, use fetch_value to get the index value in the A register
+			fetch_ss << this->fetch_value(variable_to_get->get_index_value(), line_number, stack_offset, max_offset).str();
+			// transfer that value to the Y register
+			fetch_ss << "\t" << "tay" << std::endl;
+		}
 
 		// only fetch the value if it has been defined
 		if (variable_symbol->defined) {
@@ -528,15 +542,34 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 						throw CompilerException("Cannot reference dynamic memory that has already been freed", 0, line_number);
 					}
 					else {
-						// first, we need to load the length of the string, which is the first word at the address of the string
-						fetch_ss << "\t" << "loady #$00" << std::endl;
-						fetch_ss << "\t" << "loada (" << variable_symbol->name << "), y" << std::endl;
+						// if we are indexing
+						if (to_fetch->get_expression_type() == INDEXED) {
+							// transfer the index offset from Y to B
+							fetch_ss << "\t" << "tya" << "\n\t" << "tab" << std::endl;
 
-						// we need to get the address in B, but we must also increment B by two so we don't load the length as a character
-						fetch_ss << "\t" << "loadb " << variable_symbol->name << std::endl;
-						fetch_ss << "\t" << "incb" << "\n\t" << "incb" << std::endl;
+							// load a with the address
+							fetch_ss << "\t" << "loada " << variable_symbol->name << std::endl;
 
-						// Now we are done; A and B contain the proper information
+							// add the index offset, transfer to b, and increment it by 2 (to skip the length)
+							fetch_ss << "\t" << "addca b" << std::endl;
+							fetch_ss << "\t" << "tab" << "\n\t" << "incb" << "\n\t" << "incb" << std::endl;
+
+							// finally, load a with 1 -- indexing will give one character
+							fetch_ss << "\t" << "loada #$01" << std::endl;
+
+							// now, we are done; A and B contain the proper information
+						}
+						else {
+							// first, we need to load the length of the string, which is the first word at the address of the string
+							fetch_ss << "\t" << "loadx #$00" << std::endl;
+							fetch_ss << "\t" << "loada (" << variable_symbol->name << "), x" << std::endl;
+
+							// we need to get the address in B, but we must also increment B by two so we don't load the length as a character
+							fetch_ss << "\t" << "loadb " << variable_symbol->name << std::endl;
+							fetch_ss << "\t" << "incb" << "\n\t" << "incb" << std::endl;
+
+							// Now we are done; A and B contain the proper information
+						}
 					}
 				}
 				else {
@@ -856,7 +889,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 	std::stringstream allocation_ss;
 
 	std::shared_ptr<Expression> initial_value = allocation_statement.get_initial_value();
-	Symbol to_allocate(allocation_statement.get_var_name(), allocation_statement.get_var_type(), current_scope_name, current_scope, allocation_statement.get_var_subtype(), allocation_statement.get_quality(), allocation_statement.was_initialized());
+	Symbol to_allocate(allocation_statement.get_var_name(), allocation_statement.get_var_type(), current_scope_name, current_scope, allocation_statement.get_var_subtype(), allocation_statement.get_quality(), allocation_statement.was_initialized(), {}, allocation_statement.get_array_length());
 
 	// if we have a const, we can use the "@db" directive
 	if (to_allocate.quality == CONSTANT) {
@@ -972,8 +1005,10 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 	else if (current_scope_name == "global" && current_scope == 0) {
 		this->symbol_table.insert(to_allocate, allocation_statement.get_line_number());	// global variables do not need the stack, so add to the symbol table right away
 
+		// TODO: specify size with @rs assembler directive so that we can implement static arrays
+
 		// reserve the variable itself first -- it may be a pointer to the variable if we need to dynamically allocate it
-		allocation_ss << "@rs " << to_allocate.name << std::endl;	// syntax is "@rs macro_name"
+		allocation_ss << "@rs 2 " << to_allocate.name << std::endl;	// syntax is "@rs macro_name"
 
 		// if the variable type is anything with a variable length, we need a different mechanism for handling them
 		if (to_allocate.type == STRING) {
@@ -992,7 +1027,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 			allocation_ss << this->move_sp_to_target_address(stack_offset, *max_offset).str();	// make sure the stack pointer is at the end of the stack frame before allocating a local variable (so we don't overwrite anything)
 			
 			to_allocate.stack_offset = *stack_offset;	// the stack offset for the symbol will now be the current stack offset
-			this->symbol_table.insert(to_allocate, allocation_statement.get_line_number());	// now that the symbol's stack offset has been added to the symbol, we can insert it in the table
+			this->symbol_table.insert(to_allocate, allocation_statement.get_line_number());	// now that the symbol's stack offset has been determined, we can add the symbol to the table
 
 			// If the variable is defined, we can push its initial value
 			if (to_allocate.defined) {
@@ -1022,10 +1057,25 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 			else {
 				// update the stack offset -- all types will increment the stack offset by one word; allocate space in the stack and increase our offset
 				// Note that we push 0x00 onto the stack -- this is so that if we try to dereference the pointer there, it's truly a null pointer (the memory is not guaranteed to be initialized to 0x00 except at location 0x00)
-				allocation_ss << "\t" << "loada #$00" << std::endl;
-				allocation_ss << "\t" << "pha" << std::endl;
-				(*stack_offset) += 1;
-				(*max_offset) += 1;
+				if (to_allocate.type == ARRAY) {
+					allocation_ss << "\t" << "loada #$00" << std::endl;
+					allocation_ss << "\t" << "loadx #$" << std::hex << to_allocate.array_length << std::endl;
+					allocation_ss << ".__ALLOC_ARRAY_LOOP__BR_" << this->branch_number << "__:" << std::endl;
+					allocation_ss << "\t" << "pha" << std::endl;
+					allocation_ss << "\t" << "decx" << std::endl;
+					allocation_ss << "\t" << "cmpx #$00" << std::endl;
+					allocation_ss << "\t" << "brne .__ALLOC_ARRAY_LOOP__BR_" << this->branch_number << "__" << std::endl;
+
+					this->branch_number += 1;
+					(*stack_offset) += to_allocate.array_length;
+					(*max_offset) += to_allocate.array_length;
+				}
+				else {
+					allocation_ss << "\t" << "loada #$00" << std::endl;
+					allocation_ss << "\t" << "pha" << std::endl;
+					(*stack_offset) += 1;
+					(*max_offset) += 1;
+				}
 			}
 				
 		}
@@ -1128,18 +1178,26 @@ std::stringstream Compiler::define(Definition definition_statement) {
 
 std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stack_offset, size_t max_offset) {
 
+	exp_type lvalue_exp_type = assignment_statement.get_lvalue()->get_expression_type();
+
 	// TODO: add support for double/triple/quadruple/etc. ref pointers
 
 	// create a stringstream to which we will write write our generated code
 	std::stringstream assignment_ss;
 	LValue* assignment_lvalue;
+	std::shared_ptr<Expression> assignment_index;	// if we have an index in our assignment
 	std::string var_name = "";
 
-	if (assignment_statement.get_lvalue()->get_expression_type() == LVALUE) {
+	if (lvalue_exp_type == LVALUE) {
 		assignment_lvalue = dynamic_cast<LValue*>(assignment_statement.get_lvalue().get());
 		var_name = assignment_lvalue->getValue();
 	}
-	else if (assignment_statement.get_lvalue()->get_expression_type() == DEREFERENCED) {
+	else if (lvalue_exp_type == INDEXED) {
+		Indexed* indexed_lvalue = dynamic_cast<Indexed*>(assignment_statement.get_lvalue().get());
+		var_name = indexed_lvalue->getValue();
+		assignment_index = indexed_lvalue->get_index_value();
+	}
+	else if (lvalue_exp_type == DEREFERENCED) {
 		std::shared_ptr<Expression> assign_lvalue = assignment_statement.get_lvalue();
 		while (assign_lvalue->get_expression_type() == DEREFERENCED) {
 			Dereferenced* deref = dynamic_cast<Dereferenced*>(assign_lvalue.get());
@@ -1160,6 +1218,11 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 	if (this->symbol_table.is_in_symbol_table(var_name, this->current_scope_name)) {
 		// get the symbol information
 		Symbol* fetched = this->symbol_table.lookup(var_name, this->current_scope_name, this->current_scope);
+		
+		// if the lvalue_exp_type is 'indexed', make sure 'fetched->type' is either a string or an array -- those are the only data types we can index
+		if (lvalue_exp_type == INDEXED && ((fetched->type != STRING) && (fetched->type != ARRAY))) {
+			throw CompilerException("Cannot index variables of this type", 0, assignment_statement.get_line_number());
+		}
 
 		// if the quality is "const" throw an error; we cannot make assignments to const-qualified variables
 		if (fetched->quality == CONSTANT) {
@@ -1177,10 +1240,16 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 				if (fetched->quality == DYNAMIC) {
 					// we don't need to check if the memory has been freed here -- we do that in string assignment
 					if (fetched->type == STRING) {
-						// set the symbol to "defined" and call our string_assignment function
-						fetched->defined = true;
-						fetched->freed = false;
-						assignment_ss << this->string_assignment(*fetched, assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset, max_offset).str();
+						// check to make sure the type isn't indexed; if it is, throw an exception -- string index assignment is disallowed
+						if (lvalue_exp_type == INDEXED) {
+							throw CompilerException("Index assignment on strings is forbidden", 0, assignment_statement.get_line_number());
+						}
+						else {
+							// set the symbol to "defined" and call our string_assignment function
+							fetched->defined = true;
+							fetched->freed = false;
+							assignment_ss << this->string_assignment(*fetched, assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset, max_offset).str();
+						}
 					}
 					// TODO: add support for other dynamic types
 				}
@@ -1196,13 +1265,36 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 
 					if (fetched->scope_level == 0) {
 						// global variables
-						assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset).str() << std::endl;	// TODO: add max_offset in the fetch in assignment?
 
-						if (assignment_statement.get_lvalue()->get_expression_type() != DEREFERENCED) {
-							assignment_ss << "\t" << "storea " << var_name << std::endl;
+						// get the rvalue
+						if (lvalue_exp_type == INDEXED) {
+							// get the value of the index and push it onto the stack
+							assignment_ss << this->fetch_value(assignment_index, assignment_statement.get_line_number(), stack_offset, max_offset).str();
+							assignment_ss << "\t" << "pha" << std::endl;
+							
+							// get the rvalue
+							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset, max_offset).str() << std::endl;
+							assignment_ss << "\t" << "tax" << std::endl;
+							assignment_ss << "\t" << "pla" << std::endl;
+
+							// we have to use an ROL because we need to multiply by 2 (the size of a word)
+							assignment_ss << "\t" << "rol a" << std::endl;
+							
+							// finish getting the index
+							assignment_ss << "\t" << "tay" << std::endl;
+							assignment_ss << "\t" << "txa" << std::endl;
 						}
 						else {
+							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset, max_offset).str() << std::endl;	// TODO: add max_offset in the fetch in assignment?
 							assignment_ss << "\t" << "loady #$00" << std::endl;
+						}
+
+						// now, make the assignment
+						if (lvalue_exp_type != DEREFERENCED) {
+							assignment_ss << "\t" << "storea " << var_name << ", y" << std::endl;	// y will be zero if we have no index
+						}
+						else {
+							// y register will be zero if lvalue_exp_type is 'DEREFERENCED'
 							Dereferenced* dereferenced_value = dynamic_cast<Dereferenced*>(assignment_statement.get_lvalue().get());
 							assignment_ss << this->fetch_value(dereferenced_value->get_ptr_shared(), assignment_statement.get_line_number(), stack_offset).str();
 							assignment_ss << "\t" << "storea (" << var_name << ", y)" << std::endl;
@@ -1218,7 +1310,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 						assignment_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;	// move the register values back
 
 						// make the assignment
-						if (assignment_statement.get_lvalue()->get_expression_type() != DEREFERENCED) {
+						if (lvalue_exp_type != DEREFERENCED) {
 							assignment_ss << "\t" << "pha" << std::endl;
 							*stack_offset += 1;	// when we push a variable, we need to update our stack offset
 						}

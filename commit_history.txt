@@ -5,6 +5,14 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+3/9 commit to Arrays
+
+- Updated Assembler, SinObjectFile, and Linker to use 'typedef struct' for the symbol, data, and relocation tables rather than tuples. Tuples were a poor choice for the task and structs are far more appropriate. They make the code easier to read, less error-prone, and more maintainable.
+- Some initial array implementation; this is far from complete and will be improved and expanded upon in further commits to this branch.
+- Removed 'CompilerException' from the repository; the files were unused as such exceptions are now in the 'Exceptions' files.
+
+--------------------------------------------------------------------------------------------
+
 3/4 commit to Compiler
 
 - The parser will now throw exceptions when:

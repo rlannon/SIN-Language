@@ -1,3 +1,14 @@
+/*
+
+SIN Toolchain
+Linker.h
+Copyright 2019 Riley Lannon
+
+This file contains the class for the linker, which takes SIN Object files (with a .sinc extension), and links them together into a single executable file. Note that the SINC format is for statically-linked files; this linker does not support dynamic linking at this time.
+
+*/
+
+
 #pragma once
 
 #include <vector>
@@ -8,6 +19,8 @@
 
 #include "SinObjectFile.h"
 #include "VMMemoryMap.h"	// the memory map for SINVM version 1
+#include "LinkerSymbols.h"
+
 
 class Linker
 {

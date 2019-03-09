@@ -38,6 +38,8 @@ class Parser
 	lexeme back();	// move backward one
 	void skipPunc(char punc);	// skips the specified punctuation mark
 	bool is_type(std::string lex_value);
+	std::string get_closing_grouping_symbol(std::string beginning_symbol);
+	bool is_opening_grouping_symbol(std::string to_test);
 
 	// Parsing statements
 	std::shared_ptr<Statement> parse_statement();	// entry function to parse a statement
@@ -51,10 +53,14 @@ class Parser
 	std::shared_ptr<Statement> parse_function_call(lexeme current_lex);
 
 	// Parseing expressions
-	std::shared_ptr<Expression> parse_expression(int prec=0);	// put default argument here because we call "parse_expression" in "maybe_binary"; as a reuslt, "his_prec" appears as if it is being passed to the next maybe_binary, but isn't because we parse an expression before we parse the binary, meaning my_prec gets set to 0, and not to his_prec as it should
+	/*
+	put default argument here because we call "parse_expression" in "maybe_binary"; as a reuslt, "his_prec" appears as if it is being passed to the next maybe_binary, but isn't because we parse an expression before we parse the binary, meaning my_prec gets set to 0, and not to his_prec as it should
+	Note we also have a 'not_binary' flag here; if the expression is indexed, we may not want to have a binary expression parsed
+	*/
+	std::shared_ptr<Expression> parse_expression(size_t prec=0, std::string grouping_symbol = "(", bool not_binary = false);
 	std::shared_ptr<Expression> create_dereference_object();
 	LValue getDereferencedLValue(Dereferenced to_eval);
-	std::shared_ptr<Expression> maybe_binary(std::shared_ptr<Expression> left, int my_prec);	// check to see if we need to fashion a binary expression
+	std::shared_ptr<Expression> maybe_binary(std::shared_ptr<Expression> left, size_t my_prec, std::string grouping_symbol = "(");	// check to see if we need to fashion a binary expression
 
 	// Create a list of tokens for the parser from an input stream
 	void populate_token_list(std::ifstream* token_stream);

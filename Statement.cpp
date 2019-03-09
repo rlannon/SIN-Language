@@ -99,6 +99,11 @@ std::string Allocation::get_var_name() {
 	return this->value;
 }
 
+size_t Allocation::get_array_length()
+{
+	return this->array_length;
+}
+
 SymbolQuality Allocation::get_quality()
 {
 	return this->quality;
@@ -119,7 +124,7 @@ void Allocation::set_symbol_quality(SymbolQuality new_quality)
 	this->quality = new_quality;
 }
 
-Allocation::Allocation(Type type, std::string value, Type subtype, bool initialized, std::shared_ptr<Expression> initial_value, SymbolQuality quality) : type(type), value(value), subtype(subtype), initialized(initialized), initial_value(initial_value), quality(quality) {
+Allocation::Allocation(Type type, std::string value, Type subtype, bool initialized, std::shared_ptr<Expression> initial_value, SymbolQuality quality, size_t length) : type(type), value(value), subtype(subtype), initialized(initialized), initial_value(initial_value), quality(quality), array_length(length) {
 	Allocation::statement_type = ALLOCATION;
 }
 
@@ -129,6 +134,7 @@ Allocation::Allocation() {
 	Allocation::initialized = false;
 	Allocation::statement_type = ALLOCATION;
 	Allocation::quality = NO_QUALITY;
+	Allocation::array_length = 0;
 }
 
 

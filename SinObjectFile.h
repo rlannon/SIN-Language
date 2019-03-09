@@ -1,3 +1,14 @@
+/*
+
+SIN Toolchain
+SinObjectFile.h
+Copyright 2019 Riley Lannon
+
+This file contains the definition for the SinObjectFile class, a class to hold all of the necessary data contained within a SIN Object File (.sinc). It allows the user to easily access various data about the file/program through using its methods.
+
+*/
+
+
 #pragma once
 
 #include <tuple>
@@ -8,12 +19,8 @@
 #include <fstream>
 
 #include "BinaryIO.h"
+#include "LinkerSymbols.h"
 
-/*
-
-This file contains the definition for the SinObjectFile class, a class to hold all of the necessary data contained within a SIN Object File (.sinc). It allows the user to easily access various data about the file/program through using its methods.
-
-*/
 
 // to maintain the .sinc file standard
 const uint8_t sinc_version = 2;
@@ -23,9 +30,9 @@ typedef struct AssemblerData
 {
 	uint8_t _wordsize;
 	std::vector<uint8_t> _text;
-	std::list<std::tuple<std::string, int, std::string>> _symbol_table;
-	std::list<std::tuple<std::string, int>> _relocation_table;
-	std::list<std::tuple<std::string, std::vector<uint8_t>>> _data_table;
+	std::list<AssemblerSymbol> _symbol_table;
+	std::list<RelocationSymbol> _relocation_table;
+	std::list<DataSymbol> _data_table;
 
 	AssemblerData(uint8_t _wordsize, std::vector<uint8_t> _text);
 	AssemblerData();
@@ -41,9 +48,9 @@ class SinObjectFile
 	std::vector<uint8_t> program_data;
 
 	// a list of tuples for our symbol and relocation tables
-	std::list<std::tuple<std::string, int, std::string>> symbol_table;
+	std::list<AssemblerSymbol> symbol_table;
 	std::list<std::tuple<std::string, int, std::vector<uint8_t>>> data_table;	// includes an int to tell the offset from the end of the .text section
-	std::list<std::tuple<std::string, int>> relocation_table;
+	std::list<RelocationSymbol> relocation_table;
 
 	// the wordsize of our program
 	uint8_t _wordsize;
@@ -61,9 +68,9 @@ public:
 	// get data about the file/program
 	uint8_t get_wordsize();
 	std::vector<uint8_t> get_program_data();
-	std::list<std::tuple<std::string, int, std::string>>* get_symbol_table();
+	std::list<AssemblerSymbol>* get_symbol_table();
 	std::list<std::tuple<std::string, int, std::vector<uint8_t>>>* get_data_table();
-	std::list<std::tuple<std::string, int>>* get_relocation_table();
+	std::list<RelocationSymbol>* get_relocation_table();
 
 	SinObjectFile();
 	SinObjectFile(std::istream& file);

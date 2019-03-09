@@ -51,6 +51,7 @@ public:
 // LValue -- a variable
 class LValue : public Expression
 {
+protected:
 	std::string value;	// the name of the variable
 	std::string LValue_Type;	// the type -- var, var_dereferenced, or var_address
 public:
@@ -63,6 +64,17 @@ public:
 	LValue(std::string value, std::string LValue_Type);
 	LValue(std::string value);
 	LValue();
+};
+
+// Indexed expressions are a child of an LValue
+class Indexed : public LValue
+{
+	std::shared_ptr<Expression> index_value;	// the index value is simply an expression
+public:
+	std::shared_ptr<Expression> get_index_value();
+
+	Indexed(std::string value, std::string LValue_type, std::shared_ptr<Expression> index_init);
+	Indexed();
 };
 
 // Address Of -- the address of a variable

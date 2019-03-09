@@ -269,3 +269,20 @@ SizeOf::SizeOf(std::string to_check) : to_check(to_check) {
 SizeOf::SizeOf() {
 	this->expression_type = SIZE_OF;
 }
+
+std::shared_ptr<Expression> Indexed::get_index_value()
+{
+	return this->index_value;
+}
+
+Indexed::Indexed(std::string value, std::string LValue_type, std::shared_ptr<Expression> index_init) : index_value(index_init)
+{
+	this->value = value;
+	this->LValue_Type = LValue_type;
+	this->expression_type = INDEXED;
+}
+
+Indexed::Indexed()
+{
+	this->expression_type = INDEXED;
+}
