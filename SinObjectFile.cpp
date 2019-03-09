@@ -61,7 +61,8 @@ void SinObjectFile::load_sinc_file(std::istream & file)
 			// iterate for each item in _st_size
 			for (size_t i = 0; i < _st_size; i++) {
 				// get the value of the symbol
-				int _sy_val = (int)BinaryIO::readU16(file);
+				uint16_t _sy_val = BinaryIO::readU16(file);
+				uint8_t	_sy_width = BinaryIO::readU8(file);
 				uint8_t _class = BinaryIO::readU8(file);
 				std::string _sy_name = BinaryIO::readString(file);	// _sn_len is automatically retrieved from BianryIO::BinaryIO::readString
 
@@ -87,7 +88,7 @@ void SinObjectFile::load_sinc_file(std::istream & file)
 				}
 
 				// create the tuple and push it onto "symbol_table"
-				this->symbol_table.push_back(AssemblerSymbol(_sy_name, _sy_val, 2, symbol_class));
+				this->symbol_table.push_back(AssemblerSymbol(_sy_name, _sy_val, _sy_width, symbol_class));
 			}
 
 
@@ -218,24 +219,22 @@ void SinObjectFile::write_sinc_file(std::string output_file_name, AssemblerData 
 	for (std::list<AssemblerSymbol>::iterator symbol_iter = assembler_obj._symbol_table.begin(); symbol_iter != assembler_obj._symbol_table.end(); symbol_iter++) {
 		// get the various values
 		std::string symbol_name = symbol_iter->name;
-		size_t symbol_value = symbol_iter->value;
-		SymbolClass symbol_class_string = symbol_iter->symbol_class;
 		uint8_t symbol_class;
 
 		// set the symbol class
-		if (symbol_class_string == U) {
+		if (symbol_iter->symbol_class == U) {
 			symbol_class = 1;
 		}
-		else if (symbol_class_string == D) {
+		else if (symbol_iter->symbol_class == D) {
 			symbol_class = 2;
 		}
-		else if (symbol_class_string == C) {
+		else if (symbol_iter->symbol_class == C) {
 			symbol_class = 3;
 		}
-		else if (symbol_class_string == R) {
+		else if (symbol_iter->symbol_class == R) {
 			symbol_class = 4;
 		}
-		else if (symbol_class_string == M) {
+		else if (symbol_iter->symbol_class == M) {
 			symbol_class = 5;
 		}
 		else {
@@ -243,7 +242,8 @@ void SinObjectFile::write_sinc_file(std::string output_file_name, AssemblerData 
 		}
 
 		// write the symbol value and class
-		BinaryIO::writeU16(sinc_file, symbol_value);
+		BinaryIO::writeU16(sinc_file, (uint16_t)symbol_iter->value);
+		BinaryIO::writeU8(sinc_file, (uint8_t)symbol_iter->width);
 		BinaryIO::writeU8(sinc_file, symbol_class);
 
 		// and use BinaryIO::writeString to write the symbol's name

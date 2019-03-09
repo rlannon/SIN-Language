@@ -33,6 +33,7 @@ const size_t _POINTER_TABLE_TOP = 0x00FF;
 
 // the RS directive, which creates global variables, will allocate variables starting at 0x0100 and have 3 pages
 const size_t _RS_START = 0x0100;
+const size_t _RS_END = 0x03FF;
 
 // any variables allocated on the heap will be allocated starting at 0x0400 up to the input buffer; this is where all dynamic memory will be stored
 const size_t _HEAP_START = 0x0400;

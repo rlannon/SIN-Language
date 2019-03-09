@@ -91,7 +91,7 @@ void Linker::create_sml_file(std::string file_name) {
 			// if the symbol class is "R", we need to allocate space in memory for it
 			if (symbol_iter->symbol_class == R) {
 				// first, make sure "current_rs_address" is not beyond the memory we are allowed to use; it cannot move beyond the heap
-				if (current_rs_address >= _INPUT_BUFFER_START) {
+				if (current_rs_address >= _RS_END) {
 					throw std::runtime_error("**** Memory Exception: Global variable limit exceeded.");
 				}
 				// if we are still within our bounds

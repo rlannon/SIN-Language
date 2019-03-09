@@ -5,11 +5,26 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+3/9 commit (2) to Arrays
+
+- Designed compiler schemes to fetch and assign indexed variables
+	- Added comments to explain how these algorithms work
+- Added _RS_END marker to the VM Memory Map and updated the reference to the _RS data section in the Linker (this way, whenever the VM Memory Map is updated or changed, the linker will still be able to link files using the proper map)
+- Updated SINC format to include the symbol width in the symbol table data (_sy_width)
+- Updated the builtins library to use the new @rs syntax
+- Arrays may now not hold other arrays or structs; however, they may hold pointers to such objects. Arrays may also not use alloc-assign syntax for the time being
+- Began process of removing unnecessary variables; most of this happens in the SinObjectFile, Linker, and Assembler classes in reference to symbol, relocation, and data table members. Now that structs are being used for such data, some variables used by these classes are unnecessary and will be removed.
+- Modified the SINVM::_debug_values function to display the first page of the stack beneath the memory data
+
+--------------------------------------------------------------------------------------------
+
 3/9 commit to Arrays
 
 - Updated Assembler, SinObjectFile, and Linker to use 'typedef struct' for the symbol, data, and relocation tables rather than tuples. Tuples were a poor choice for the task and structs are far more appropriate. They make the code easier to read, less error-prone, and more maintainable.
 - Some initial array implementation; this is far from complete and will be improved and expanded upon in further commits to this branch.
 - Removed 'CompilerException' from the repository; the files were unused as such exceptions are now in the 'Exceptions' files.
+- The SINASM @rs directive now requires the number of bytes to reserve for the given macro
+- Fixed a bug in SINASM that occurred when using indexed addressing with labels; the comma (because commas are required in the indexed addressing syntax in SINASM) was being pushed as a part of the symbol name to the relocation table, so the linker threw an error when it couldn't find the appropriate symbol to match. Now, the assembler removes said comma before pushing to the relocation table, and the error has been fixed.
 
 --------------------------------------------------------------------------------------------
 

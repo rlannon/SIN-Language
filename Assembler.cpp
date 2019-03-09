@@ -369,6 +369,11 @@ void Assembler::construct_symbol_table() {
 
 				// get the number of bytes to reserve
 				try {
+					// if the first character of the second line_data_vector element is not a digit, throw an exception
+					if (!isdigit(line_data_vector[1][0])) {
+						throw AssemblerException("You must specify the number of bytes (in base 10) to reserve!");
+					}
+
 					short int num_bytes = std::stoi(line_data_vector[1]);
 
 					if (num_bytes > 0) {

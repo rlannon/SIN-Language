@@ -40,9 +40,10 @@ PROGRAM HEADER:
 		
 		For each symbol:
 			0x00 - 0x01	-	_sy_val			-	symbol value
-			0x02		-	_class			-	1 = Undefined; 2 = Defined; 3 = Constant; 4 = Reserved; 5 = Macro
-			0x03 - 0x04 -	_sn_len			-	length of symbol name
-			0x05 +		-	_sy_name		-	symbol name (of length specified in _sn_len)
+			0x02		-	_sy_width		-	symbol width (in bytes)
+			0x03		-	_class			-	1 = Undefined; 2 = Defined; 3 = Constant; 4 = Reserved; 5 = Macro
+			0x04 - 0x05 -	_sn_len			-	length of symbol name
+			0x06 +		-	_sy_name		-	symbol name (of length specified in _sn_len)
 
 	RELOCATION DATA:
 		0x00 - 0x03		-	_rt_size		-	tells us how many entries in the relocation table

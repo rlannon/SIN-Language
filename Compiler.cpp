@@ -52,11 +52,18 @@ Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate,
 			// get the variable's symbol and return the type
 			Symbol* lvalue_symbol = this->symbol_table.lookup(lvalue_exp->getValue(), this->current_scope_name, this->current_scope);
 
-			if (get_subtype && (lvalue_symbol->sub_type != NONE)) {
-				return lvalue_symbol->sub_type;
+			// if the expression is not indexed
+			if (to_evaluate->get_expression_type() != INDEXED) {
+				if (get_subtype && (lvalue_symbol->sub_type != NONE)) {
+					return lvalue_symbol->sub_type;
+				}
+				else {
+					return lvalue_symbol->type;
+				}
 			}
+			// if we have an indexed expression, return its subtype
 			else {
-				return lvalue_symbol->type;
+				return lvalue_symbol->sub_type;
 			}
 		}
 		else {
@@ -524,8 +531,6 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 
 			// now, use fetch_value to get the index value in the A register
 			fetch_ss << this->fetch_value(variable_to_get->get_index_value(), line_number, stack_offset, max_offset).str();
-			// transfer that value to the Y register
-			fetch_ss << "\t" << "tay" << std::endl;
 		}
 
 		// only fetch the value if it has been defined
@@ -544,8 +549,8 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 					else {
 						// if we are indexing
 						if (to_fetch->get_expression_type() == INDEXED) {
-							// transfer the index offset from Y to B
-							fetch_ss << "\t" << "tya" << "\n\t" << "tab" << std::endl;
+							// transfer the index offset from A to B
+							fetch_ss << "\t" << "tab" << std::endl;
 
 							// load a with the address
 							fetch_ss << "\t" << "loada " << variable_symbol->name << std::endl;
@@ -573,7 +578,16 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 					}
 				}
 				else {
-					fetch_ss << "\t" << "loada " << variable_symbol->name << std::endl;
+					// if we are loading an indexed value, index it
+					if (to_fetch->get_expression_type() == INDEXED) {
+						// multiply the index offset by 2 with lsl and transfer it from A to Y
+						fetch_ss << "\t" << "lsl a" << std::endl;
+						fetch_ss << "\t" << "tay" << std::endl;
+						fetch_ss << "\t" << "loada " << variable_symbol->name << ", y" << std::endl;
+					}
+					else {
+						fetch_ss << "\t" << "loada " << variable_symbol->name << std::endl;
+					}
 				}
 			}
 			else {
@@ -585,25 +599,68 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 						throw CompilerException("Cannot reference dynamic memory that has already been freed", 0, line_number);
 					}
 					else {
-						// dynamic variables must use pointer dereferencing
-						// so we pull the address of the string into B
-						fetch_ss << "\t" << "plb" << std::endl;
-						(*stack_offset) -= 1;
+						// if we are indexing the string, get the value within the string in A
+						if (to_fetch->get_expression_type() == INDEXED) {
+							// TODO: index local string
+						}
+						else {
+							// dynamic variables must use pointer dereferencing
+							// so we pull the address of the string into B
+							fetch_ss << "\t" << "plb" << std::endl;
+							(*stack_offset) -= 1;
 
-						// now, we must get the value at the address contained in B -- use the X register for this -- which is our string length
-						fetch_ss << "\t" << "tba" << "\n\t" << "tax" << std::endl;	// simply index -- we _already dereferenced the pointer_, this address does not contain another address to dereference, but rather the data we want
-						fetch_ss << "\t" << "loada $00, X" << std::endl;
+							// now, we must get the value at the address contained in B -- use the X register for this -- which is our string length
+							fetch_ss << "\t" << "tba" << "\n\t" << "tax" << std::endl;	// simply index -- we _already dereferenced the pointer_, this address does not contain another address to dereference, but rather the data we want
+							fetch_ss << "\t" << "loada $00, X" << std::endl;
 
-						// now, increment B by 2 so that we point to the correct byte
-						fetch_ss << "\t" << "incb" << "\n\t" << "incb" << std::endl;
+							// now, increment B by 2 so that we point to the correct byte
+							fetch_ss << "\t" << "incb" << "\n\t" << "incb" << std::endl;
 
-						// Now, A and B contain the correct values
+							// Now, A and B contain the correct values
+						}
 					}
 				}
 				else {
-					// pull the value into the A register
-					fetch_ss << "\t" << "pla" << std::endl;
-					(*stack_offset) -= 1;	// we pulled from the stack, so we must adjust the stack offset
+					if (to_fetch->get_expression_type() == INDEXED) {
+						/*
+						
+						Indexed local arrays must be accessed as follows:
+							1) Get the index value in A
+							2) Multiply by 2 with LSL (2 bytes per word, each index number is 1 word)
+							3) Transfer to B
+							4) Transfer the SP into A
+							5) Subtract B from A (stack grows downward)
+							6) Transfer back
+							7) Pull the value
+							8) Decrement the SP and add B back to it, so it is where it was before (so we don't screw up where the compiler thinks the SP is)
+						
+						*/
+						
+						// adjust the index
+						fetch_ss << "\t" << "lsl a" << std::endl;	// index value ends up in A, so we can multiply right away
+						fetch_ss << "\t" << "tab" << std::endl;
+
+						// adjust the SP
+						fetch_ss << "\t" << "tspa" << std::endl;
+						fetch_ss << "\t" << "subca b" << std::endl;
+						fetch_ss << "\t" << "tasp" << std::endl;
+
+						// get the value
+						fetch_ss << "\t" << "pla" << std::endl;
+						fetch_ss << "\t" << "decsp" << std::endl;
+						fetch_ss << "\t" << "tax" << std::endl;
+
+						// re-adjust the SP
+						fetch_ss << "\t" << "tspa" << std::endl;
+						fetch_ss << "\t" << "addca b" << std::endl;
+						fetch_ss << "\t" << "tasp" << std::endl;
+						fetch_ss << "\t" << "txa" << std::endl;
+					}
+					else {
+						// pull the value into the A register
+						fetch_ss << "\t" << "pla" << std::endl;
+						(*stack_offset) -= 1;	// we pulled from the stack, so we must adjust the stack offset
+					}
 				}
 			}
 		}
@@ -1005,16 +1062,38 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 	else if (current_scope_name == "global" && current_scope == 0) {
 		this->symbol_table.insert(to_allocate, allocation_statement.get_line_number());	// global variables do not need the stack, so add to the symbol table right away
 
-		// TODO: specify size with @rs assembler directive so that we can implement static arrays
+		// we must specify how many bytes to reserve depending on the data type; structs and arrays will use different sizes, but all other data types will use one word
+		if (to_allocate.type == ARRAY) {
+			// arrays may only contain the integral types; you can have an array of pointers to arrays or structs, but not of arrays or structs themselves (at this time)
+			if (to_allocate.sub_type == ARRAY || to_allocate.sub_type == STRUCT) {
+				throw CompilerException("Arrays with subtype 'array' or 'struct' are not supported in SIN at this time", 0, allocation_statement.get_line_number());
+			}
+			else {
+				// reserve one word for each element
+				size_t num_bytes = to_allocate.array_length * 2;
+				allocation_ss << "@rs " << std::dec << num_bytes << " " << to_allocate.name << std::endl;	// since we have been using std::hex, switch back to decimal mode here to be safe
+			}
+		}
+		else if (to_allocate.type == STRUCT) {
+			// TODO: implement structs
+		}
+		else {
+			// reserve the variable itself first -- it may be a pointer to the variable if we need to dynamically allocate it
+			allocation_ss << "@rs 2 " << to_allocate.name << std::endl;	// syntax is "@rs macro_name"
 
-		// reserve the variable itself first -- it may be a pointer to the variable if we need to dynamically allocate it
-		allocation_ss << "@rs 2 " << to_allocate.name << std::endl;	// syntax is "@rs macro_name"
-
-		// if the variable type is anything with a variable length, we need a different mechanism for handling them
-		if (to_allocate.type == STRING) {
-			// We can only allocate space dynamically if we have an initial value; we shouldn't guess on a size
-			if (to_allocate.defined) {
-				allocation_ss << this->string_assignment(to_allocate, initial_value, allocation_statement.get_line_number(), stack_offset, *max_offset).str();
+			// if the variable type is anything with a variable length, we need a different mechanism for handling them
+			if (to_allocate.type == STRING) {
+				// We can only allocate space dynamically if we have an initial value; we shouldn't guess on a size
+				if (to_allocate.defined) {
+					allocation_ss << this->string_assignment(to_allocate, initial_value, allocation_statement.get_line_number(), stack_offset, *max_offset).str();
+				}
+			}
+			else {
+				// check to see if we have alloc-assign syntax for our other data types
+				if (to_allocate.defined) {
+					allocation_ss << this->fetch_value(allocation_statement.get_initial_value(), allocation_statement.get_line_number(), stack_offset, *max_offset).str();
+					allocation_ss << "\t" << "storea " << to_allocate.name << std::endl;
+				}
 			}
 		}
 	}
@@ -1265,7 +1344,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 
 					if (fetched->scope_level == 0) {
 						// global variables
-
+						
 						// get the rvalue
 						if (lvalue_exp_type == INDEXED) {
 							// get the value of the index and push it onto the stack
@@ -1277,8 +1356,8 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 							assignment_ss << "\t" << "tax" << std::endl;
 							assignment_ss << "\t" << "pla" << std::endl;
 
-							// we have to use an ROL because we need to multiply by 2 (the size of a word)
-							assignment_ss << "\t" << "rol a" << std::endl;
+							// we have to use an LSL because we need to multiply by 2 (the size of a word), but we want to shift in 0
+							assignment_ss << "\t" << "lsl a" << std::endl;
 							
 							// finish getting the index
 							assignment_ss << "\t" << "tay" << std::endl;
@@ -1302,26 +1381,86 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 					}
 					else {
 						// get the value
-						assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset).str() << std::endl;
+						if (lvalue_exp_type == INDEXED) {
+							// first, fetch the index value and push it to the stack
+							assignment_ss << this->fetch_value(assignment_index, assignment_statement.get_line_number(), stack_offset, max_offset).str();
+							assignment_ss << "\t" << "tay" << std::endl;	// transfer A to Y so we don't have to set the preserve_registers flag
+							assignment_ss << this->move_sp_to_target_address(stack_offset, max_offset).str();	// move the stack pointer to the stack frame
+							assignment_ss << "\t" << "tya" << "\n\t" << "pha" << std::endl;	// push the index
+							(*stack_offset) += 1;
 
-						// move the SP to the target address, but store A and B in X and Y, respectively, before we move it
-						assignment_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;
-						assignment_ss << this->move_sp_to_target_address(stack_offset, fetched->stack_offset).str();
-						assignment_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;	// move the register values back
+							// now, get the value we want
+							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset).str() << std::endl;
 
-						// make the assignment
-						if (lvalue_exp_type != DEREFERENCED) {
+							// move the stack pointer back to where it was, but preserve our registers
+							assignment_ss << "\t" << "tax" << std::endl;
+							assignment_ss << this->move_sp_to_target_address(stack_offset, max_offset + 1).str();
+
+							/*
+
+							At this point, we have to add the appropriate index value to the stack pointer, and subtract it again once we make the assignment so the compiler's tracker doesn't get messed up. The algorithm is as follows:
+
+							1) Multiply the index value by 2, as there are 2 bytes in a word
+							2) Subtract the value of the index to the stack pointer (use SUBCA because the stack grows _downwards_)
+							3) Make the push
+							4) Increment the stack pointer back to where it was before we pushed the value
+							5) Add the value of the index from the stack pointer (use ADDCA because the stack grows _downwards_)
+
+							The stack pointer will then be where it was before the indexed value was assigned
+
+							*/
+
+							// update the index
+							// since we moved A to X before the move, the value to assign is still safe in register X, and A is free to use
+							assignment_ss << "\t" << "pla" << std::endl;
+							(*stack_offset) -= 1;
+							assignment_ss << "\t" << "lsl a" << std::endl;	// multiply the index by 2 with lsl
+							assignment_ss << "\t" << "tay" << std::endl;	// move the index into Y so it's safe to move the SP
+
+							assignment_ss << this->move_sp_to_target_address(stack_offset, fetched->stack_offset).str();
+
+							// move the index back into the B register
+							assignment_ss << "\t" << "tya" << std::endl;
+							assignment_ss << "\t" << "tab" << std::endl;
+
+							// update the stack pointer value
+							assignment_ss << "\t" << "tspa" << std::endl;
+							assignment_ss << "\t" << "subca b" << std::endl;	// the B register holds the index
+							assignment_ss << "\t" << "tasp" << std::endl;
+
+							// push the value
+							assignment_ss << "\t" << "txa" << std::endl;	// the value to assign was in X
 							assignment_ss << "\t" << "pha" << std::endl;
-							*stack_offset += 1;	// when we push a variable, we need to update our stack offset
+
+							// move the stack pointer back to where it was (for the compiler's sake)
+							assignment_ss << "\t" << "incsp" << std::endl;	// move it back to where it was before the push
+							assignment_ss << "\t" << "tspa" << std::endl;
+							assignment_ss << "\t" << "addca b" << std::endl;	// subtract the index from it
+							assignment_ss << "\t" << "tasp" << std::endl;	// move the pointer value back
 						}
 						else {
-							// we can use indexed indirect addressing with the x register to determine where the data should be stored
-							assignment_ss << "\t" << "decsp" << std::endl;
-							assignment_ss << "\t" << "tab" << std::endl;
-							assignment_ss << "\t" << "pla" << std::endl;
-							assignment_ss << "\t" << "tax" << std::endl;
-							assignment_ss << "\t" << "tba" << std::endl;
-							assignment_ss << "\t" << "storea ($00, X)" << std::endl;
+							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset).str() << std::endl;
+
+							// move the SP to the target address, but store A and B in X and Y, respectively, before we move it
+							assignment_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;
+							assignment_ss << this->move_sp_to_target_address(stack_offset, fetched->stack_offset).str();
+							assignment_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;	// move the register values back
+
+
+							// make the assignment
+							if (lvalue_exp_type != DEREFERENCED) {
+								assignment_ss << "\t" << "pha" << std::endl;
+								*stack_offset += 1;	// when we push a variable, we need to update our stack offset
+							}
+							else {
+								// we can use indexed indirect addressing with the x register to determine where the data should be stored
+								assignment_ss << "\t" << "decsp" << std::endl;
+								assignment_ss << "\t" << "tab" << std::endl;
+								assignment_ss << "\t" << "pla" << std::endl;
+								assignment_ss << "\t" << "tax" << std::endl;
+								assignment_ss << "\t" << "tba" << std::endl;
+								assignment_ss << "\t" << "storea ($00, X)" << std::endl;
+							}
 						}
 					}
 

@@ -1284,9 +1284,20 @@ void SINVM::_debug_values() {
 	std::cout << "\t\tSTATUS: $" << std::hex << (int)this->STATUS << std::endl << std::endl;
 
 	std::cout << "Memory: " << std::endl;
-	for (int i = 0; i < 0xFF; i++) {
+	for (size_t i = 0; i < 0xFF; i++) {
 		// display the first two pages of memory
 		std::cout << "\t$000" << i << ": $" << std::hex << (int)this->memory[i] << "\t\t$0" << 0x100 + i << ": $" << (int)this->memory[256 + i] << std::endl;
+	}
+
+	std::cout << "\nStack: " << std::endl;
+	for (size_t i = 0xff; i > 0x00; i--) {
+		// display the top page of the stack
+		if (i > 0x0f) {
+			std::cout << "\t$23" << i << ": $" << std::hex << (int)this->memory[0x2300 + i] << std::endl;
+		}
+		else {
+			std::cout << "\t$230" << i << ": $" << std::hex << (int)this->memory[0x2300 + i] << std::endl;
+		}
 	}
 
 	std::cout << std::endl;
