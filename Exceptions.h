@@ -14,7 +14,7 @@ A class to contain all of our custom exceptions.
 #include <stdexcept>
 #include <string>
 #include <sstream>
-#include <cinttypes>	// use this instead of iostream for uint_t types
+#include <iostream>
 
 /*
 
@@ -35,6 +35,9 @@ public:
 	virtual const char* what() const noexcept;
 };
 
+// sometimes, we want to print an error message, but we don't need to stop compilation
+void compiler_warning(std::string message, unsigned int line = 0);
+
 
 class ParserException : public std::exception
 {
@@ -45,6 +48,9 @@ public:
 	explicit ParserException(const std::string& message, const unsigned int& code, const unsigned int& line = 0);
 	virtual const char* what() const noexcept;
 };
+
+// like in the compiler, we sometimes want to print warnings without stopping parsing
+void parser_warning(std::string message, unsigned int line_number = 0);
 
 
 class VMException : public std::exception {

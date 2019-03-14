@@ -61,9 +61,14 @@ Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate,
 					return lvalue_symbol->type;
 				}
 			}
-			// if we have an indexed expression, return its subtype
+			// if we have an indexed expression, return its subtype if it's an array; if it's a string, return the type
 			else {
-				return lvalue_symbol->sub_type;
+				if (lvalue_symbol->type == STRING) {
+					return lvalue_symbol->type;
+				}
+				else {
+					return lvalue_symbol->sub_type;
+				}
 			}
 		}
 		else {
@@ -101,6 +106,117 @@ Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate,
 	}
 }
 
+bool Compiler::is_signed(std::shared_ptr<Expression> to_evaluate, unsigned int line_number)
+{
+	/*
+	
+	Determines whether a given expression is signed or not
+	
+	*/
+
+	if (to_evaluate->get_expression_type() == LITERAL) {
+		Literal* literal_exp = dynamic_cast<Literal*>(to_evaluate.get());
+
+		// only INT and FLOAT can be signed
+		if (literal_exp->get_type() == INT) {
+			// an int may be signed or unsigned; we must get the value to determine whether to return true or false
+			int value = std::stoi(literal_exp->get_value());
+
+			// if it's negative, it's signed; otherwise, it's unsigned
+			if (value < 0) {
+				return true;
+			}
+			else {
+				return false;
+			}
+		}
+		else if (literal_exp->get_type() == FLOAT) {
+			// floats are _always_ signed
+			return true;
+		}
+		else {
+			return false;
+		}
+	}
+	else if (to_evaluate->get_expression_type() == LVALUE || to_evaluate->get_expression_type() == INDEXED) {
+		LValue* lvalue_exp = dynamic_cast<LValue*>(to_evaluate.get());
+		Symbol* to_check = this->symbol_table.lookup(lvalue_exp->getValue(), this->current_scope_name, this->current_scope);
+		
+		// only ints and floats can be signed
+		if (to_check->type == INT) {
+			// check the int's quality
+			bool lvalue_is_signed = true;	// ints default to being signed
+			bool exit = false;
+
+			// iterate through the qualities vector to see if we have a sign indicator
+			std::vector<SymbolQuality>::iterator quality_iter = to_check->qualities.begin();
+			while (quality_iter != to_check->qualities.end() && !exit) {
+				if (*quality_iter == UNSIGNED) {
+					lvalue_is_signed = false;
+					exit = true;
+				}
+				else if (*quality_iter == SIGNED) {
+					exit = true;
+				}
+				else {
+					quality_iter++;
+				}
+			}
+
+			return lvalue_is_signed;
+		}
+		else if (to_check->type == FLOAT) {
+			return true;
+		}
+		else {
+			return false;
+		}
+	}
+	else if (to_evaluate->get_expression_type() == ADDRESS_OF) {
+		return false;	// addresses are unsigned
+	}
+	else if (to_evaluate->get_expression_type() == DEREFERENCED) {
+		Dereferenced* deref_exp = dynamic_cast<Dereferenced*>(to_evaluate.get());
+		return this->is_signed(deref_exp->get_ptr_shared(), line_number);	// call this function on the thing the pointer is pointing to
+	}
+	else if (to_evaluate->get_expression_type() == UNARY) {
+		Unary* unary_exp = dynamic_cast<Unary*>(to_evaluate.get());
+
+		// check to see if the unary operand is signed
+		bool unary_arg_is_signed = this->is_signed(unary_exp->get_operand());
+
+		// if the unary operand is signed, or if the unary operator is MINUS, we have a signed expression
+		if (unary_arg_is_signed || unary_exp->get_operator() == MINUS) {
+			return true;
+		}
+		else {
+			return false;
+		}
+	}
+	else if (to_evaluate->get_expression_type() == BINARY) {
+		Binary* bin_exp = dynamic_cast<Binary*>(to_evaluate.get());
+
+		// if either one of the operands is signed, return true
+		bool left_is_signed = this->is_signed(bin_exp->get_left());
+		bool right_is_signed = this->is_signed(bin_exp->get_right());
+
+		if (left_is_signed || right_is_signed) {
+			// however, if only one is signed, generate an error
+			if (!(left_is_signed && right_is_signed)) {
+				compiler_warning("Signed/unsigned mismatch", line_number);
+			}
+
+			return true;
+		}
+		else {
+			return false;
+		}
+	}
+	else {
+		return false;
+	}
+}
+
 std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int line_number, size_t* stack_offset, size_t max_offset, Type right_type)
 {
 	std::stringstream binary_ss;
@@ -132,7 +248,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 	// once we reach this, the right expression is not binary
 	if (right_exp->get_expression_type() == LVALUE || right_exp->get_expression_type() == INDEXED || right_exp->get_expression_type() == LITERAL || right_exp->get_expression_type() == DEREFERENCED) {
 		// update right_type
-		bool get_sub = right_exp->get_expression_type() == INDEXED;
+		bool get_sub = (right_exp->get_expression_type() == INDEXED);
 		right_type = this->get_expression_data_type(current_tree.get_right(), get_sub);
 
 		binary_ss << this->fetch_value(bin_exp.get_right(), line_number, stack_offset, max_offset).str();
@@ -198,16 +314,40 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 
 	// now, we can perform the operation on the two operands
 	if (bin_exp.get_operator() == PLUS) {
-		binary_ss << "\t" << "addca b" << std::endl;
+		// the + operator can be addition or string concatenation
+		if (right_type != STRING) {
+			binary_ss << "\t" << "addca b" << std::endl;
+		}
+		// if we have a string, we don't just use 'addca b'; we have to add to the length and then write to the location. However, we also have to check to see if we need to reallocate the string or if the space we allocated for it initially is enough
+		else {
+			// TODO: implement string concatenation
+		}
 	}
 	else if (bin_exp.get_operator() == MINUS) {
 		binary_ss << "\t" << "subca b" << std::endl;
 	}
 	else if (bin_exp.get_operator() == MULT) {
-		binary_ss << "\t" << "jsr __builtins_multiply" << std::endl;
+		// if we have _signed numbers_, use MULTA; otherwise use MULTUA
+		if (this->is_signed(std::make_shared<Binary>(bin_exp), line_number)) {
+			binary_ss << "\t" << "multa b" << std::endl;
+		}
+		else {
+			binary_ss << "\t" << "multua b" << std::endl;
+		}
 	}
 	else if (bin_exp.get_operator() == DIV) {
-		binary_ss << "\t" << "jsr __builtins_divide" << std::endl;
+		// if we have signed numbers, use DIVA; otherwise, use DIVUA
+		if (this->is_signed(std::make_shared<Binary>(bin_exp), line_number)) {
+			binary_ss << "\t" << "diva b" << std::endl;
+		}
+		else {
+			binary_ss << "\t" << "divua b" << std::endl;
+		}
+	}
+	else if (bin_exp.get_operator() == MODULO) {
+		// to get the modulo, simply use a mult instruction and transfer B (the remainder) into A
+		binary_ss << "\t" << "diva b" << std::endl;
+		binary_ss << "\t" << "tba" << std::endl;
 	}
 	else if (bin_exp.get_operator() == EQUAL) {
 		binary_ss << "\t" << "jsr __builtins_equal" << std::endl;
@@ -229,6 +369,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 		binary_ss << "\t" << "jsr __builtins_lt_equal" << std::endl;
 	}
 	// TODO: add AND/OR binary operators
+	// TODO: add BIT_AND/BIT_OR binary operators
 	
 	return binary_ss;
 }
@@ -411,7 +552,7 @@ void Compiler::include_file(Include include_statement)
 
 				// iterate through the symbols in that file and add them to our symbol table
 				for (std::vector<Symbol>::iterator it = include_compiler->symbol_table.symbols.begin(); it != include_compiler->symbol_table.symbols.end(); it++) {
-					this->symbol_table.insert(it->name, it->type, it->scope_name, it->scope_level, it->sub_type, it->quality, it->defined, it->formal_parameters, include_statement.get_line_number());
+					this->symbol_table.insert(it->name, it->type, it->scope_name, it->scope_level, it->sub_type, it->qualities, it->defined, it->formal_parameters, include_statement.get_line_number());
 				}
 
 				// now, open the compiled include file as an istream object
@@ -533,6 +674,30 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 			fetch_ss << this->fetch_value(variable_to_get->get_index_value(), line_number, stack_offset, max_offset).str();
 		}
 
+		// now that the variable has been fetched, check its qualities
+
+		bool is_const = false;
+		bool is_dynamic = false;
+		bool is_signed;
+
+		std::vector<SymbolQuality>::iterator quality_iter = variable_symbol->qualities.begin();
+		while (quality_iter != variable_symbol->qualities.end()) {
+			if (*quality_iter == CONSTANT) {
+				is_const = true;
+			}
+			else if (*quality_iter == DYNAMIC) {
+				is_dynamic = true;
+			}
+			else if (*quality_iter == SIGNED) {
+				is_signed = true;
+			}
+			else if (*quality_iter == UNSIGNED) {
+				is_signed = false;
+			}
+
+			quality_iter++;
+		}
+
 		// only fetch the value if it has been defined
 		if (variable_symbol->defined) {
 			
@@ -540,7 +705,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 			if ((variable_symbol->scope_name == "global") && (variable_symbol->scope_level == 0)) {
 				
 				// all we need to do is use the variable name for globals; however, we need to know the type
-				if (variable_symbol->quality == DYNAMIC) {
+				if (is_dynamic) {
 
 					// ensure that the dynamic memory has not been freed
 					if (variable_symbol->freed) {
@@ -594,7 +759,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 				fetch_ss << this->move_sp_to_target_address(stack_offset, variable_symbol->stack_offset + 1).str();
 				
 				// now, the offsets are the same; get the variable's value
-				if (variable_symbol->quality == DYNAMIC) {
+				if (is_dynamic) {
 					if (variable_symbol->freed) {
 						throw CompilerException("Cannot reference dynamic memory that has already been freed", 0, line_number);
 					}
@@ -695,9 +860,33 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		LValue address_to_get = address_of_exp->get_target();	// the actual LValue of the address we want
 		Symbol* variable_symbol = this->symbol_table.lookup(address_to_get.getValue(), this->current_scope_name, this->current_scope);
 
+		// get our qualities
+
+		bool is_const = false;
+		bool is_dynamic = false;
+		bool is_signed;
+
+		std::vector<SymbolQuality>::iterator quality_iter = variable_symbol->qualities.begin();
+		while (quality_iter != variable_symbol->qualities.end()) {
+			if (*quality_iter == CONSTANT) {
+				is_const = true;
+			}
+			else if (*quality_iter == DYNAMIC) {
+				is_dynamic = true;
+			}
+			else if (*quality_iter == SIGNED) {
+				is_signed = true;
+			}
+			else if (*quality_iter == UNSIGNED) {
+				is_signed = false;
+			}
+
+			quality_iter++;
+		}
+
 		// make sure the variable was defined
 		if (variable_symbol->defined) {
-			if (variable_symbol->quality == DYNAMIC) {
+			if (is_dynamic) {
 				// Getting the address of a dynamic variable is easy -- we simply move the stack pointer to the proper byte, pull the value into A
 
 				if (variable_symbol->freed) {
@@ -946,10 +1135,32 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 	std::stringstream allocation_ss;
 
 	std::shared_ptr<Expression> initial_value = allocation_statement.get_initial_value();
-	Symbol to_allocate(allocation_statement.get_var_name(), allocation_statement.get_var_type(), current_scope_name, current_scope, allocation_statement.get_var_subtype(), allocation_statement.get_quality(), allocation_statement.was_initialized(), {}, allocation_statement.get_array_length());
+	Symbol to_allocate(allocation_statement.get_var_name(), allocation_statement.get_var_type(), current_scope_name, current_scope, allocation_statement.get_var_subtype(), allocation_statement.get_qualities(), allocation_statement.was_initialized(), {}, allocation_statement.get_array_length());
+
+	// get our qualities
+	bool is_const = false;
+	bool is_dynamic = false;
+	bool is_signed;
+	std::vector<SymbolQuality>::iterator quality_iter = to_allocate.qualities.begin();
+	while (quality_iter != to_allocate.qualities.end()) {
+		if (*quality_iter == CONSTANT) {
+			is_const = true;
+		}
+		else if (*quality_iter == DYNAMIC) {
+			is_dynamic = true;
+		}
+		else if (*quality_iter == UNSIGNED) {
+			is_signed = false;
+		}
+		else if (*quality_iter == SIGNED) {
+			is_signed = true;
+		}
+
+		quality_iter++;
+	}
 
 	// if we have a const, we can use the "@db" directive
-	if (to_allocate.quality == CONSTANT) {
+	if (is_const) {
 		this->symbol_table.insert(to_allocate, allocation_statement.get_line_number());	// constants have no need for the stack; we can add the symbol right away
 
 		// constants must initialized when they are allocated (i.e. they must use alloc-assign syntax)
@@ -1111,7 +1322,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 			// If the variable is defined, we can push its initial value
 			if (to_allocate.defined) {
 				// we must handle dynamic memory differently
-				if (to_allocate.quality == DYNAMIC) {
+				if (is_dynamic) {
 					// we don't need to check if the variable has been freed when we are allocating it
 					if (to_allocate.type == STRING) {
 						// allocate a word on the stack for the pointer
@@ -1185,7 +1396,7 @@ std::stringstream Compiler::define(Definition definition_statement) {
 
 	// function definitions have to be in the global scope
 	if (current_scope_name == "global" && current_scope == 0) {
-		this->symbol_table.insert(func_name, return_type, "global", 0, NONE, NO_QUALITY, true, definition_statement.get_args(), definition_statement.get_line_number());
+		this->symbol_table.insert(func_name, return_type, "global", 0, NONE, {}, true, definition_statement.get_args(), definition_statement.get_line_number());
 		// next, we will make sure that all of the function code gets written to a stringstream; once we have gone all the way through the AST, we will write our functions as subroutines to the end of the file
 
 		// create a label for the function name
@@ -1202,7 +1413,7 @@ std::stringstream Compiler::define(Definition definition_statement) {
 				Allocation* arg_alloc = dynamic_cast<Allocation*>(arg_iter->get());
 				
 				// add the variable to the symbol table, giving it the function's scope name at scope level 1
-				this->symbol_table.insert(arg_alloc->get_var_name(), arg_alloc->get_var_type(), func_name, 1, arg_alloc->get_var_subtype(), arg_alloc->get_quality(), arg_alloc->was_initialized(), {}, definition_statement.get_line_number());	// this variable is only accessible inside this function's scope
+				this->symbol_table.insert(arg_alloc->get_var_name(), arg_alloc->get_var_type(), func_name, 1, arg_alloc->get_var_subtype(), arg_alloc->get_qualities(), arg_alloc->was_initialized(), {}, definition_statement.get_line_number());	// this variable is only accessible inside this function's scope
 
 				// TODO: add default parameters
 
@@ -1233,11 +1444,18 @@ std::stringstream Compiler::define(Definition definition_statement) {
 		
 		// by this point, all of our function parameters are on the stack, in our symbol table, and our stack offset pointer tells us how many; as such, we can call the compile routine on our AST, as all of the functions for compilation will be able to handle scopes other than global
 		StatementBlock function_procedure = *definition_statement.get_procedure().get();	// get the AST
-		function_asm << this->compile_to_sinasm(function_procedure, 1, func_name, &current_stack_offset, max_stack_offset).str();	// compile it
+
+		// if we don't have an empty procedure, compile it
+		if (function_procedure.statements_list.size() > 0) {
+			function_asm << this->compile_to_sinasm(function_procedure, 1, func_name, &current_stack_offset, max_stack_offset).str();	// compile it
+		}
+		else {
+			compiler_warning("Empty function definition", definition_statement.get_line_number());
+		}
 
 		// unwind the stack pointer back to its original position, thereby freeing the memory we allocated for the function
-		for (int i = current_stack_offset; i > 0; i--) {
-			function_asm << "\t" << "incsp" << std::endl;
+		for (size_t i = current_stack_offset; i > 0; i--) {
+			function_asm << "\t" << "incsp" << std::endl;		// TODO: change to "move_sp_to_target_address(...)" ?
 		}
 
 		// return from the subroutine
@@ -1297,6 +1515,28 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 	if (this->symbol_table.is_in_symbol_table(var_name, this->current_scope_name)) {
 		// get the symbol information
 		Symbol* fetched = this->symbol_table.lookup(var_name, this->current_scope_name, this->current_scope);
+
+		bool is_const = false;
+		bool is_dynamic = false;
+		bool is_signed;
+
+		std::vector<SymbolQuality>::iterator quality_iter = fetched->qualities.begin();
+		while (quality_iter != fetched->qualities.end()) {
+			if (*quality_iter == CONSTANT) {
+				is_const = true;
+			}
+			else if (*quality_iter == DYNAMIC) {
+				is_dynamic = true;
+			}
+			else if (*quality_iter == SIGNED) {
+				is_signed = true;
+			}
+			else if (*quality_iter == UNSIGNED) {
+				is_signed = false;
+			}
+
+			quality_iter++;
+		}
 		
 		// if the lvalue_exp_type is 'indexed', make sure 'fetched->type' is either a string or an array -- those are the only data types we can index
 		if (lvalue_exp_type == INDEXED && ((fetched->type != STRING) && (fetched->type != ARRAY))) {
@@ -1304,7 +1544,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 		}
 
 		// if the quality is "const" throw an error; we cannot make assignments to const-qualified variables
-		if (fetched->quality == CONSTANT) {
+		if (is_const) {
 			throw CompilerException("Cannot make an assignment to a const-qualified variable!", 0, assignment_statement.get_line_number());
 		}
 		// otherwise, make the assignment
@@ -1316,7 +1556,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 			if ((fetched->type == rvalue_data_type) || (fetched->sub_type == rvalue_data_type)) {
 
 				// dynamic memory must be handled a little differently than automatic memory because under the hood, it is implemented through pointers
-				if (fetched->quality == DYNAMIC) {
+				if (is_dynamic) {
 					// we don't need to check if the memory has been freed here -- we do that in string assignment
 					if (fetched->type == STRING) {
 						// check to make sure the type isn't indexed; if it is, throw an exception -- string index assignment is disallowed
@@ -1591,8 +1831,30 @@ std::stringstream Compiler::call(Call call_statement, size_t* stack_offset, size
 						// then, get the variable
 						Symbol argument_symbol_data = *this->symbol_table.lookup(var_arg_exp->getValue(), this->current_scope_name, this->current_scope);
 
+						bool is_const = false;
+						bool is_dynamic = false;
+						bool is_signed;
+
+						std::vector<SymbolQuality>::iterator quality_iter = argument_symbol_data.qualities.begin();
+						while (quality_iter != argument_symbol_data.qualities.end()) {
+							if (*quality_iter == CONSTANT) {
+								is_const = true;
+							}
+							else if (*quality_iter == DYNAMIC) {
+								is_dynamic = true;
+							}
+							else if (*quality_iter == SIGNED) {
+								is_signed = true;
+							}
+							else if (*quality_iter == UNSIGNED) {
+								is_signed = false;
+							}
+
+							quality_iter++;
+						}
+
 						// dynamic and static/auto memory must be treated differently
-						if (argument_symbol_data.quality == DYNAMIC) {
+						if (is_dynamic) {
 							// DYNAMIC MEMORY
 
 							// make sure we haven't freed the memory before we reference it
@@ -1845,7 +2107,8 @@ std::stringstream Compiler::while_loop(WhileLoop while_statement, size_t * stack
 		while_ss << this->evaluate_unary_tree(*unary_expression, while_statement.get_line_number(), stack_offset, max_offset).str();
 	}
 	else if (while_statement.get_condition()->get_expression_type() == BINARY) {
-		// TODO: produce binary tree
+		Binary* binary_expression = dynamic_cast<Binary*>(while_statement.get_condition().get());
+		while_ss << this->evaluate_binary_tree(*binary_expression, while_statement.get_line_number(), stack_offset, max_offset).str();
 	}
 	else {
 		throw CompilerException("Invalid expression type in conditional expression", 0, while_statement.get_line_number());
@@ -1955,8 +2218,31 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 
 			// look for a symbol in the table with the same name as is indicated by the free statement
 			Symbol* to_free = this->symbol_table.lookup(free_statement->get_freed_memory().getValue(), this->current_scope_name, this->current_scope);
+
+			bool is_const = false;
+			bool is_dynamic = false;
+			bool is_signed;
+
+			std::vector<SymbolQuality>::iterator quality_iter = to_free->qualities.begin();
+			while (quality_iter != to_free->qualities.end()) {
+				if (*quality_iter == CONSTANT) {
+					is_const = true;
+				}
+				else if (*quality_iter == DYNAMIC) {
+					is_dynamic = true;
+				}
+				else if (*quality_iter == SIGNED) {
+					is_signed = true;
+				}
+				else if (*quality_iter == UNSIGNED) {
+					is_signed = false;
+				}
+
+				quality_iter++;
+			}
+
 			// we can only free dynamic memory that hasn't already been freed
-			if (!to_free->freed && (to_free->quality == DYNAMIC)) {
+			if (!to_free->freed && (is_dynamic)) {
 				/*
 				
 				The SINASM method to free dynamic memory is simply loading the B register with the address where the variable is in the heap, and use the syscall instruction with syscall number 0x20.

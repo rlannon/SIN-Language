@@ -14,13 +14,13 @@ The implementation of the SymbolTable class.
 
 // Our SymbolTable object
 
-void SymbolTable::insert(std::string name, Type type, std::string scope_name, size_t scope_level, Type sub_type, SymbolQuality quality, bool initialized, std::vector<std::shared_ptr<Statement>> formal_parameters, unsigned int line_number)
+void SymbolTable::insert(std::string name, Type type, std::string scope_name, size_t scope_level, Type sub_type, std::vector<SymbolQuality> qualities, bool initialized, std::vector<std::shared_ptr<Statement>> formal_parameters, unsigned int line_number)
 {	
 	if (this->exists_in_scope(name, scope_name, scope_level)) {
 		throw SymbolTableException("'" + name + "'already in symbol table.", line_number);
 	}
 	else {
-		this->symbols.push_back(Symbol(name, type, scope_name, scope_level, sub_type, quality, initialized, formal_parameters));	// an allocation is NOT a definition
+		this->symbols.push_back(Symbol(name, type, scope_name, scope_level, sub_type, qualities, initialized, formal_parameters));	// an allocation is NOT a definition
 	}
 }
 

@@ -26,10 +26,10 @@ uint16_t SINVM::get_data_of_wordsize() {
 	*/
 
 	// load the appropriate number of bytes according to our wordsize
-	int data_to_load = 0;
+	uint16_t data_to_load = 0;
 
 	// loop one time too few
-	for (int i = 1; i < this->_WORDSIZE / 8; i++) {
+	for (size_t i = 1; i < this->_WORDSIZE / 8; i++) {
 		data_to_load = data_to_load + this->memory[this->PC];
 		data_to_load = data_to_load << 8;
 		this->PC++;
@@ -49,7 +49,7 @@ std::vector<uint8_t> SINVM::get_properly_ordered_bytes(int value) {
 }
 
 
-void SINVM::execute_instruction(int opcode) {
+void SINVM::execute_instruction(uint16_t opcode) {
 	/* 
 	
 	Execute a single instruction. Each instruction will increment or set the PC according to what it needs to do for that particular instruction. This function delegates the task of handling instruction execution to many other functions to make the code more maintainable and easier to understand.
@@ -141,7 +141,7 @@ void SINVM::execute_instruction(int opcode) {
 		case SUBCA:
 		{
 			// in subtraction, REG_A is the minuend and the value supplied is the subtrahend
-			int subtrahend = this->execute_load();
+			uint16_t subtrahend = this->execute_load();
 
 			if (subtrahend > REG_A) {
 				this->set_status_flag('N');	// set the N flag if the result is negative, which will be the case if subtrahend > REG_A
@@ -150,26 +150,114 @@ void SINVM::execute_instruction(int opcode) {
 				this->set_status_flag('Z');	// set the Z flag if the two are equal, as the result will be 0
 			}
 
-			REG_A -= subtrahend;
+			this->REG_A -= subtrahend;
+			break;
+		}
+		case MULTA:
+		{
+			// Multiply A by some value; treat both integers as signed
+			uint16_t multiplier = this->execute_load();
+
+			// if both of these are true, we don't need to perform twos complement on the result
+			bool mult_signed = false;
+			bool a_signed = false;
+
+			// perform twos complement if we have signed arithmetic
+			if (multiplier & 0x8000 == 0x8000) {	// if the sign bit is set, perform twos complement
+				multiplier ^= 0xFFFF;	// flip all the bits
+				multiplier += 1;	// add one to finish twos complement
+
+				mult_signed = true;
+			}
+			if (this->REG_A & 0x8000 == 0x8000) {	// do again for REG_A
+				this->REG_A ^= 0xFFFF;
+				this->REG_A += 1;
+
+				a_signed = true;
+			}
+
+			// perform the multiplication
+			this->REG_A *= multiplier;
+
+			// if both numbers were signed, we don't need two's complement
+			if (mult_signed && a_signed) {
+				// clear the N flag
+				this->clear_status_flag('N');
+
+				// check to see if we need to set the overflow flag
+				if (this->REG_A & 0x8000 == 0x8000) {	// if the sign bit is set (it shouldn't be)
+					this->set_status_flag('V');
+				}
+			}
+			// otherwise, perform twos complement on register A
+			else {
+				this->REG_A -= 1;
+				this->REG_A ^= 0xFFFF;
+
+				// set the N flag
+				this->set_status_flag('N');
+
+				// if the sign flag is clear, set the overflow flag
+				if (this->REG_A & 0x8000 == 0) {
+					this->set_status_flag('V');
+				}
+			}
+
+			break;
+		}
+		case DIVA:
+		{
+			// Divide A by some value; this uses _integer division_ where B will hold the remainder of the operation
+			// TODO: implement DIVA instruction
+		}
+		case MULTUA:
+		{
+			// Unsigned multiplication
+
+			uint16_t multiplier = this->execute_load();
+
+			// if the result overflows, set the V flag
+			if ((int)REG_A * (int)multiplier > 0xFFFF) {
+				this->set_status_flag('V');
+			}
+
+			// execute the multiplication
+			this->REG_A = this->REG_A * multiplier;
+			break;
+		}
+		case DIVUA:
+		{
+			// Unsigned division
+
+			uint16_t divisor = this->execute_load();
+
+			uint16_t result = REG_A / divisor;
+			uint16_t remainder = REG_A % divisor;	// TODO: keep remainder in B or not?
+
+			this->REG_A = result;
+			this->REG_B = remainder;
+
+			// TODO: manage flags in division
+
 			break;
 		}
 		case ANDA:
 		{
-			int and_value = this->execute_load();
+			uint16_t and_value = this->execute_load();
 
 			REG_A = REG_A & and_value;
 			break;
 		}
 		case ORA:
 		{
-			int or_value = this->execute_load();
+			uint16_t or_value = this->execute_load();
 
 			REG_A = REG_A | or_value;
 			break;
 		}
 		case XORA:
 		{
-			int xor_value = this->execute_load();
+			uint16_t xor_value = this->execute_load();
 
 			REG_A = REG_A ^ xor_value;
 			break;
@@ -1152,8 +1240,9 @@ void SINVM::allocate_heap_memory()
 		this->dynamic_objects.push_back(DynamicObject(REG_B, REG_A));	// add the object to our dynamic object table
 	}
 	else {
-		// otherwise, throw an exception; we cannot allocate the memory
-		throw VMException("Cannot allocate memory.", this->PC);
+		// if the memory allocation fails, return a NULL pointer
+		REG_B = 0x00;
+		REG_A = 0x00;
 	}
 }
 

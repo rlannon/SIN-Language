@@ -5,6 +5,22 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+3/14 commit to Arrays
+
+- Updated precedence vector to reflect changes to the tokens and operators list
+- Updated the translate_operator function (in Expression.cpp) to reflect changes to the operators; further, modified code to avoid aborting the 'for' loop and returning NO_OP at the end of the function only if the loop is never aborted
+- Added mult, multu, div, and divu instructions to the VM for multiplication and division; as such, removed __builtins_mult and __builtins_div from the builtins-sinasm16 library.
+- In order to determine whether a value is signed or not (as it needs to know for mathematical operations), 'SymbolQuality' now has 'SIGNED' and 'UNSIGNED' qualities. This allows us to determine what instructions to use / how to proceed based on whether we need to treat data as signed or not
+- Added a function to the compiler to determine whether an expression is signed:
+	- For ints, if the quality is not specified, it's signed
+	- Floats are always signed
+	- Literal ints are only signed if they are < 0
+- Note that although right now, signed/unsigned ints are all treated as the same type, it may be easier to implement separate signed int/unsigned int types if it is the only type that can be unsigned
+- Added a 'compiler_warning' function to print a compiler warning -- these are things encountered in compilation that will not stop compilation, but could cause undefined bevahior if they aren't handled (things like signed/unsigned mismatches will go here)
+- Fixed parser bug that would crash program if there was an empty function definition; it now prints a warning, but still parses. The compiler will also print a warning if it comes across an empty function definition
+
+--------------------------------------------------------------------------------------------
+
 3/9 commit (2) to Arrays
 
 - Designed compiler schemes to fetch and assign indexed variables

@@ -104,9 +104,9 @@ size_t Allocation::get_array_length()
 	return this->array_length;
 }
 
-SymbolQuality Allocation::get_quality()
+std::vector<SymbolQuality> Allocation::get_qualities()
 {
-	return this->quality;
+	return this->qualities;
 }
 
 bool Allocation::was_initialized()
@@ -119,12 +119,26 @@ std::shared_ptr<Expression> Allocation::get_initial_value()
 	return this->initial_value;
 }
 
-void Allocation::set_symbol_quality(SymbolQuality new_quality)
+void Allocation::add_symbol_quality(SymbolQuality new_quality)
 {
-	this->quality = new_quality;
+	if (this->qualities[0] == NO_QUALITY) {
+		this->qualities.erase(this->qualities.begin(), this->qualities.begin() + 1);
+	}
+
+	if (new_quality == NO_QUALITY) {
+		this->qualities.push_back(new_quality);
+	}
+	else {
+		throw std::runtime_error("**** Error in Statement.cpp : Cannot add 'NO_QUALITY' to the symbol");
+	}
 }
 
-Allocation::Allocation(Type type, std::string value, Type subtype, bool initialized, std::shared_ptr<Expression> initial_value, SymbolQuality quality, size_t length) : type(type), value(value), subtype(subtype), initialized(initialized), initial_value(initial_value), quality(quality), array_length(length) {
+void Allocation::set_symbol_qualities(std::vector<SymbolQuality> qualities)
+{
+	this->qualities = qualities;
+}
+
+Allocation::Allocation(Type type, std::string value, Type subtype, bool initialized, std::shared_ptr<Expression> initial_value, std::vector<SymbolQuality> quality, size_t length) : type(type), value(value), subtype(subtype), initialized(initialized), initial_value(initial_value), qualities(quality), array_length(length) {
 	Allocation::statement_type = ALLOCATION;
 }
 
@@ -133,7 +147,7 @@ Allocation::Allocation() {
 	Allocation::subtype = NONE;	// will remain 'NONE' unless 'type' is a ptr or array
 	Allocation::initialized = false;
 	Allocation::statement_type = ALLOCATION;
-	Allocation::quality = NO_QUALITY;
+	Allocation::qualities = { NO_QUALITY };
 	Allocation::array_length = 0;
 }
 

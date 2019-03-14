@@ -70,7 +70,7 @@ class SINVM
 	std::vector<uint8_t> get_properly_ordered_bytes(int value);
 
 	// execute a single instruction
-	void execute_instruction(int opcode);
+	void execute_instruction(uint16_t opcode);
 
 	// instruction-specific load/store functions
 	uint16_t execute_load();

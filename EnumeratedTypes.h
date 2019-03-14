@@ -46,7 +46,9 @@ enum SymbolQuality {
 	NO_QUALITY,
 	CONSTANT,
 	STATIC,
-	DYNAMIC
+	DYNAMIC,
+	SIGNED,
+	UNSIGNED
 };
 
 // Defined so that we have a clear list of operators
@@ -61,9 +63,12 @@ enum exp_operator {
 	LESS,
 	GREATER_OR_EQUAL,
 	LESS_OR_EQUAL,
-	AND,
+	AND,	// 'AND' is equivalent to C++ &&
 	NOT,
 	OR,
+	MODULO,
+	BIT_AND,	// 'BIT_AND' is bitwise-AND (C++ &)
+	BIT_OR,
 	NO_OP
 };
 

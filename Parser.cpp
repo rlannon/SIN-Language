@@ -3,9 +3,9 @@
 
 
 // Define our symbols and their precedences as a vector of tuples
-const std::vector<std::tuple<std::string, int>> Parser::precedence{ std::make_tuple("&", 2), std::make_tuple("|", 3), \
+const std::vector<std::tuple<std::string, int>> Parser::precedence{ std::make_tuple("or", 2), std::make_tuple("and", 2), std::make_tuple("!", 2), \
 	std::make_tuple("<", 4), std::make_tuple(">", 7), std::make_tuple("<", 7), std::make_tuple(">=", 7), std::make_tuple("<=", 7), std::make_tuple("=", 7),\
-	std::make_tuple("!=", 7), std::make_tuple("+", 10), std::make_tuple("-", 10), std::make_tuple("$", 15), std::make_tuple("*", 20), std::make_tuple("/", 20), std::make_tuple("%", 20) };
+	std::make_tuple("!=", 7), std::make_tuple("|", 8), std::make_tuple("^", 8), std::make_tuple("&", 9), std::make_tuple("+", 10), std::make_tuple("-", 10), std::make_tuple("$", 15), std::make_tuple("*", 20), std::make_tuple("/", 20), std::make_tuple("%", 20) };
 
 // Iterate through the vector and find the tuple that matches our symbol; if found, return its precedence; if not, return -1
 const int Parser::get_precedence(std::string symbol) {
@@ -150,7 +150,7 @@ Create an abstract syntax tree using Parser::tokens. This is used not only as th
 
 StatementBlock Parser::create_ast() {
 	// allocate a StatementBlock, which will be used to store our AST
-	StatementBlock prog;
+	StatementBlock prog = StatementBlock();
 
 	// creating an empty lexeme will allow us to test if the current token has nothing in it
 	// sometimes, the lexer will produce a null lexeme, so we want to skip over it if we find one
@@ -158,7 +158,7 @@ StatementBlock Parser::create_ast() {
 
 	// Parse a token file
 	// While we are within the program and we have not reached the end of a procedure block, keep parsing
-	while (!this->is_at_end() && !this->quit && !(this->peek().value == "}")) {
+	while (!this->is_at_end() && !this->quit && (this->peek().value != "}") && (this->current_token().value != "}")) {
 		// skip any semicolons and newline characters, if there are any in the tokens list
 		this->skipPunc(';');
 		this->skipPunc('\n');
@@ -448,32 +448,51 @@ std::shared_ptr<Statement> Parser::parse_allocation(lexeme current_lex)
 	if (var_type.type == "kwd") {
 
 		// check our quality, if any
-		SymbolQuality quality;
+		std::vector<SymbolQuality> qualities;
 		if (var_type.value == "const") {
 			// change the variable quality
-			quality = CONSTANT;
+			qualities.push_back(CONSTANT);
 
 			// get the actual variable type
 			var_type = this->next();
 		}
 		else if (var_type.value == "dynamic") {
-			quality = DYNAMIC;
+			qualities.push_back(DYNAMIC);
 			var_type = this->next();
 		}
 		else if (var_type.value == "static") {
-			quality = STATIC;
+			qualities.push_back(STATIC);
 			var_type = this->next();
+		}
+
+		// check to see if we have a sign quality; this always comes immediately before the type
+		if (var_type.value == "unsigned") {
+			// make sure the next value is 'int'
+			if (this->peek().value != "int") {
+				throw ParserException("Cannot use sign qualifier for variable of this type", 0, var_type.line_number);
+			}
+			else {
+				qualities.push_back(UNSIGNED);
+				var_type = this->next();
+			}
+		}
+		else if (var_type.value == "signed") {
+			// make sure the next value is 'int'
+			if (this->peek().value != "int") {
+				throw ParserException("Cannot use sign qualifier for variable of this type", 0, var_type.line_number);
+			}
+			else {
+				qualities.push_back(SIGNED);
+				var_type = this->next();
+			}
 		}
 
 		if (var_type.value == "int" || var_type.value == "float" || var_type.value == "bool" || var_type.value == "string" || var_type.value == "raw" || var_type.value == "ptr") {
 			// Note: pointers, consts, and RAWs must be treated a little bit differently than other fundamental types
 
-			// set the quality to DYNAMIC if we have a string, or to NO_QUALITY otherwise
+			// set the quality to DYNAMIC if we have a string
 			if (var_type.value == "string") {
-				quality = DYNAMIC;
-			}
-			else {
-				quality = NO_QUALITY;
+				qualities.push_back(DYNAMIC);
 			}
 
 			bool initialized = false;
@@ -509,6 +528,18 @@ std::shared_ptr<Statement> Parser::parse_allocation(lexeme current_lex)
 			}
 			// otherwise, if it is not a pointer,
 			else {
+				// if we have an int, but we haven't pushed back signed/unsigned, default to signed
+				if (var_type.value == "int") {
+					// if the last quality in the list (which is our signed/unsigned specifier, if we have one) is not signed and also not unsigned, push back 'signed'
+					if (qualities.size() != 0 && (qualities[qualities.size() - 1] != SIGNED && qualities[qualities.size() - 1] != UNSIGNED)) {
+						qualities.push_back(SIGNED);
+					}
+					// if we don't have _any_ qualities, push back 'signed'
+					else if (qualities.size() == 0) {
+						qualities.push_back(SIGNED);
+					}
+				}
+
 				// store the type name in our Type object
 				new_var_type = get_type_from_string(var_type.value); // note: Type get_type_from_string() is found in "Expression" (.h and .cpp)
 			}
@@ -532,19 +563,30 @@ std::shared_ptr<Statement> Parser::parse_allocation(lexeme current_lex)
 					initial_value = this->parse_expression();
 
 					// return the allocation
-					stmt = std::make_shared<Allocation>(new_var_type, new_var_name, new_var_subtype, initialized, initial_value, quality);
+					stmt = std::make_shared<Allocation>(new_var_type, new_var_name, new_var_subtype, initialized, initial_value, qualities);
 					stmt->set_line_number(current_lex.line_number);
 				}
 				// we can only ever have a semicolon, comma, or end paren at the end of an allocation statement
 				else if (this->peek().value == ";" || this->peek().value == "," || this->peek().value == ")") {
 					// if it is NOT allloc-assign syntax, we have to make sure the variable is not const before allocating it -- all const variables MUST be defined in the allocation
-					if (quality == CONSTANT) {
+					bool is_constant = false;
+					std::vector<SymbolQuality>::iterator quality_iter = qualities.begin();
+					while (quality_iter != qualities.end() && !is_constant) {
+						if (*quality_iter == CONSTANT) {
+							is_constant = true;
+						}
+						else {
+							quality_iter++;
+						}
+					}
+
+					if (is_constant) {
 						throw ParserException("Const variables must use allloc-assign syntax (e.g., 'alloc const int a: 5').", 000, current_lex.line_number);
 					}
 					else {
 						// Otherwise, if it is not const, return our new variable
 						Allocation allocation_statement(new_var_type, new_var_name, new_var_subtype);
-						allocation_statement.set_symbol_quality(quality);
+						allocation_statement.set_symbol_qualities(qualities);
 						allocation_statement.set_line_number(current_lex.line_number);
 
 						stmt = std::make_shared<Allocation>(allocation_statement);
@@ -616,7 +658,7 @@ std::shared_ptr<Statement> Parser::parse_allocation(lexeme current_lex)
 							}
 							else {
 								// finally, create the allocation statement
-								stmt = std::make_shared<Allocation>(new_var_type, new_var_name, new_var_subtype, initialized, initial_value, quality, array_length);
+								stmt = std::make_shared<Allocation>(new_var_type, new_var_name, new_var_subtype, initialized, initial_value, qualities, array_length);
 								stmt->set_line_number(current_lex.line_number);
 							}
 						}
@@ -817,7 +859,15 @@ std::shared_ptr<Statement> Parser::parse_definition(lexeme current_lex)
 				// Now, check to make sure we have a curly brace
 				if (this->peek().value == "{") {
 					this->next();
-					this->next();
+
+					// if we have an empty definition, print a warning but continue parsing
+					if (this->peek().value != "}") {
+						this->next();	// if the definition isn't empty we can skip ahead, but we don't want to if it is (it will cause the parser to crash)
+					}
+					else {
+						parser_warning("Empty function definition", this->current_token().line_number);	// print a warning and don't advance the token pointer
+					}
+
 					procedure = this->create_ast();
 					this->next();	// skip closing curly brace
 
@@ -1117,8 +1167,8 @@ std::shared_ptr<Expression> Parser::maybe_binary(std::shared_ptr<Expression> lef
 	if (next.value == ";" || next.value == get_closing_grouping_symbol(grouping_symbol) || next.value == ",") {
 		return left;
 	}
-	// Otherwise, if we have an op_char...
-	else if (next.type == "op_char") {
+	// Otherwise, if we have an op_char or the 'and' or 'or' keyword
+	else if (next.type == "op_char" || next.value == "and" || next.value == "or") {
 
 		// get the next op_char's data
 		int his_prec = get_precedence(next.value);

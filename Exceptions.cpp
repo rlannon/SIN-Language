@@ -24,6 +24,18 @@ CompilerException::CompilerException(const std::string& message, unsigned int co
 }
 
 
+// Compiler Warning
+
+void compiler_warning(std::string message, unsigned int line_number) {
+	std::cout << "**** Compiler Warning: " << message << " (line " << line_number << ")" << std::endl;
+}
+
+void parser_warning(std::string message, unsigned int line_number)
+{
+	std::cout << "**** Parser Warning: " << message << " (line " << line_number << ")" << std::endl;
+}
+
+
 
 // Parser Exceptions
 

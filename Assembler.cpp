@@ -878,14 +878,14 @@ std::vector<uint8_t> Assembler::assemble()
 					}
 					// if the value is 'B'
 					else if ((value.size() == 1) && ((value == "B") || (value == "b"))) {
-						// make sure it is an addition, subtraction, or comparison to A
-						if ((opcode == ADDCA) || (opcode == SUBCA) || (opcode == CMPA)) {
+						// make sure it is an addition, subtraction, multiplication, division, or comparison to A
+						if ((opcode == ADDCA) || (opcode == SUBCA) || (opcode == MULTA) || (opcode == MULTUA) || (opcode == DIVA) || (opcode == DIVUA) || (opcode == CMPA)) {
 							addressing_mode = addressingmode::reg_b;
 							program_data.push_back(addressing_mode);
 						}
 						// if it's not, throw an exception
 						else {
-							throw AssemblerException("May only use 'B' as an operand with ADDCA, SUBCA, and CMPA instructions", this->line_counter);
+							throw AssemblerException("May only use 'B' as an operand with ADDCA, SUBCA, MULTA, MULTUA, DIVA, DIVUA, and CMPA instructions", this->line_counter);
 						}
 					}
 					// otherwise, carry on normally

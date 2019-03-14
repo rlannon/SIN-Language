@@ -5,19 +5,30 @@
 
 
 const exp_operator translate_operator(std::string op_string) {
-	std::string string_operators_list[13] = { "+", "-", "*", "/", "=", "!=", ">", "<", ">=", "<=", "&", "!", "|" };
-	exp_operator operators_list[13] = { PLUS, MINUS, MULT, DIV, EQUAL, NOT_EQUAL, GREATER, LESS, GREATER_OR_EQUAL, LESS_OR_EQUAL, AND, NOT, OR };
+	const size_t num_operators = 16;
 
-	for (int i = 0; i < 13; i++) {
+	// our operator strings and list;
+	std::string string_operators_list[num_operators] = { "+", "-", "*", "/", "=", "!=", ">", "<", ">=", "<=", "&", "!", "|", "%", "and", "or" };
+	exp_operator operators_list[num_operators] = { PLUS, MINUS, MULT, DIV, EQUAL, NOT_EQUAL, GREATER, LESS, GREATER_OR_EQUAL, LESS_OR_EQUAL, BIT_AND, NOT, BIT_OR, MODULO, AND, OR };
+
+	size_t i = 0;
+	bool found = false;
+	while (i < num_operators && !found) {
 		if (op_string == string_operators_list[i]) {
-			return operators_list[i];
+			found = true;
 		}
 		else {
-			continue;
+			i += 1;
 		}
 	}
-	// if we arrive here, we have not found a match; therefore, we must return NO_OP
-	return NO_OP;
+
+	// return the operator; if we didn't find the one we wanted, return NO_OP
+	if (found) {
+		return operators_list[i];
+	}
+	else {
+		return NO_OP;
+	}
 }
 
 const bool is_literal(std::string candidate_type) {

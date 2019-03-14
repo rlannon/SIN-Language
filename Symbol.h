@@ -46,7 +46,7 @@ typedef struct Symbol
 
 	bool defined;	// tracks whether the variable has been defined; we cannot use it before it is defined
 	bool freed;	// tracks whether the variable has been freed; this is used for dynamic memory when we want to do garbage collection
-	SymbolQuality quality;	// tells us whether something is const, etc.
+	std::vector<SymbolQuality> qualities;	// tells us whether something is const, etc.
 
 	size_t stack_offset;	// used for local symbols to determine the offset (in words) from the initial address of the SP
 
@@ -56,7 +56,7 @@ typedef struct Symbol
 	std::string struct_name;	// used only for structs; contains the name of the struct
 
 	// constructor/destructor
-	Symbol(std::string name, Type type, std::string scope_name, size_t scope_level, Type sub_type = NONE, SymbolQuality quality = NO_QUALITY, bool defined = false, std::vector<std::shared_ptr<Statement>> formal_parameters = {}, size_t array_length = 0, std::string struct_name = "");
+	Symbol(std::string name, Type type, std::string scope_name, size_t scope_level, Type sub_type = NONE, std::vector<SymbolQuality> quality = {}, bool defined = false, std::vector<std::shared_ptr<Statement>> formal_parameters = {}, size_t array_length = 0, std::string struct_name = "");
 	Symbol();
 	~Symbol();
 };

@@ -37,7 +37,7 @@ class SymbolTable
 
 	std::vector<Symbol> symbols;
 
-	void insert(std::string name, Type type, std::string scope_name, size_t scope_level, Type sub_type = NONE, SymbolQuality quality = NO_QUALITY, bool intialized = false, std::vector<std::shared_ptr<Statement>> formal_parameters = {}, unsigned int line_number = 0);
+	void insert(std::string name, Type type, std::string scope_name, size_t scope_level, Type sub_type = NONE, std::vector<SymbolQuality> qualities = { }, bool intialized = false, std::vector<std::shared_ptr<Statement>> formal_parameters = {}, unsigned int line_number = 0);
 	void insert(Symbol to_add, unsigned int line_number = 0);
 	void define(std::string symbol_name, std::string scope_name);	// list the symbol of a given name in a given scope as defined
 

@@ -90,7 +90,7 @@ class Allocation : public Statement
 	std::string value;
 
 	size_t array_length;	// arrays need to specify their length
-	SymbolQuality quality;	// the "quality" of the variable (defaults to "none", but can be const, etc)
+	std::vector<SymbolQuality> qualities;	// the "quality" of the variable (defaults to "none" (or "signed" for an int), but can be const, etc)
 
 	// If we have an alloc-define statement, we will need:
 	bool initialized;	// whether the variable was defined upon allocation
@@ -105,14 +105,15 @@ public:
 	std::string get_var_name();
 
 	size_t get_array_length();
-	SymbolQuality get_quality();
+	std::vector<SymbolQuality> get_qualities();
 
 	bool was_initialized();
 	std::shared_ptr<Expression> get_initial_value();
 
-	void set_symbol_quality(SymbolQuality new_quality);
+	void add_symbol_quality(SymbolQuality new_quality);
+	void set_symbol_qualities(std::vector<SymbolQuality> qualities);
 
-	Allocation(Type type, std::string value, Type subtype = NONE, bool was_initialized = false, std::shared_ptr<Expression> initial_value = std::make_shared<Expression>(), SymbolQuality quality = NO_QUALITY, size_t length = 0);	// use default parameters to allow us to use alloc-define syntax, but we don't have to
+	Allocation(Type type, std::string value, Type subtype = NONE, bool was_initialized = false, std::shared_ptr<Expression> initial_value = std::make_shared<Expression>(), std::vector<SymbolQuality> quality = { NO_QUALITY }, size_t length = 0);	// use default parameters to allow us to use alloc-define syntax, but we don't have to
 	Allocation();
 };
 
