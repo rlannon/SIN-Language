@@ -315,12 +315,16 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 	// now, we can perform the operation on the two operands
 	if (bin_exp.get_operator() == PLUS) {
 		// the + operator can be addition or string concatenation
-		if (right_type != STRING) {
-			binary_ss << "\t" << "addca b" << std::endl;
+		if (right_type == STRING) {
+			/*
+			
+			If we have a string, we don't just use 'addca b'; we have to add to the length and then write to the location.
+			However, we also have to check to see if we need to reallocate the string or if the space we allocated for it initially is enough. For this, we will check the realloc() function
+
+			*/
 		}
-		// if we have a string, we don't just use 'addca b'; we have to add to the length and then write to the location. However, we also have to check to see if we need to reallocate the string or if the space we allocated for it initially is enough
 		else {
-			// TODO: implement string concatenation
+			binary_ss << "\t" << "addca b" << std::endl;
 		}
 	}
 	else if (bin_exp.get_operator() == MINUS) {
@@ -1030,7 +1034,7 @@ std::stringstream Compiler::move_sp_to_target_address(size_t * stack_offset, siz
 	return inc_ss;
 }
 
-std::stringstream Compiler::string_assignment(Symbol target_symbol, std::shared_ptr<Expression> rvalue, unsigned int line_number, size_t * stack_offset, size_t max_offset)
+std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared_ptr<Expression> rvalue, unsigned int line_number, size_t * stack_offset, size_t max_offset)
 {
 	std::stringstream string_assign_ss;
 
@@ -1049,37 +1053,67 @@ std::stringstream Compiler::string_assignment(Symbol target_symbol, std::shared_
 		string_assign_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;
 	}
 
-	string_assign_ss << "\t" << "phb" << std::endl;	// push the address of the string variable
+	string_assign_ss << "\t" << "phb" << std::endl;	// push the address of the string pointer
 
 	// add some padding to the string length
 	string_assign_ss << "\t" << "pha" << std::endl;
 	string_assign_ss << "\t" << "addca #$10" << std::endl;
 
-	// next, create the system call to allocate the memory on the heap
-	string_assign_ss << "\t" << "syscall #$21" << std::endl;
+	/*
+	
+	Next, we need to allocate memory for the object. If the string has already been allocated, reallocate it; if not, then allocate it for the first time.
+	If we need to reallocate:
+		Since A contains the length already, so we just need the address. Do _not_ use "fetch_value" outright, because that function dereferences the pointer. As such, we must fetch it manually
+	
+	*/
+	if (!target_symbol->allocated) {
+		string_assign_ss << "\t" << "syscall #$21" << std::endl;
+		target_symbol->allocated = true;
+	}
+	else {
+		// preserve A by transfering to X
+		string_assign_ss << "\t" << "tax" << std::endl;
+		
+		// if we have a static variable
+		if (target_symbol->scope_name == "global" && target_symbol->scope_level == 0) {
+			string_assign_ss << "\t" << "loadb " << target_symbol->name << std::endl;
+		}
+		// otherwise, it's on the stack
+		else {
+			// fetch the variable into B
+			size_t former_offset = *stack_offset;
+			string_assign_ss << this->move_sp_to_target_address(stack_offset, target_symbol->stack_offset + 1);
+			string_assign_ss << "\t" << "plb" << std::endl;
+			string_assign_ss << this->move_sp_to_target_address(stack_offset, former_offset);	// move the stack offset back
+		}
+
+		// move the length back into register A and make the syscall
+		string_assign_ss << "\t" << "txa" << std::endl;
+		string_assign_ss << "\t" << "syscall #$22" << std::endl;
+	}
 
 	// TODO: we need to ensure that we don't allocate new memory every time we have a string assignment, but rather only reallocate memory for the object when it is necessary
 
 	// Global and local variables must be handled differently
-	if (target_symbol.scope_level == 0) {
-		string_assign_ss << "\t" << "storeb " << target_symbol.name << std::endl;	// store the address in our pointer variable
+	if (target_symbol->scope_level == 0) {
+		string_assign_ss << "\t" << "storeb " << target_symbol->name << std::endl;	// store the address in our pointer variable
 
 		// get the original value of A -- the actual string length -- back
 		string_assign_ss << "\t" << "pla" << std::endl;
 
 		// next, store the length in the heap
 		string_assign_ss << "\t" << "loady #$00" << std::endl;
-		string_assign_ss << "\t" << "storea (" << target_symbol.name << "), y" << std::endl;
+		string_assign_ss << "\t" << "storea (" << target_symbol->name << "), y" << std::endl;
 
 		// next, get the value of our pointer and increment by 2 for memcpy
-		string_assign_ss << "\t" << "loada " << target_symbol.name << std::endl;
+		string_assign_ss << "\t" << "loada " << target_symbol->name << std::endl;
 		string_assign_ss << "\t" << "addca #$02" << std::endl;
 
 		// the address of the string variable has already been pushed, so the next thing to push is the address of our destination
 		string_assign_ss << "\t" << "pha" << std::endl;
 
 		// next, we need to push the length of the string, which we will get from our pointer variable
-		string_assign_ss << "\t" << "loada (" << target_symbol.name << "), y" << std::endl;
+		string_assign_ss << "\t" << "loada (" << target_symbol->name << "), y" << std::endl;
 		string_assign_ss << "\t" << "pha" << std::endl;
 	}
 	else {
@@ -1087,7 +1121,7 @@ std::stringstream Compiler::string_assignment(Symbol target_symbol, std::shared_
 		size_t previous_offset = *stack_offset;	// we want to ensure that we know exactly where to return back to
 
 		// now, we must move the stack pointer to the pointer variable; we don't need to set the retain registers flag because the addca method does not touch the B register and we have nothing valuable in A
-		string_assign_ss << this->move_sp_to_target_address(stack_offset, target_symbol.stack_offset).str();
+		string_assign_ss << this->move_sp_to_target_address(stack_offset, target_symbol->stack_offset).str();
 
 		// store the address of the dynamic memory in _LOCAL_DYNAMIC_POINTER in addition to putting it on the stack
 		string_assign_ss << "\t" << "phb" << std::endl;
@@ -1296,7 +1330,9 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 			if (to_allocate.type == STRING) {
 				// We can only allocate space dynamically if we have an initial value; we shouldn't guess on a size
 				if (to_allocate.defined) {
-					allocation_ss << this->string_assignment(to_allocate, initial_value, allocation_statement.get_line_number(), stack_offset, *max_offset).str();
+					allocation_ss << this->string_assignment(&to_allocate, initial_value, allocation_statement.get_line_number(), stack_offset, *max_offset).str();
+					Symbol* allocated_symbol = this->symbol_table.lookup(to_allocate.name, to_allocate.scope_name, to_allocate.scope_level);
+					allocated_symbol->allocated = to_allocate.allocated;
 				}
 			}
 			else {
@@ -1331,7 +1367,11 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 						allocation_ss << "\t" << "decsp" << std::endl;
 
 						// strings will use the member function for string assignment
-						allocation_ss << this->string_assignment(to_allocate, initial_value, allocation_statement.get_line_number(), stack_offset, *max_offset).str();
+						allocation_ss << this->string_assignment(&to_allocate, initial_value, allocation_statement.get_line_number(), stack_offset, *max_offset).str();
+
+						// update the symbol's 'allocated' member
+						Symbol* allocated_symbol = this->symbol_table.lookup(to_allocate.name, to_allocate.scope_name, to_allocate.scope_level);
+						allocated_symbol->allocated = to_allocate.allocated;
 					}
 					// TODO: implement more dynamic memory types
 				}
@@ -1366,8 +1406,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 					(*stack_offset) += 1;
 					(*max_offset) += 1;
 				}
-			}
-				
+			}	
 		}
 		else {
 			// if we forgot to supply the address of our counter, it will throw an exception
@@ -1378,6 +1417,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 	// return our allocation statement
 	return allocation_ss;
 }
+
 
 // create a function definition
 std::stringstream Compiler::define(Definition definition_statement) {
@@ -1470,7 +1510,6 @@ std::stringstream Compiler::define(Definition definition_statement) {
 		throw CompilerException("Function definitions must be in the global scope.", 0, definition_statement.get_line_number());
 	}
 }
-
 
 
 std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stack_offset, size_t max_offset) {
@@ -1567,7 +1606,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 							// set the symbol to "defined" and call our string_assignment function
 							fetched->defined = true;
 							fetched->freed = false;
-							assignment_ss << this->string_assignment(*fetched, assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset, max_offset).str();
+							assignment_ss << this->string_assignment(fetched, assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset, max_offset).str();
 						}
 					}
 					// TODO: add support for other dynamic types
@@ -1721,7 +1760,6 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 	// return the assignment statement
 	return assignment_ss;
 }
-
 
 
 std::stringstream Compiler::call(Call call_statement, size_t* stack_offset, size_t max_offset) {
@@ -1930,6 +1968,7 @@ std::stringstream Compiler::call(Call call_statement, size_t* stack_offset, size
 	return call_ss;
 }
 
+
 std::stringstream Compiler::ite(IfThenElse ite_statement, size_t * stack_offset, size_t max_offset)
 {
 	/*
@@ -2072,6 +2111,7 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t * stack_offset,
 	return ite_ss;
 }
 
+
 std::stringstream Compiler::while_loop(WhileLoop while_statement, size_t * stack_offset, size_t max_offset)
 {
 	/*
@@ -2158,7 +2198,6 @@ std::stringstream Compiler::while_loop(WhileLoop while_statement, size_t * stack
 
 	return while_ss;
 }
-
 
 
 // the actual compilation routine -- it is separate from our entry functions so that we can call it recursively (it is called by our entry functions)
@@ -2431,9 +2470,6 @@ Compiler::Compiler(std::istream& sin_file, uint8_t _wordsize, std::vector<std::s
 	if (include_builtins) {
 		Include builtins_include_statement("builtins.sin");
 		this->include_file(builtins_include_statement);
-	}
-	else {
-		// do nothing
 	}
 }
 

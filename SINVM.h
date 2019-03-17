@@ -91,7 +91,8 @@ class SINVM
 
 	// syscall utility
 	void free_heap_memory();
-	void allocate_heap_memory();	// if the "in_bytes" flag is set, we use bytes, not words, for storage
+	void allocate_heap_memory();
+	void reallocate_heap_memory();
 
 	// status flag utility
 	void set_status_flag(char flag); // set the status flag whose abbreviation is equal to the character 'flag'

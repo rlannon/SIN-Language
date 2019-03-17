@@ -568,6 +568,9 @@ void SINVM::execute_instruction(uint16_t opcode) {
 			else if (syscall_number == 0x21) {
 				this->allocate_heap_memory();
 			}
+			else if (syscall_number == 0x22) {
+				this->reallocate_heap_memory();
+			}
 			// if it is not a valid syscall number, throw an error
 			else {
 				throw VMException("Unknown syscall number; halting execution.", this->PC);
@@ -1206,6 +1209,12 @@ void SINVM::free_heap_memory()
 
 void SINVM::allocate_heap_memory()
 {
+	/*
+	
+	Attempts to allocate some memory on the heap. It tries to allocate REG_A bytes, and will load REG_B with the address where the object is located. If it cannot find any space for the object, it will load REG_A and REG_B with 0x00.
+	
+	*/
+	
 	// first, check to see the next available address in the heap that is large enough for this object -- use an iterator
 	std::list<DynamicObject>::iterator obj_iter = this->dynamic_objects.begin();
 	DynamicObject previous(_HEAP_START, 0);
@@ -1243,6 +1252,83 @@ void SINVM::allocate_heap_memory()
 		// if the memory allocation fails, return a NULL pointer
 		REG_B = 0x00;
 		REG_A = 0x00;
+	}
+
+	// sort the list of DynamicObject if we have multiple objects in the list
+	if (this->dynamic_objects.size() > 1) {
+		this->dynamic_objects.sort();
+	}
+}
+
+void SINVM::reallocate_heap_memory()
+{
+	/*
+	
+	Attempts to reallocate the dynamic object at the location specified by REG_B with the number of bytes in REG_A.
+	If there is room for the new size where the object is currently allocated, then it will leave it where it is and simply change the size in the VM. If not, it will try to find a new place. If it can't reallocate the memory, it will load REG_A and REG_B with 0x00.
+
+	*/
+	
+	// iterate through the dynamic objects, trying to find the object we are looking for
+	std::list<DynamicObject>::iterator obj_iter = this->dynamic_objects.begin();
+	std::list<DynamicObject>::iterator target_object;
+	bool found = false;
+
+	while (obj_iter != dynamic_objects.end() && !found) {
+		// if REG_B is equal to the address of obj_iter, we have found our object
+		if (obj_iter->get_start_address() == this->REG_B) {
+			found = true;
+			target_object = obj_iter;
+		}
+		else {
+			obj_iter++;
+		}
+	}
+
+	// if we can't find the dynamic object, load the registers with 0x00
+	if (found) {
+		uint16_t original_address = obj_iter->get_start_address();
+		uint16_t old_size = obj_iter->get_size();
+
+		// because we sort the list when we allocate a heap object, the next object (if there is one) will be next in the order
+		obj_iter++;	// increment the iterator
+		
+		// if we have another object in the vector, see if there is space for the new length
+		if (obj_iter != dynamic_objects.end()) {
+			// get the space between the start address and the end of the current object
+			uint16_t buffer_space = obj_iter->get_start_address() - (target_object->get_start_address() + target_object->get_size());
+
+			// if the new size is greater than the target object's size, but less than the target object's size plus the buffer, update the size
+			// if it's less than or equal to the target object's size, we don't need to do anything
+			if ((this->REG_A > target_object->get_size()) && (this->REG_A < (target_object->get_size() + buffer_space))) {
+				target_object->set_size(this->REG_A);	// update the size to the value in REG_A
+			}
+			// otherwise, if it overflows the buffer, reallocate it
+			else if (this->REG_A > (target_object->get_size() + buffer_space)) {
+				// try to allocate it normally
+				this->allocate_heap_memory();
+
+				// copy the data from the old space into the new one
+				memcpy(&this->memory[this->REG_B], &this->memory[original_address], old_size);
+
+				// finally, remove the target object from the vector
+				this->dynamic_objects.erase(target_object);	// because target_object is an iterator, we can remove it
+			}
+		}
+		else {
+			// otherwise, as long as we won't overrun the heap, it can stay
+			if ((target_object->get_start_address() + this->REG_A) > _HEAP_MAX) {
+				target_object->set_size(this->REG_A);	// all we have to do is update the size
+			}
+			else {
+				this->REG_A = 0x00;	// there's no room, so load them with 0x00
+				this->REG_B = 0x00;
+			}
+		}
+	}
+	else {
+		this->REG_A = 0x00;	// we can't find the object, so set the registers to 0x00
+		this->REG_B = 0x00;
 	}
 }
 

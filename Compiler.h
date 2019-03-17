@@ -75,7 +75,7 @@ class Compiler
 
 	std::stringstream move_sp_to_target_address(size_t* stack_offset, size_t target_offset, bool preserve_registers = false);
 
-	std::stringstream string_assignment(Symbol target_symbol, std::shared_ptr<Expression> rvalue, unsigned int line_number = 0, size_t* stack_offset = nullptr, size_t max_offset = 0);
+	std::stringstream string_assignment(Symbol* target_symbol, std::shared_ptr<Expression> rvalue, unsigned int line_number = 0, size_t* stack_offset = nullptr, size_t max_offset = 0);
 
 	std::stringstream allocate(Allocation allocation_statement, size_t* stack_offset = nullptr, size_t* max_offset = nullptr);	// add a variable to the symbol table (using an allocation statement)
 	std::stringstream define(Definition definition_statement);	// add a function definition (using a definition statement)

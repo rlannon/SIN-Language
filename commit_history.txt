@@ -5,6 +5,14 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+3/17 commit to Compiler
+
+- Merged Arrays into Compiler
+- Implemented dynamic memory reallocation
+- Compiler::string_assignment() no longer allocates a new string every time; if the string has already been allocated (Symbol::allocated), it uses the reallocate syscall.
+
+--------------------------------------------------------------------------------------------
+
 3/14 commit to Arrays
 
 - Updated precedence vector to reflect changes to the tokens and operators list

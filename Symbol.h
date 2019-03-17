@@ -45,6 +45,7 @@ typedef struct Symbol
 	size_t scope_level;	// the /level/ of scope within the program; if we are in a loop or ite block, the level will increase
 
 	bool defined;	// tracks whether the variable has been defined; we cannot use it before it is defined
+	bool allocated;	// tracks whether dynamic memory has been allocated on the heap
 	bool freed;	// tracks whether the variable has been freed; this is used for dynamic memory when we want to do garbage collection
 	std::vector<SymbolQuality> qualities;	// tells us whether something is const, etc.
 
