@@ -18,9 +18,29 @@
 
 @db __INPUT_BUFFER_START_ADDR ($1400)   ; defines where our input buffer should start
 @rs 2 __INPUT_LEN     ; a global variable holding the length of the last input
-@rs 2 __MATH_TEMP     ; a temp variable for mathematical functions 
 @rs 2 __MEMCPY_SRC    ; the source location for memcpy 
-@rs 2 __MEMCPY_DEST   ; the destination for memcpy 
+@rs 2 __MEMCPY_DEST   ; the destination for memcpy
+@rs 2 __BUFFER_PTR    ; a pointer variable for handling buffer memory 
+@rs 2 __TEMP_A        ; temp variables in the event we can't use the stack and we need all of the registers
+@rs 2 __TEMP_B        ; these are useful for string concatenation, for example
+
+
+
+;;;;;;;;;;      Initialization      ;;;;;;;;;;
+
+; This is the function to initialize the builtins library
+; It initializes all of the built-in environment variables by storing #$00 in them
+
+__builtins_init:
+    loada #$00
+    storea __INPUT_LEN
+    storea __MEMCPY_SRC
+    storea __MEMCPY_DEST
+    storea __BUFFER_PTR
+    storea __TEMP_A
+    storea __TEMP_B
+
+    rts
 
 
 

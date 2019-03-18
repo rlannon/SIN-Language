@@ -507,7 +507,7 @@ void SINVM::execute_instruction(uint16_t opcode) {
 				}
 
 				// the length of the input buffer is the max - min + 1, as we start at 0x00 and end at 0xFF
-				size_t buffer_length = _INPUT_BUFFER_MAX - _INPUT_BUFFER_START + 1;
+				size_t buffer_length = _STRING_BUFFER_MAX - _STRING_BUFFER_START + 1;
 
 				// check to make sure the input data won't overflow the buffer
 				if (input_bytes.size() <= buffer_length) {
@@ -786,7 +786,7 @@ void SINVM::execute_store(uint16_t reg_to_store) {
 			this->store_in_memory(memory_address, reg_to_store, is_short);
 		}
 		else {
-			throw VMException("Write access violation; cannot write data to 0x00.", this->PC);
+			throw VMException("Write access violation; cannot write data to 0x00.", this->PC, this->STATUS);
 		}
 
 		return;
@@ -1225,12 +1225,14 @@ void SINVM::allocate_heap_memory()
 		next_available_address = _HEAP_START;
 	}
 
-	while (obj_iter != this->dynamic_objects.end()) {
+	bool found_space = false;	// if we found space for the object somewhere in the middle of the list, use this to terminate the loop; we will use list::insert to add a new heap object at the position of the iterator
+
+	while (obj_iter != this->dynamic_objects.end() && !found_space) {
 		// check to see if there's room between the end of the previous object (which is the start address + size) and the start of the next object
 		if (REG_A <= (obj_iter->get_start_address() - (previous.get_start_address() + previous.get_size()))) {
 			// if there is, update the start address
 			next_available_address = previous.get_start_address() + previous.get_size();
-			obj_iter = this->dynamic_objects.end();	// set it to the end so that we exit the loop
+			found_space = true;
 		}
 		else {
 			// update 'previous' and increment the object iterator
@@ -1246,17 +1248,13 @@ void SINVM::allocate_heap_memory()
 	// if the next available address is within our heap space, we are ok
 	if ((next_available_address >= _HEAP_START) || (next_available_address <= _HEAP_MAX)) {
 		REG_B = next_available_address;	// set the B register to the available address
-		this->dynamic_objects.push_back(DynamicObject(REG_B, REG_A));	// add the object to our dynamic object table
+		this->dynamic_objects.insert(obj_iter, DynamicObject(REG_B, REG_A));	// instead of appending and sorting, insert the object in the list -- this will be less computationally expensive ( O(n) vs O(n log n) )
 	}
 	else {
 		// if the memory allocation fails, return a NULL pointer
 		REG_B = 0x00;
 		REG_A = 0x00;
-	}
-
-	// sort the list of DynamicObject if we have multiple objects in the list
-	if (this->dynamic_objects.size() > 1) {
-		this->dynamic_objects.sort();
+		this->set_status_flag('D');
 	}
 }
 
@@ -1317,18 +1315,20 @@ void SINVM::reallocate_heap_memory()
 		}
 		else {
 			// otherwise, as long as we won't overrun the heap, it can stay
-			if ((target_object->get_start_address() + this->REG_A) > _HEAP_MAX) {
+			if ((target_object->get_start_address() + this->REG_A) <= _HEAP_MAX) {
 				target_object->set_size(this->REG_A);	// all we have to do is update the size
 			}
 			else {
 				this->REG_A = 0x00;	// there's no room, so load them with 0x00
 				this->REG_B = 0x00;
+				this->set_status_flag('D');
 			}
 		}
 	}
 	else {
 		this->REG_A = 0x00;	// we can't find the object, so set the registers to 0x00
 		this->REG_B = 0x00;
+		this->set_status_flag('D');
 	}
 }
 
@@ -1350,19 +1350,22 @@ void SINVM::set_status_flag(char flag) {
 	*/
 
 	if (flag == 'N') {
-		this->STATUS = 128;
+		this->STATUS |= 128;
 	}
 	else if (flag == 'V') {
-		this->STATUS = 64;
+		this->STATUS |= 64;
 	}
 	else if (flag == 'H') {
-		this->STATUS = 16;
+		this->STATUS |= 16;
+	}
+	else if (flag == 'D') {
+		this->STATUS |= 8;
 	}
 	else if (flag == 'Z') {
-		this->STATUS = 2;
+		this->STATUS |= 2;
 	}
 	else if (flag == 'C') {
-		this->STATUS = 1;
+		this->STATUS |= 1;
 	}
 
 	// this should never throw an exception
@@ -1412,6 +1415,8 @@ uint8_t SINVM::get_processor_status() {
 }
 
 bool SINVM::is_flag_set(char flag) {
+	// TODO: add new flags
+
 	// return the status of a single flag in the status register
 	// do this by performing an AND operation on that bit; if set, we will get true (the only bit that can be set is the bit in question)
 	if (flag == 'N') {

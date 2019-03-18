@@ -56,8 +56,9 @@ void parser_warning(std::string message, unsigned int line_number = 0);
 class VMException : public std::exception {
 	std::string message;	// the message associated with the error
 	uint16_t address;	// the address of the program counter when the error occurred
+	uint16_t status;	// the STATUS register at the time of the error
 public:
-	explicit VMException(const std::string& message, const uint16_t& address = 0x0000);
+	explicit VMException(const std::string& message, const uint16_t& address = 0x0000, const uint16_t& status = 0x00);
 	virtual const char* what() const noexcept;
 };
 

@@ -5,6 +5,17 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+3/17 commit (2) to Compiler
+
+- The VM now uses list::insert to add items upon dynamic memory allocation instead of using list::push_back and list::sort; this is less computationally expensive (O(n) vs O(n log n)). The heap objects will still be in order of where they are in memory.
+- Renamed the input buffer in the VM memory map to be a string buffer instead; this is a little more appropriate as it is a buffer for working with strings.
+- Implemented string concatenation. The compiler uses the string buffer for this purpose, utilizing __builtins_memcpy to copy each part of the binary tree into the buffer before copying the buffer back into the variable.
+	- Note there is still a bug if there are more than two arguments in concatenation. This will be resolved in the next commit.
+- Fixed a bug in dynamic reallocation; accidentally used < in a comparison to _HEAP_MAX when it should have been <=
+- Added a feature to VMExceptions that includes the state of the STATUS register
+
+--------------------------------------------------------------------------------------------
+
 3/17 commit to Compiler
 
 - Merged Arrays into Compiler

@@ -225,6 +225,9 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 	Expression* left_exp = current_tree.get_left().get();
 	Expression* right_exp = current_tree.get_right().get();
 
+	// first, move to the end of the stack frame
+	binary_ss << this->move_sp_to_target_address(stack_offset, max_offset).str();
+
 	/*
 	
 	The binary evaluation algorithm works as follows:
@@ -242,7 +245,13 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 		// cast to Binary expression type and call this function recursively
 		Binary* right_operand = dynamic_cast<Binary*>(right_exp);
 		binary_ss << this->evaluate_binary_tree(*right_operand, line_number, stack_offset, max_offset, right_type).str();
-		binary_ss << "\t" << "tab" << std::endl;
+		if (right_type == STRING) {
+			binary_ss << "\t" << "storea __TEMP_A" << std::endl;
+			binary_ss << "\t" << "storeb __TEMP_B" << std::endl;
+		}
+		else {
+			binary_ss << "\t" << "tab" << std::endl;
+		}
 	}
 
 	// once we reach this, the right expression is not binary
@@ -252,7 +261,16 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 		right_type = this->get_expression_data_type(current_tree.get_right(), get_sub);
 
 		binary_ss << this->fetch_value(bin_exp.get_right(), line_number, stack_offset, max_offset).str();
-		binary_ss << "\t" << "tab" << std::endl;
+
+		// if the type is a string, move A and B to __TEMP_A and __TEMP_B so the registers are free
+		if (right_type == STRING) {
+			binary_ss << "\t" << "storea __TEMP_A" << std::endl;
+			binary_ss << "\t" << "storeb __TEMP_B" << std::endl;
+		}
+		// otherwise, transfer A to B so that A is free for the left operand
+		else {
+			binary_ss << "\t" << "tab" << std::endl;
+		}
 	}
 	else if (right_exp->get_expression_type() == UNARY) {
 		Unary* unary_operand = dynamic_cast<Unary*>(right_exp);
@@ -274,15 +292,29 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 	}
 
 	if (left_exp->get_expression_type() == BINARY) {
-		// first, we must push the B register
-		binary_ss << "\t" << "phb" << std::endl;
+		// first, we must push our right operand
+		if (right_type == STRING) {
+			binary_ss << "\t" << "loada __TEMP_A" << std::endl;
+			binary_ss << "\t" << "loadb __TEMP_B" << std::endl;
+			binary_ss << "\t" << "pha" << "\n\t" << "phb" << std::endl;
+		}
+		else {
+			binary_ss << "\t" << "phb" << std::endl;
+		}
 
 		// cast to Binary and call this function recursively
 		Binary* left_operand = dynamic_cast<Binary*>(left_exp);
 		binary_ss << this->evaluate_binary_tree(*left_operand, line_number, stack_offset, max_offset, right_type).str();
 
-		// now we can pull the b register again
-		binary_ss << "\t" << "plb" << std::endl;
+		// now we can pull the operand again
+		if (right_type == STRING) {
+			binary_ss << "\t" << "plb" << "\n\t" << "pla" << std::endl;
+			binary_ss << "\t" << "storea __TEMP_A" << std::endl;
+			binary_ss << "\t" << "storeb __TEMP_B" << std::endl;
+		}
+		else {
+			binary_ss << "\t" << "plb" << std::endl;
+		}
 	}
 	else {
 		// check to make sure the type matches
@@ -319,9 +351,53 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 			/*
 			
 			If we have a string, we don't just use 'addca b'; we have to add to the length and then write to the location.
-			However, we also have to check to see if we need to reallocate the string or if the space we allocated for it initially is enough. For this, we will check the realloc() function
+			However, we also have to check to see if we need to reallocate the string or if the space we allocated for it initially is enough. For this, we will use the realloc() function; if the amount of space allocated for the old string will hold the new string, then it won't change anything about the heap objects.
+
+			The buffer at _STRING_BUFFER_START will contain the concatenated string, and the __INPUT_LEN variable will contain the length of the string. These values will also be loaded into B and A, respectively
 
 			*/
+
+			// store the length of the string in __INPUT_LEN so we can index the buffer's start address
+			binary_ss << "\t" << "storea __INPUT_LEN" << std::endl;
+
+			// if our left expression is binary, we don't need to do this -- the string data is already in the buffer
+			if (bin_exp.get_left()->get_expression_type() != BINARY) {
+				// copy the left argument into the string buffer
+				binary_ss << "\t" << "phb" << std::endl;	// push the source
+				binary_ss << "\t" << "loadb __INPUT_BUFFER_START_ADDR" << std::endl;	// get the destination and push it
+				binary_ss << "\t" << "phb" << std::endl;
+				binary_ss << "\t" << "pha" << std::endl;	// push the length
+
+				// call __builtins_memcpy
+				binary_ss << "\t" << "jsr __builtins_memcpy" << std::endl;
+			}
+
+			// load A with the length of the last string written and add the address of _STRING_BUFFER_START; this is our destination
+			binary_ss << "\t" << "loada __INPUT_LEN" << std::endl;
+			binary_ss << "\t" << "addca __INPUT_BUFFER_START_ADDR" << std::endl;
+
+			// load B with the source address
+			binary_ss << "\t" << "loadb __TEMP_B" << std::endl;
+
+			// push the addresses -- B has the source, A has the destination
+			binary_ss << "\t" << "phb" << "\n\t" << "pha" << std::endl;
+
+			// push the length
+			binary_ss << "\t" << "loada __TEMP_A" << std::endl;
+			binary_ss << "\t" << "pha" << std::endl;
+
+			// add that length to the length of the other string, which is in __INPUT_LEN
+			binary_ss << "\t" << "loadb __INPUT_LEN" << std::endl;
+			binary_ss << "\t" << "addca b" << std::endl;
+			binary_ss << "\t" << "storea __INPUT_LEN" << std::endl;
+
+			// copy the memory
+			binary_ss << "\t" << "jsr __builtins_memcpy" << std::endl;
+
+			// we are done; the concatenated string is at the string buffer and __INPUT_LEN contains the new length
+			// all we need to do is load our A and B registers
+			binary_ss << "\t" << "loadb __INPUT_BUFFER_START_ADDR" << std::endl;
+			binary_ss << "\t" << "loada __INPUT_LEN" << std::endl;
 		}
 		else {
 			binary_ss << "\t" << "addca b" << std::endl;
@@ -1153,6 +1229,12 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 	// finally, invoke the subroutine
 	string_assign_ss << "\t" << "jsr __builtins_memcpy" << std::endl;
 
+	// reset the pointers we used for string assignment
+	string_assign_ss << "\t" << "loada #$00" << std::endl;
+	string_assign_ss << "\t" << "storea __TEMP_A" << std::endl;
+	string_assign_ss << "\t" << "storea __TEMP_B" << std::endl;
+	string_assign_ss << "\t" << "storea __INPUT_LEN" << std::endl;
+
 	// the memory has been successfully copied over; our assignment is done, so we can return the assembly we generated
 	return string_assign_ss;
 }
@@ -1331,6 +1413,8 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 				// We can only allocate space dynamically if we have an initial value; we shouldn't guess on a size
 				if (to_allocate.defined) {
 					allocation_ss << this->string_assignment(&to_allocate, initial_value, allocation_statement.get_line_number(), stack_offset, *max_offset).str();
+
+					// We need to update the symbol's 'allocated' member
 					Symbol* allocated_symbol = this->symbol_table.lookup(to_allocate.name, to_allocate.scope_name, to_allocate.scope_level);
 					allocated_symbol->allocated = to_allocate.allocated;
 				}
@@ -2395,6 +2479,11 @@ void Compiler::produce_sina_file(std::string sina_filename, bool include_builtin
 
 	// check to make sure it opened correctly
 	if (this->sina_file.is_open()) {
+		// if we are not suppressing builtins, invoke the builtins init subroutine
+		if (include_builtins) {
+			this->sina_file << "\t" << "jsr __builtins_init" << std::endl;
+		}
+
 		// write the body of the program
 		this->sina_file << this->compile_to_sinasm(this->AST, current_scope, current_scope_name, &this->stack_offset).str();
 
@@ -2424,14 +2513,12 @@ std::stringstream Compiler::compile_to_stringstream(bool include_builtins) {
 	// declare a stringstream to hold our generated ASM code
 	std::stringstream generated_asm;
 
-	// all programs include a header to define a few things
-	//if (include_builtins) {
-	//	generated_asm << "@include builtins.sina" << std::endl;	// include 'builtins', to allow us to use SIN's built-in functions in the VM
-	//	this->object_file_names->push_back("builtins.sinc");
-	//}
-	// any other common header information will go here
+	// if we are not suppressing builtins, we must make a call to the builtins init function
+	if (include_builtins) {
+		generated_asm << "\t" << "jsr __builtins_init" << std::endl;
+	}
 
-	// write the body of the program
+	// generate our ASM code
 	generated_asm << this->compile_to_sinasm(this->AST, current_scope, current_scope_name, &this->stack_offset).str();
 
 	// write a halt statement before our function definitions

@@ -41,11 +41,12 @@ class SINVM
 	/*
 	The status register has the following layout:
 		7	6	5	4	3	2	1	0
-		N	V	0	H	0	F	Z	C
+		N	V	0	H	D	F	Z	C
 	Flag meanings:
 		N: Negative
 		V: Overflow
 		H: HALT instruction executed
+		D: Dynamic memory failbit
 		F: Floating-point
 		Z: Zero
 		C: Carry
