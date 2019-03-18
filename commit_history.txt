@@ -5,6 +5,12 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+3/17 commit (3) to Compiler
+
+- Changed the algorithm to evaluate binary trees to start evaluation from the left side rather than the right; this allows for string concatenation to be done (evaluating from right is fine for integer expressions, but once we start writing data in the buffer, it must be done from left to right if there are more than two or three strings to concatenate together).
+
+--------------------------------------------------------------------------------------------
+
 3/17 commit (2) to Compiler
 
 - The VM now uses list::insert to add items upon dynamic memory allocation instead of using list::push_back and list::sort; this is less computationally expensive (O(n) vs O(n log n)). The heap objects will still be in order of where they are in memory.

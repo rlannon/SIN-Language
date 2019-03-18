@@ -217,7 +217,7 @@ bool Compiler::is_signed(std::shared_ptr<Expression> to_evaluate, unsigned int l
 	}
 }
 
-std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int line_number, size_t* stack_offset, size_t max_offset, Type right_type)
+std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int line_number, size_t* stack_offset, size_t max_offset, Type left_type)
 {
 	std::stringstream binary_ss;
 
@@ -231,51 +231,56 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 	/*
 	
 	The binary evaluation algorithm works as follows:
-		1. Look at the right operand
+		1. Look at the left operand
 			A. If the operand is another binary tree, call the function recursively on that tree (returning to step one)
-		2. Now look at the left-hand operand
+			B. Otherwise, fetch the values in the expression
+			C. Push appropriate register values to the stack
+		2. Now look at the right operand
 			A. If the operand is another binary tree, call the function recursively on that tree (returning to step one)
+			B. Otherwise, fetch the values
+			C. Move the values from A to B, or from A/B to the temp variables
+			D. Pull the previously pushed values into A and B (depending on type)
 		3. Evaluate the expression
-			A. If the result was the left_exp, keep it in A
-			B. If the result was the right_exp, transfer it to B
-	
+			If the value is being returned from a recursive call, the result will be pushed to the stack or moved in registers as is appropriate
+
 	*/
 
-	if (right_exp->get_expression_type() == BINARY) {
-		// cast to Binary expression type and call this function recursively
-		Binary* right_operand = dynamic_cast<Binary*>(right_exp);
-		binary_ss << this->evaluate_binary_tree(*right_operand, line_number, stack_offset, max_offset, right_type).str();
-		if (right_type == STRING) {
-			binary_ss << "\t" << "storea __TEMP_A" << std::endl;
-			binary_ss << "\t" << "storeb __TEMP_B" << std::endl;
+	// Check the left side
+	if (left_exp->get_expression_type() == BINARY) {
+		Binary* left_op = dynamic_cast<Binary*>(left_exp);
+
+		if (left_type == NONE) {
+			left_type = this->get_expression_data_type(current_tree.get_left());
+		}
+
+		binary_ss << this->evaluate_binary_tree(*left_op, line_number, stack_offset, max_offset, left_type).str();
+
+		if (left_type == STRING) {
+			binary_ss << "\t" << "pha" << "\n\t" << "phb" << std::endl;
 		}
 		else {
-			binary_ss << "\t" << "tab" << std::endl;
+			binary_ss << "\t" << "pha" << std::endl;
 		}
 	}
 
-	// once we reach this, the right expression is not binary
-	if (right_exp->get_expression_type() == LVALUE || right_exp->get_expression_type() == INDEXED || right_exp->get_expression_type() == LITERAL || right_exp->get_expression_type() == DEREFERENCED) {
-		// update right_type
-		bool get_sub = (right_exp->get_expression_type() == INDEXED);
-		right_type = this->get_expression_data_type(current_tree.get_right(), get_sub);
+	// By this point, 'left' is not a binary expression; evaluate the left hand side of the tree
+	if (left_exp->get_expression_type() == LVALUE || left_exp->get_expression_type() == INDEXED || left_exp->get_expression_type() == LITERAL || left_exp->get_expression_type() == DEREFERENCED) {
+		bool get_sub = (left_exp->get_expression_type() == INDEXED);
+		left_type = this->get_expression_data_type(bin_exp.get_left(), get_sub);
 
-		binary_ss << this->fetch_value(bin_exp.get_right(), line_number, stack_offset, max_offset).str();
+		binary_ss << this->fetch_value(bin_exp.get_left(), line_number, stack_offset, max_offset).str();
 
-		// if the type is a string, move A and B to __TEMP_A and __TEMP_B so the registers are free
-		if (right_type == STRING) {
-			binary_ss << "\t" << "storea __TEMP_A" << std::endl;
-			binary_ss << "\t" << "storeb __TEMP_B" << std::endl;
+		if (left_type == STRING) {
+			binary_ss << "\t" << "pha" << "\n\t" << "phb" << std::endl;
 		}
-		// otherwise, transfer A to B so that A is free for the left operand
 		else {
-			binary_ss << "\t" << "tab" << std::endl;
+			binary_ss << "\t" << "pha" << std::endl;
 		}
 	}
-	else if (right_exp->get_expression_type() == UNARY) {
-		Unary* unary_operand = dynamic_cast<Unary*>(right_exp);
+	else if (left_exp->get_expression_type() == UNARY) {
+		Unary* unary_operand = dynamic_cast<Unary*>(left_exp);
 
-		right_type = get_expression_data_type(unary_operand->get_operand());
+		left_type = get_expression_data_type(unary_operand->get_operand());
 
 		// signed arithmetic will depend on the evaluation of a unary expression; if there are no unaries, there is no sign
 		// if the quality is "minus", set the "N" flag
@@ -288,54 +293,61 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 		}
 
 		binary_ss << this->evaluate_unary_tree(*unary_operand, line_number, stack_offset, max_offset).str();
-		binary_ss << "\t" << "tab" << std::endl;
+		binary_ss << "\t" << "pha" << std::endl;
 	}
 
-	if (left_exp->get_expression_type() == BINARY) {
-		// first, we must push our right operand
-		if (right_type == STRING) {
-			binary_ss << "\t" << "loada __TEMP_A" << std::endl;
-			binary_ss << "\t" << "loadb __TEMP_B" << std::endl;
-			binary_ss << "\t" << "pha" << "\n\t" << "phb" << std::endl;
-		}
-		else {
-			binary_ss << "\t" << "phb" << std::endl;
-		}
+	// Now that we have evaluated the left side, check to see if 'right' is a binary tree; if so, we will do the same thing we did for left
+	if (right_exp->get_expression_type() == BINARY) {
+		// our left operand data is already on the stack, so our registers are safe
 
-		// cast to Binary and call this function recursively
-		Binary* left_operand = dynamic_cast<Binary*>(left_exp);
-		binary_ss << this->evaluate_binary_tree(*left_operand, line_number, stack_offset, max_offset, right_type).str();
+		Binary* right_op = dynamic_cast<Binary*>(right_exp);
+		binary_ss << this->evaluate_binary_tree(*right_op, line_number, stack_offset, max_offset, left_type).str();
 
-		// now we can pull the operand again
-		if (right_type == STRING) {
-			binary_ss << "\t" << "plb" << "\n\t" << "pla" << std::endl;
+		if (left_type == STRING) {
+			// right argument goes into __TEMP_A and __TEMP_B, left goes in registers
 			binary_ss << "\t" << "storea __TEMP_A" << std::endl;
 			binary_ss << "\t" << "storeb __TEMP_B" << std::endl;
+			binary_ss << "\t" << "plb" << "\n\t" << "pla" << std::endl;	// we pushed A and then B, so pull B and then A
 		}
 		else {
-			binary_ss << "\t" << "plb" << std::endl;
+			// right argument goes in B, left goes in A
+			binary_ss << "\t" << "tab" << std::endl;
+			binary_ss << "\t" << "pla" << std::endl;
 		}
 	}
 	else {
-		// check to make sure the type matches
-		Type left_type = this->get_expression_data_type(current_tree.get_left());
+		// make sure the types match
+		Type right_type = this->get_expression_data_type(current_tree.get_right());
 
-		if (left_type == right_type) {
-			if (left_exp->get_expression_type() == LVALUE || left_exp->get_expression_type() == LITERAL || left_exp->get_expression_type() == DEREFERENCED) {
-				binary_ss << this->fetch_value(bin_exp.get_left(), line_number, stack_offset, max_offset).str();
+		if (right_type == left_type) {
+			if (right_exp->get_expression_type() == LVALUE || right_exp->get_expression_type() == LITERAL || right_exp->get_expression_type() == DEREFERENCED) {
+				binary_ss << this->fetch_value(bin_exp.get_right(), line_number, stack_offset, max_offset).str();
 			}
 			else if (right_exp->get_expression_type() == UNARY) {
-				Unary* unary_operand = dynamic_cast<Unary*>(left_exp);
+				Unary* unary_operand = dynamic_cast<Unary*>(right_exp);
 				binary_ss << this->evaluate_unary_tree(*unary_operand, line_number, stack_offset, max_offset).str();
 			}
+
+			if (left_type == STRING) {
+				// left side goes in registers, right in __TEMP variables
+				binary_ss << "\t" << "storea __TEMP_A" << std::endl;
+				binary_ss << "\t" << "storeb __TEMP_B" << std::endl;
+				binary_ss << "\t" << "plb" << "\n\t" << "pla" << std::endl;
+			}
+			else {
+				// left side goes in A, right side goes in B
+				binary_ss << "\t" << "tab" << std::endl;
+				binary_ss << "\t" << "pla" << std::endl;
+			}
 		}
+		// the types in a binary expression must match
 		else {
-			throw CompilerException("Types in binary expression do not match!", 0 , line_number);
+			throw CompilerException("Types in binary expression do not match!", 0, line_number);
 		}
-	} 
+	}
 
 	// set STATUS bits accordingly
-	if (right_type == FLOAT) {
+	if (left_type == FLOAT) {
 		binary_ss << "\n\t" << "; Set 'float' bit in STATUS" << std::endl;
 		binary_ss << "\t" << "tay" << std::endl;
 		binary_ss << "\t" << "tstatusa" << std::endl;
@@ -344,10 +356,10 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 		binary_ss << "\t" << "tya" << std::endl << std::endl;
 	}
 
-	// now, we can perform the operation on the two operands
+	// now, we can perform the specified operation on the two operands
 	if (bin_exp.get_operator() == PLUS) {
 		// the + operator can be addition or string concatenation
-		if (right_type == STRING) {
+		if (left_type == STRING) {
 			/*
 			
 			If we have a string, we don't just use 'addca b'; we have to add to the length and then write to the location.
@@ -387,8 +399,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 			binary_ss << "\t" << "pha" << std::endl;
 
 			// add that length to the length of the other string, which is in __INPUT_LEN
-			binary_ss << "\t" << "loadb __INPUT_LEN" << std::endl;
-			binary_ss << "\t" << "addca b" << std::endl;
+			binary_ss << "\t" << "addca __INPUT_LEN" << std::endl;
 			binary_ss << "\t" << "storea __INPUT_LEN" << std::endl;
 
 			// copy the memory
