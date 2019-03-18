@@ -217,7 +217,7 @@ bool Compiler::is_signed(std::shared_ptr<Expression> to_evaluate, unsigned int l
 	}
 }
 
-std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int line_number, size_t* stack_offset, size_t max_offset, Type left_type)
+std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int line_number, size_t max_offset, Type left_type)
 {
 	std::stringstream binary_ss;
 
@@ -226,7 +226,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 	Expression* right_exp = current_tree.get_right().get();
 
 	// first, move to the end of the stack frame
-	binary_ss << this->move_sp_to_target_address(stack_offset, max_offset).str();
+	binary_ss << this->move_sp_to_target_address(max_offset).str();
 
 	/*
 	
@@ -253,7 +253,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 			left_type = this->get_expression_data_type(current_tree.get_left());
 		}
 
-		binary_ss << this->evaluate_binary_tree(*left_op, line_number, stack_offset, max_offset, left_type).str();
+		binary_ss << this->evaluate_binary_tree(*left_op, line_number, max_offset, left_type).str();
 
 		if (left_type == STRING) {
 			binary_ss << "\t" << "pha" << "\n\t" << "phb" << std::endl;
@@ -268,7 +268,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 		bool get_sub = (left_exp->get_expression_type() == INDEXED);
 		left_type = this->get_expression_data_type(bin_exp.get_left(), get_sub);
 
-		binary_ss << this->fetch_value(bin_exp.get_left(), line_number, stack_offset, max_offset).str();
+		binary_ss << this->fetch_value(bin_exp.get_left(), line_number, max_offset).str();
 
 		if (left_type == STRING) {
 			binary_ss << "\t" << "pha" << "\n\t" << "phb" << std::endl;
@@ -292,7 +292,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 			binary_ss << "\t" << "tya" << std::endl;
 		}
 
-		binary_ss << this->evaluate_unary_tree(*unary_operand, line_number, stack_offset, max_offset).str();
+		binary_ss << this->evaluate_unary_tree(*unary_operand, line_number, max_offset).str();
 		binary_ss << "\t" << "pha" << std::endl;
 	}
 
@@ -301,7 +301,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 		// our left operand data is already on the stack, so our registers are safe
 
 		Binary* right_op = dynamic_cast<Binary*>(right_exp);
-		binary_ss << this->evaluate_binary_tree(*right_op, line_number, stack_offset, max_offset, left_type).str();
+		binary_ss << this->evaluate_binary_tree(*right_op, line_number, max_offset, left_type).str();
 
 		if (left_type == STRING) {
 			// right argument goes into __TEMP_A and __TEMP_B, left goes in registers
@@ -321,11 +321,11 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 
 		if (right_type == left_type) {
 			if (right_exp->get_expression_type() == LVALUE || right_exp->get_expression_type() == LITERAL || right_exp->get_expression_type() == DEREFERENCED) {
-				binary_ss << this->fetch_value(bin_exp.get_right(), line_number, stack_offset, max_offset).str();
+				binary_ss << this->fetch_value(bin_exp.get_right(), line_number, max_offset).str();
 			}
 			else if (right_exp->get_expression_type() == UNARY) {
 				Unary* unary_operand = dynamic_cast<Unary*>(right_exp);
-				binary_ss << this->evaluate_unary_tree(*unary_operand, line_number, stack_offset, max_offset).str();
+				binary_ss << this->evaluate_unary_tree(*unary_operand, line_number, max_offset).str();
 			}
 
 			if (left_type == STRING) {
@@ -465,7 +465,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 	return binary_ss;
 }
 
-std::stringstream Compiler::evaluate_unary_tree(Unary unary_exp, unsigned int line_number, size_t* stack_offset, size_t max_offset)
+std::stringstream Compiler::evaluate_unary_tree(Unary unary_exp, unsigned int line_number, size_t max_offset)
 {
 	std::stringstream unary_ss;
 
@@ -517,7 +517,7 @@ std::stringstream Compiler::evaluate_unary_tree(Unary unary_exp, unsigned int li
 	}
 	else if (unary_exp.get_operand()->get_expression_type() == LVALUE) {
 		// if we have an lvalue in the unary expression, simply fetch the lvalue
-		unary_ss << this->fetch_value(unary_exp.get_operand(), line_number, stack_offset, max_offset).str();
+		unary_ss << this->fetch_value(unary_exp.get_operand(), line_number, max_offset).str();
 	}
 	else if (unary_exp.get_operand()->get_expression_type() == BINARY) {
 		// TODO: parse binary tree to get the result in A
@@ -525,7 +525,7 @@ std::stringstream Compiler::evaluate_unary_tree(Unary unary_exp, unsigned int li
 	else if (unary_exp.get_operand()->get_expression_type() == UNARY) {
 		// Our unary operand can be another unary expression -- if so, simply get the operand and call this function recursively
 		Unary* unary_operand = dynamic_cast<Unary*>(unary_exp.get_operand().get());	// cast to appropriate type
-		unary_ss << this->evaluate_unary_tree(*unary_operand, line_number, stack_offset, max_offset).str();	// add the produced code to our code here
+		unary_ss << this->evaluate_unary_tree(*unary_operand, line_number, max_offset).str();	// add the produced code to our code here
 	}
 
 	// Now that the A register contains the value of the operand
@@ -678,7 +678,7 @@ void Compiler::include_file(Include include_statement)
 	}
 }
 
-std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, unsigned int line_number, size_t * stack_offset, size_t max_offset)
+std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, unsigned int line_number, size_t max_offset)
 {
 	/*
 	
@@ -762,7 +762,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 			variable_symbol = this->symbol_table.lookup(variable_to_get->getValue(), this->current_scope_name, this->current_scope);
 
 			// now, use fetch_value to get the index value in the A register
-			fetch_ss << this->fetch_value(variable_to_get->get_index_value(), line_number, stack_offset, max_offset).str();
+			fetch_ss << this->fetch_value(variable_to_get->get_index_value(), line_number, max_offset).str();
 		}
 
 		// now that the variable has been fetched, check its qualities
@@ -847,7 +847,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 				}
 			}
 			else {
-				fetch_ss << this->move_sp_to_target_address(stack_offset, variable_symbol->stack_offset + 1).str();
+				fetch_ss << this->move_sp_to_target_address(variable_symbol->stack_offset + 1).str();
 				
 				// now, the offsets are the same; get the variable's value
 				if (is_dynamic) {
@@ -863,7 +863,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 							// dynamic variables must use pointer dereferencing
 							// so we pull the address of the string into B
 							fetch_ss << "\t" << "plb" << std::endl;
-							(*stack_offset) -= 1;
+							this->stack_offset -= 1;
 
 							// now, we must get the value at the address contained in B -- use the X register for this -- which is our string length
 							fetch_ss << "\t" << "tba" << "\n\t" << "tax" << std::endl;	// simply index -- we _already dereferenced the pointer_, this address does not contain another address to dereference, but rather the data we want
@@ -915,7 +915,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 					else {
 						// pull the value into the A register
 						fetch_ss << "\t" << "pla" << std::endl;
-						(*stack_offset) -= 1;	// we pulled from the stack, so we must adjust the stack offset
+						this->stack_offset -= 1;	// we pulled from the stack, so we must adjust the stack offset
 					}
 				}
 			}
@@ -929,7 +929,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		Dereferenced* dereferenced_exp = dynamic_cast<Dereferenced*>(to_fetch.get());;
 		
 		if (dereferenced_exp->get_ptr_shared()->get_expression_type() == DEREFERENCED) {
-			fetch_ss << this->fetch_value(dereferenced_exp->get_ptr_shared(), line_number, stack_offset, max_offset).str();
+			fetch_ss << this->fetch_value(dereferenced_exp->get_ptr_shared(), line_number, max_offset).str();
 		}
 		else {
 			// check to make sure the variable is in the symbol table
@@ -984,11 +984,11 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 					throw CompilerException("Cannot reference dynamic memory that has already been freed", 0, line_number);
 				}
 				else {
-					fetch_ss << this->move_sp_to_target_address(stack_offset, variable_symbol->stack_offset + 1).str();
+					fetch_ss << this->move_sp_to_target_address(variable_symbol->stack_offset + 1).str();
 
 					// now that the stack pointer is in the right place, we can pull the value into A
 					fetch_ss << "\t" << "pla" << std::endl;
-					*stack_offset -= 1;
+					this->stack_offset -= 1;
 				}
 			}
 			else {
@@ -996,10 +996,10 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 					fetch_ss << "\t" << "loada #" << variable_symbol->name << std::endl;	// using  "loada var" would mean "load the A register with the value at address 'var' " while "loada #var" means "load the A register with the address of 'var' "
 				}
 				else {
-					fetch_ss << this->move_sp_to_target_address(stack_offset, variable_symbol->stack_offset + 1).str();
+					fetch_ss << this->move_sp_to_target_address(variable_symbol->stack_offset + 1).str();
 
 					// now that the stack pointer is in the proper place to pull the variable from, increment it by one place and transfer the pointer value to A; that is the address where the variable we want lives
-					(*stack_offset) -= 1;
+					this->stack_offset -= 1;
 					fetch_ss << "\t" << "incsp" << std::endl;
 					fetch_ss << "\t" << "tspa" << std::endl;
 				}
@@ -1011,11 +1011,11 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 	}
 	else if (to_fetch->get_expression_type() == UNARY) {
 		Unary* unary_expression = dynamic_cast<Unary*>(to_fetch.get());
-		fetch_ss << this->evaluate_unary_tree(*unary_expression, line_number, stack_offset, max_offset).str();
+		fetch_ss << this->evaluate_unary_tree(*unary_expression, line_number, max_offset).str();
 	}
 	else if (to_fetch->get_expression_type() == BINARY) {
 		Binary* binary_expression = dynamic_cast<Binary*>(to_fetch.get());
-		fetch_ss << this->evaluate_binary_tree(*binary_expression, line_number, stack_offset, max_offset).str();
+		fetch_ss << this->evaluate_binary_tree(*binary_expression, line_number, max_offset).str();
 	}
 	else if (to_fetch->get_expression_type() == VALUE_RETURNING_CALL) {
 		ValueReturningFunctionCall* val_ret = dynamic_cast<ValueReturningFunctionCall*>(to_fetch.get());
@@ -1024,23 +1024,25 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		Symbol* function_symbol = this->symbol_table.lookup(val_ret->get_name()->getValue());
 
 		// increment the stack pointer to the stack frame
-		fetch_ss << this->move_sp_to_target_address(stack_offset, max_offset).str();
+		fetch_ss << this->move_sp_to_target_address(max_offset).str();
 
 		// call the function
 		Call to_call(val_ret->get_name(), val_ret->get_args());	// create a 'call' object from val_ret
-		fetch_ss << this->call(to_call, stack_offset, max_offset).str();	// add that to the asm
+		fetch_ss << this->call(to_call, max_offset).str();	// add that to the asm
 
-		// now, the returned value will be on the stack; if the type is of variable length (array or struct), handle it separately
-		if (function_symbol->type != ARRAY && function_symbol->type != STRUCT) {
-			// the size of the return symbol is only one word; pull it from the stack
-			fetch_ss << "\t" << "pla" << std::endl;
-		}
-		else if (function_symbol->type == STRUCT) {
+		// now, the returned value will be in the registers; if the type is of variable length (array or struct), handle it separately because it is on the stack
+		if (function_symbol->type == ARRAY) {
 			// TODO: implement structs
 		}
-		else {
+		else if (function_symbol->type == STRUCT) {
 			// TODO: implement arrays
 		}
+		else if (function_symbol->type == VOID || function_symbol->type == NONE) {
+			// we cannot use void functions as value returning types
+			throw CompilerException("Cannot retrieve value of '" + get_string_from_type(function_symbol->type) + "' type", 0, line_number);
+		}
+
+		// We are done -- the values are where they are expected to be
 	}
 	else if (to_fetch->get_expression_type() == SIZE_OF) {
 		// cast to SizeOf type
@@ -1063,7 +1065,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 	return fetch_ss;
 }
 
-std::stringstream Compiler::move_sp_to_target_address(size_t * stack_offset, size_t target_offset, bool preserve_registers)
+std::stringstream Compiler::move_sp_to_target_address(size_t target_offset, bool preserve_registers)
 {
 	/*
 	
@@ -1074,67 +1076,62 @@ std::stringstream Compiler::move_sp_to_target_address(size_t * stack_offset, siz
 	*/
 	std::stringstream inc_ss;
 
-	if (stack_offset) {
-		// increment the stack pointer to the end of the current stack frame
-		if (*stack_offset < target_offset) {
-			// if we need to increment more than three times, use a transfer and add -- otherwise, it's efficient enough to use decsp; we will also elect not to use this method if we must preserve our register values
-			if ((target_offset - *stack_offset > 3) && !preserve_registers) {
-				// transfer the stack pointer to a, add the difference, and transfer it back
-				size_t difference = target_offset - *stack_offset;
-				inc_ss << "\t" << "tspa" << "\t; increment sp by using transfers and addca" << std::endl;
-				inc_ss << "\t" << "addca #$" << std::hex << difference << std::endl;
-				inc_ss << "\t" << "tasp" << std::endl;
+	// increment the stack pointer to the end of the current stack frame
+	if (this->stack_offset < target_offset) {
+		// if we need to increment more than three times, use a transfer and add -- otherwise, it's efficient enough to use decsp; we will also elect not to use this method if we must preserve our register values
+		if ((target_offset - this->stack_offset > 3) && !preserve_registers) {
+			// transfer the stack pointer to a, add the difference, and transfer it back
+			size_t difference = target_offset - this->stack_offset;
+			inc_ss << "\t" << "tspa" << "\t; increment sp by using transfers and addca" << std::endl;
+			inc_ss << "\t" << "addca #$" << std::hex << difference << std::endl;
+			inc_ss << "\t" << "tasp" << std::endl;
 
-				*stack_offset = target_offset;
-			}
-			else {
-				while (*stack_offset < target_offset) {
-					inc_ss << "\t" << "decsp" << std::endl;
-					*stack_offset += 1;
-				}
-			}
-		}
-		else if (*stack_offset > target_offset) {
-			// do the reverse here of what we did above
-			if ((*stack_offset - target_offset > 3) && !preserve_registers) {
-				// subtract the difference between the stack offset and the target offset from the stack offset
-				size_t difference = *stack_offset - target_offset;
-				inc_ss << "\t" << "tspa" << std::endl;
-				inc_ss << "\t" << "subca #$" << std::hex << difference << std::endl;
-				inc_ss << "\t" << "tspa" << std::endl;
-			}
-			else {
-				while (*stack_offset > target_offset) {
-					inc_ss << "\t" << "incsp" << std::endl;
-					*stack_offset -= 1;
-				}
-			}
+			this->stack_offset = target_offset;
 		}
 		else {
-			// the values must be equal, so do nothing
+			while (this->stack_offset < target_offset) {
+				inc_ss << "\t" << "decsp" << std::endl;
+				this->stack_offset += 1;
+			}
+		}
+	}
+	else if (this->stack_offset > target_offset) {
+		// do the reverse here of what we did above
+		if ((this->stack_offset - target_offset > 3) && !preserve_registers) {
+			// subtract the difference between the stack offset and the target offset from the stack offset
+			size_t difference = this->stack_offset - target_offset;
+			inc_ss << "\t" << "tspa" << std::endl;
+			inc_ss << "\t" << "subca #$" << std::hex << difference << std::endl;
+			inc_ss << "\t" << "tspa" << std::endl;
+		}
+		else {
+			while (this->stack_offset > target_offset) {
+				inc_ss << "\t" << "incsp" << std::endl;
+				this->stack_offset -= 1;
+			}
 		}
 	}
 	else {
-		std::cerr << "**** Warning: 'stack_offset' was nullptr in 'incsp_to_stack_frame'!" << std::endl;
+		// the values must be equal, so do nothing
 	}
 
 	return inc_ss;
 }
 
-std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared_ptr<Expression> rvalue, unsigned int line_number, size_t * stack_offset, size_t max_offset)
+std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared_ptr<Expression> rvalue, unsigned int line_number, size_t max_offset)
 {
 	std::stringstream string_assign_ss;
 
 	// fetch the rvalue -- A will contain the length, B will contain the address
-	string_assign_ss << this->fetch_value(rvalue, line_number, stack_offset, max_offset).str();
+	string_assign_ss << this->fetch_value(rvalue, line_number, max_offset).str();
 
 	// move the stack pointer to the end of the stack frame
-	if (*stack_offset != max_offset) {
+	if (this->stack_offset != max_offset) {
 		// transfer A and B to X and Y before incrementing the stack pointer
 		string_assign_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;
 
 		// increment the stack pointer to the end of the stack frame so we can use the stack
-		string_assign_ss << this->move_sp_to_target_address(stack_offset, max_offset).str();
+		string_assign_ss << this->move_sp_to_target_address(max_offset).str();
 
 		// move X and Y back into A and B
 		string_assign_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;
@@ -1168,10 +1165,10 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 		// otherwise, it's on the stack
 		else {
 			// fetch the variable into B
-			size_t former_offset = *stack_offset;
-			string_assign_ss << this->move_sp_to_target_address(stack_offset, target_symbol->stack_offset + 1);
+			size_t former_offset = this->stack_offset;
+			string_assign_ss << this->move_sp_to_target_address(target_symbol->stack_offset + 1);
 			string_assign_ss << "\t" << "plb" << std::endl;
-			string_assign_ss << this->move_sp_to_target_address(stack_offset, former_offset);	// move the stack offset back
+			string_assign_ss << this->move_sp_to_target_address(former_offset);	// move the stack offset back
 		}
 
 		// move the length back into register A and make the syscall
@@ -1204,20 +1201,20 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 		string_assign_ss << "\t" << "pha" << std::endl;
 	}
 	else {
-		*stack_offset += 2;	// increment our stack offset so we can decrement correctly
-		size_t previous_offset = *stack_offset;	// we want to ensure that we know exactly where to return back to
+		this->stack_offset += 2;	// increment our stack offset so we can decrement correctly
+		size_t previous_offset = this->stack_offset;	// we want to ensure that we know exactly where to return back to
 
 		// now, we must move the stack pointer to the pointer variable; we don't need to set the retain registers flag because the addca method does not touch the B register and we have nothing valuable in A
-		string_assign_ss << this->move_sp_to_target_address(stack_offset, target_symbol->stack_offset).str();
+		string_assign_ss << this->move_sp_to_target_address(target_symbol->stack_offset).str();
 
 		// store the address of the dynamic memory in _LOCAL_DYNAMIC_POINTER in addition to putting it on the stack
 		string_assign_ss << "\t" << "phb" << std::endl;
-		*stack_offset += 1;	// increase the stack offset so the compiler navigates the stack properly
+		this->stack_offset += 1;	// increase the stack offset so the compiler navigates the stack properly
 
 		string_assign_ss << "\t" << "storeb $" << std::hex << _LOCAL_DYNAMIC_POINTER << std::endl;
 
 		// move the stack pointer back to where it was
-		string_assign_ss << this->move_sp_to_target_address(stack_offset, previous_offset).str();
+		string_assign_ss << this->move_sp_to_target_address(previous_offset).str();
 
 		// pull the length back into A and store it
 		string_assign_ss << "\t" << "pla" << std::endl;
@@ -1234,7 +1231,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 		string_assign_ss << "\t" << "loada ($" << std::hex << _LOCAL_DYNAMIC_POINTER << "), y" << std::endl;
 		string_assign_ss << "\t" << "pha" << std::endl;
 
-		*stack_offset -= 2;
+		this->stack_offset -= 2;
 	}
 
 	// finally, invoke the subroutine
@@ -1252,7 +1249,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 
 
 // allocate a variable
-std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* stack_offset, size_t* max_offset) {
+std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* max_offset) {
 	// first, add the variable to the symbol table
 	// next, create a macro for it and assign it to the next available address in the scope; local variables will use pages incrementally
 	// next, every time a variable is referenced, make sure it is in the symbol table and within the appropriate scope
@@ -1337,8 +1334,8 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 
 							*/
 
-							allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), stack_offset, *max_offset).str();
-							allocation_ss << this->move_sp_to_target_address(stack_offset, *max_offset, true).str();	// increment the stack pointer to our stack frame, but preserve our register values
+							allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), *max_offset).str();
+							allocation_ss << this->move_sp_to_target_address(*max_offset, true).str();	// increment the stack pointer to our stack frame, but preserve our register values
 
 							// push our parameters and invoke our memcpy subroutine
 							allocation_ss << "\t" << "phb" << "\n\t" << "loadb #" << to_allocate.name << "\n\t" << "phb" << "\n\t" << "pha" << std::endl;
@@ -1347,7 +1344,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 						// TODO: add the array type here as well, once that is implemented in SIN
 						else {
 							// now, use fetch_value to get the value of our lvalue and store the value in A at the constant we have defined
-							allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), stack_offset, *max_offset).str();
+							allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), *max_offset).str();
 							allocation_ss << "storea " << to_allocate.name << std::endl;
 						}
 					}
@@ -1369,7 +1366,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 				if (this->get_expression_data_type(initial_value) == to_allocate.type) {
 					allocation_ss << "@db " << to_allocate.name << " (0)" << std::endl;
 					// get the evaluated unary
-					this->evaluate_unary_tree(*initializer_unary, allocation_statement.get_line_number(), stack_offset, *max_offset);	// evaluate the unary expression
+					this->evaluate_unary_tree(*initializer_unary, allocation_statement.get_line_number(), *max_offset);	// evaluate the unary expression
 					allocation_ss << "storea " << to_allocate.name << std::endl;
 				}
 				else {
@@ -1381,7 +1378,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 				// if the types match
 				if (this->get_expression_data_type(initial_value) == to_allocate.type) {
 					allocation_ss << "@db " << to_allocate.name << " (0)";
-					this->evaluate_binary_tree(*initializer_binary, allocation_statement.get_line_number(), stack_offset, *max_offset);
+					this->evaluate_binary_tree(*initializer_binary, allocation_statement.get_line_number(), *max_offset);
 					allocation_ss << "storea " << to_allocate.name << std::endl;
 				}
 				else {
@@ -1423,7 +1420,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 			if (to_allocate.type == STRING) {
 				// We can only allocate space dynamically if we have an initial value; we shouldn't guess on a size
 				if (to_allocate.defined) {
-					allocation_ss << this->string_assignment(&to_allocate, initial_value, allocation_statement.get_line_number(), stack_offset, *max_offset).str();
+					allocation_ss << this->string_assignment(&to_allocate, initial_value, allocation_statement.get_line_number(), *max_offset).str();
 
 					// We need to update the symbol's 'allocated' member
 					Symbol* allocated_symbol = this->symbol_table.lookup(to_allocate.name, to_allocate.scope_name, to_allocate.scope_level);
@@ -1433,7 +1430,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 			else {
 				// check to see if we have alloc-assign syntax for our other data types
 				if (to_allocate.defined) {
-					allocation_ss << this->fetch_value(allocation_statement.get_initial_value(), allocation_statement.get_line_number(), stack_offset, *max_offset).str();
+					allocation_ss << this->fetch_value(allocation_statement.get_initial_value(), allocation_statement.get_line_number(), *max_offset).str();
 					allocation_ss << "\t" << "storea " << to_allocate.name << std::endl;
 				}
 			}
@@ -1443,11 +1440,11 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 	// handle all non-const local variables
 	else {
 		// make sure we have valid pointers
-		if ((stack_offset != nullptr) && (max_offset != nullptr)) {
+		if (max_offset != nullptr) {
 			// our local variables will use the stack; they will directly modify the list of variable names and the stack offset
-			allocation_ss << this->move_sp_to_target_address(stack_offset, *max_offset).str();	// make sure the stack pointer is at the end of the stack frame before allocating a local variable (so we don't overwrite anything)
+			allocation_ss << this->move_sp_to_target_address(*max_offset).str();	// make sure the stack pointer is at the end of the stack frame before allocating a local variable (so we don't overwrite anything)
 			
-			to_allocate.stack_offset = *stack_offset;	// the stack offset for the symbol will now be the current stack offset
+			to_allocate.stack_offset = this->stack_offset;	// the stack offset for the symbol will now be the current stack offset
 			this->symbol_table.insert(to_allocate, allocation_statement.get_line_number());	// now that the symbol's stack offset has been determined, we can add the symbol to the table
 
 			// If the variable is defined, we can push its initial value
@@ -1457,12 +1454,12 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 					// we don't need to check if the variable has been freed when we are allocating it
 					if (to_allocate.type == STRING) {
 						// allocate a word on the stack for the pointer
-						*stack_offset += 1;
+						this->stack_offset += 1;
 						*max_offset += 1;
 						allocation_ss << "\t" << "decsp" << std::endl;
 
 						// strings will use the member function for string assignment
-						allocation_ss << this->string_assignment(&to_allocate, initial_value, allocation_statement.get_line_number(), stack_offset, *max_offset).str();
+						allocation_ss << this->string_assignment(&to_allocate, initial_value, allocation_statement.get_line_number(), *max_offset).str();
 
 						// update the symbol's 'allocated' member
 						Symbol* allocated_symbol = this->symbol_table.lookup(to_allocate.name, to_allocate.scope_name, to_allocate.scope_level);
@@ -1472,10 +1469,10 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 				}
 				else {
 					// get the initial value
-					allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), stack_offset, *max_offset).str();
+					allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), *max_offset).str();
 					// push the A register and increment our counters
 					allocation_ss << "\t" << "pha" << std::endl;
-					(*stack_offset) += 1;
+					this->stack_offset += 1;
 					(*max_offset) += 1;
 				}
 			}
@@ -1492,13 +1489,13 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* st
 					allocation_ss << "\t" << "brne .__ALLOC_ARRAY_LOOP__BR_" << this->branch_number << "__" << std::endl;
 
 					this->branch_number += 1;
-					(*stack_offset) += to_allocate.array_length;
+					this->stack_offset += to_allocate.array_length;
 					(*max_offset) += to_allocate.array_length;
 				}
 				else {
 					allocation_ss << "\t" << "loada #$00" << std::endl;
 					allocation_ss << "\t" << "pha" << std::endl;
-					(*stack_offset) += 1;
+					this->stack_offset += 1;
 					(*max_offset) += 1;
 				}
 			}	
@@ -1526,7 +1523,7 @@ std::stringstream Compiler::define(Definition definition_statement) {
 	std::stringstream function_asm;
 
 	// stack offsets
-	size_t current_stack_offset = 0;	// the offset from when we originally called the function
+	size_t previous_stack_offset = this->stack_offset;	// the offset from when we originally called the function
 	size_t max_stack_offset = 0;	// the maximum stack offset for the function (increment by one per local variable)
 
 	// function definitions have to be in the global scope
@@ -1548,7 +1545,8 @@ std::stringstream Compiler::define(Definition definition_statement) {
 				Allocation* arg_alloc = dynamic_cast<Allocation*>(arg_iter->get());
 				
 				// add the variable to the symbol table, giving it the function's scope name at scope level 1
-				this->symbol_table.insert(arg_alloc->get_var_name(), arg_alloc->get_var_type(), func_name, 1, arg_alloc->get_var_subtype(), arg_alloc->get_qualities(), arg_alloc->was_initialized(), {}, definition_statement.get_line_number());	// this variable is only accessible inside this function's scope
+				// make sure we set "was_initialized" in the definition so that when the function is compiled, we don't get a "referenced before assignment" error; the definition assumes all arguments will be passed, because the call will throw an error if they aren't
+				this->symbol_table.insert(arg_alloc->get_var_name(), arg_alloc->get_var_type(), func_name, 1, arg_alloc->get_var_subtype(), arg_alloc->get_qualities(), true, {}, definition_statement.get_line_number());	// this variable is only accessible inside this function's scope
 
 				// TODO: add default parameters
 
@@ -1564,11 +1562,11 @@ std::stringstream Compiler::define(Definition definition_statement) {
 				}
 				else if (arg_alloc->get_var_type() == STRING) {
 					// One word for length, one for address
-					current_stack_offset += 2;
+					this->stack_offset += 2;
 				}
 				else {
 					// all other types are one word
-					current_stack_offset += 1;
+					this->stack_offset += 1;
 				}
 			}
 			else {
@@ -1580,20 +1578,21 @@ std::stringstream Compiler::define(Definition definition_statement) {
 		// by this point, all of our function parameters are on the stack, in our symbol table, and our stack offset pointer tells us how many; as such, we can call the compile routine on our AST, as all of the functions for compilation will be able to handle scopes other than global
 		StatementBlock function_procedure = *definition_statement.get_procedure().get();	// get the AST
 
+		// update the current scope
+		this->current_scope_name = func_name;
+		this->current_scope = 1;
+
 		// if we don't have an empty procedure, compile it
 		if (function_procedure.statements_list.size() > 0) {
-			function_asm << this->compile_to_sinasm(function_procedure, 1, func_name, &current_stack_offset, max_stack_offset).str();	// compile it
+			function_asm << this->compile_to_sinasm(function_procedure, 1, func_name, max_stack_offset, previous_stack_offset).str();	// compile it; be sure to pass in the previous offset so the return statement unwinds the stack correctly
 		}
 		else {
 			compiler_warning("Empty function definition", definition_statement.get_line_number());
 		}
 
-		// unwind the stack pointer back to its original position, thereby freeing the memory we allocated for the function
-		for (size_t i = current_stack_offset; i > 0; i--) {
-			function_asm << "\t" << "incsp" << std::endl;		// TODO: change to "move_sp_to_target_address(...)" ?
-		}
+		// The 'return' statement at the end of the function is responsible for unwinding the stack, so we don't need to do that here
 
-		// return from the subroutine
+		// as such, we can now return from the subroutine
 		function_asm << "\t" << "rts" << std::endl;
 
 		// return our scope name to "global", the current scope to 0, and return the function assembly
@@ -1607,7 +1606,7 @@ std::stringstream Compiler::define(Definition definition_statement) {
 }
 
 
-std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stack_offset, size_t max_offset) {
+std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_offset) {
 
 	exp_type lvalue_exp_type = assignment_statement.get_lvalue()->get_expression_type();
 
@@ -1701,7 +1700,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 							// set the symbol to "defined" and call our string_assignment function
 							fetched->defined = true;
 							fetched->freed = false;
-							assignment_ss << this->string_assignment(fetched, assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset, max_offset).str();
+							assignment_ss << this->string_assignment(fetched, assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str();
 						}
 					}
 					// TODO: add support for other dynamic types
@@ -1722,11 +1721,11 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 						// get the rvalue
 						if (lvalue_exp_type == INDEXED) {
 							// get the value of the index and push it onto the stack
-							assignment_ss << this->fetch_value(assignment_index, assignment_statement.get_line_number(), stack_offset, max_offset).str();
+							assignment_ss << this->fetch_value(assignment_index, assignment_statement.get_line_number(), max_offset).str();
 							assignment_ss << "\t" << "pha" << std::endl;
 							
 							// get the rvalue
-							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset, max_offset).str() << std::endl;
+							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str() << std::endl;
 							assignment_ss << "\t" << "tax" << std::endl;
 							assignment_ss << "\t" << "pla" << std::endl;
 
@@ -1738,7 +1737,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 							assignment_ss << "\t" << "txa" << std::endl;
 						}
 						else {
-							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset, max_offset).str() << std::endl;	// TODO: add max_offset in the fetch in assignment?
+							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str() << std::endl;	// TODO: add max_offset in the fetch in assignment?
 							assignment_ss << "\t" << "loady #$00" << std::endl;
 						}
 
@@ -1749,7 +1748,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 						else {
 							// y register will be zero if lvalue_exp_type is 'DEREFERENCED'
 							Dereferenced* dereferenced_value = dynamic_cast<Dereferenced*>(assignment_statement.get_lvalue().get());
-							assignment_ss << this->fetch_value(dereferenced_value->get_ptr_shared(), assignment_statement.get_line_number(), stack_offset).str();
+							assignment_ss << this->fetch_value(dereferenced_value->get_ptr_shared(), assignment_statement.get_line_number()).str();
 							assignment_ss << "\t" << "storea (" << var_name << ", y)" << std::endl;
 						}
 					}
@@ -1757,18 +1756,18 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 						// get the value
 						if (lvalue_exp_type == INDEXED) {
 							// first, fetch the index value and push it to the stack
-							assignment_ss << this->fetch_value(assignment_index, assignment_statement.get_line_number(), stack_offset, max_offset).str();
+							assignment_ss << this->fetch_value(assignment_index, assignment_statement.get_line_number(), max_offset).str();
 							assignment_ss << "\t" << "tay" << std::endl;	// transfer A to Y so we don't have to set the preserve_registers flag
-							assignment_ss << this->move_sp_to_target_address(stack_offset, max_offset).str();	// move the stack pointer to the stack frame
+							assignment_ss << this->move_sp_to_target_address(max_offset).str();	// move the stack pointer to the stack frame
 							assignment_ss << "\t" << "tya" << "\n\t" << "pha" << std::endl;	// push the index
-							(*stack_offset) += 1;
+							this->stack_offset += 1;
 
 							// now, get the value we want
-							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset).str() << std::endl;
+							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number()).str() << std::endl;
 
 							// move the stack pointer back to where it was, but preserve our registers
 							assignment_ss << "\t" << "tax" << std::endl;
-							assignment_ss << this->move_sp_to_target_address(stack_offset, max_offset + 1).str();
+							assignment_ss << this->move_sp_to_target_address(max_offset + 1).str();
 
 							/*
 
@@ -1787,11 +1786,11 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 							// update the index
 							// since we moved A to X before the move, the value to assign is still safe in register X, and A is free to use
 							assignment_ss << "\t" << "pla" << std::endl;
-							(*stack_offset) -= 1;
+							this->stack_offset -= 1;
 							assignment_ss << "\t" << "lsl a" << std::endl;	// multiply the index by 2 with lsl
 							assignment_ss << "\t" << "tay" << std::endl;	// move the index into Y so it's safe to move the SP
 
-							assignment_ss << this->move_sp_to_target_address(stack_offset, fetched->stack_offset).str();
+							assignment_ss << this->move_sp_to_target_address(fetched->stack_offset).str();
 
 							// move the index back into the B register
 							assignment_ss << "\t" << "tya" << std::endl;
@@ -1813,18 +1812,18 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 							assignment_ss << "\t" << "tasp" << std::endl;	// move the pointer value back
 						}
 						else {
-							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), stack_offset).str() << std::endl;
+							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number()).str() << std::endl;
 
 							// move the SP to the target address, but store A and B in X and Y, respectively, before we move it
 							assignment_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;
-							assignment_ss << this->move_sp_to_target_address(stack_offset, fetched->stack_offset).str();
+							assignment_ss << this->move_sp_to_target_address(fetched->stack_offset).str();
 							assignment_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;	// move the register values back
 
 
 							// make the assignment
 							if (lvalue_exp_type != DEREFERENCED) {
 								assignment_ss << "\t" << "pha" << std::endl;
-								*stack_offset += 1;	// when we push a variable, we need to update our stack offset
+								this->stack_offset += 1;	// when we push a variable, we need to update our stack offset
 							}
 							else {
 								// we can use indexed indirect addressing with the x register to determine where the data should be stored
@@ -1857,7 +1856,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t* stac
 }
 
 
-std::stringstream Compiler::call(Call call_statement, size_t* stack_offset, size_t max_offset) {
+std::stringstream Compiler::call(Call call_statement, size_t max_offset) {
 	/*
 	
 	Compile a function call, held in 'call_statement'. We will use stack_offset and max_offset to hold the stack offset at the time the function is called and the maximum offset for local variables, respectively. stack_offset and max_offset are both default parameters, set to nullptr and 0, respectively, and serve to track stack locations for using local variables. If no local variables have been allocated at call time, they will both be 0
@@ -2007,7 +2006,7 @@ std::stringstream Compiler::call(Call call_statement, size_t* stack_offset, size
 								}
 								else {
 									// get the value at the address of our pointer
-									call_ss << this->fetch_value(argument, call_statement.get_line_number(), stack_offset, max_offset).str();
+									call_ss << this->fetch_value(argument, call_statement.get_line_number(), max_offset).str();
 									// now, A contains the length and B contains the address of the string -- we are ready to push
 								}
 
@@ -2028,12 +2027,12 @@ std::stringstream Compiler::call(Call call_statement, size_t* stack_offset, size
 							// otherwise, we must navigate through the stack
 							else {
 								// use fetch_value to get the argument
-								call_ss << this->fetch_value(argument, call_statement.get_line_number(), stack_offset, max_offset).str();
+								call_ss << this->fetch_value(argument, call_statement.get_line_number(), max_offset).str();
 							}
 
 							// now that the value is in A, push it -- but first, move to the end of the stack frame
 							call_ss << "\t" << "tab" << std::endl;
-							call_ss << this->move_sp_to_target_address(stack_offset, max_offset).str();
+							call_ss << this->move_sp_to_target_address(max_offset).str();
 							call_ss << "\t" << "phb" << std::endl;
 						}
 					}
@@ -2064,7 +2063,7 @@ std::stringstream Compiler::call(Call call_statement, size_t* stack_offset, size
 }
 
 
-std::stringstream Compiler::ite(IfThenElse ite_statement, size_t * stack_offset, size_t max_offset)
+std::stringstream Compiler::ite(IfThenElse ite_statement, size_t max_offset)
 {
 	/*
 	
@@ -2075,7 +2074,7 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t * stack_offset,
 	// a stringstream for our generated asm
 	std::stringstream ite_ss;
 
-	std::string parent_scope_name = this->current_scope_name;	// the parent scope name must be restored once we exit the scope
+	//std::string parent_scope_name = this->current_scope_name;	// the parent scope name must be restored once we exit the scope
 
 	/*
 	First, make sure everything in our branch is under a label so we can use relative labels -- it looks like:
@@ -2110,7 +2109,7 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t * stack_offset,
 		*/
 
 		// load the A register with the value
-		ite_ss << this->fetch_value(ite_statement.get_condition(), ite_statement.get_line_number(), stack_offset, max_offset).str();
+		ite_ss << this->fetch_value(ite_statement.get_condition(), ite_statement.get_line_number(), max_offset).str();
 	}
 	else if (ite_statement.get_condition()->get_expression_type() == UNARY) {
 		
@@ -2134,17 +2133,17 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t * stack_offset,
 
 	// increment the scope level because we are within a branch (allows variables local to the scope); further, update the scope name to the branch we want
 	this->current_scope += 1;
-	this->current_scope_name = parent_scope_name + "__ITE_" + std::to_string(this->branch_number);
+	//this->current_scope_name = parent_scope_name + "__ITE_" + std::to_string(this->branch_number);
 
 	// increment the SP to the end of the stack frame
-	ite_ss << this->move_sp_to_target_address(stack_offset, max_offset).str();
+	ite_ss << this->move_sp_to_target_address(max_offset).str();
 
 	// now, compile the branch using our compile method
-	ite_ss << this->compile_to_sinasm(*ite_statement.get_if_branch().get(), this->current_scope, this->current_scope_name, stack_offset, max_offset).str();
+	ite_ss << this->compile_to_sinasm(*ite_statement.get_if_branch().get(), this->current_scope, this->current_scope_name, max_offset).str();
 
 	// unwind the stack and delete local variables
-	for (size_t i = *stack_offset; i > max_offset; i--) {
-		*stack_offset -= 1;
+	for (size_t i = this->stack_offset; i > max_offset; i--) {
+		this->stack_offset -= 1;
 		ite_ss << "\t" << "incsp" << std::endl;
 	}
 	// we now need to delete all variables that were local to this if/else block -- iterate through the symbol table, removing the symbols in this local scope
@@ -2169,13 +2168,13 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t * stack_offset,
 	// if we have an if_then (no else branch), then ignore this
 	if (ite_statement.get_else_branch()) {
 		// increment the scope level because we are within a branch (allows variables local to the scope)
-		ite_ss << this->move_sp_to_target_address(stack_offset, max_offset).str();
+		ite_ss << this->move_sp_to_target_address(max_offset).str();
 
-		ite_ss << this->compile_to_sinasm(*ite_statement.get_else_branch().get(), this->current_scope, this->current_scope_name, stack_offset, max_offset).str();
+		ite_ss << this->compile_to_sinasm(*ite_statement.get_else_branch().get(), this->current_scope, this->current_scope_name, max_offset).str();
 
 		// unwind the stack and delete local variables
-		for (size_t i = *stack_offset; i > max_offset; i--) {
-			*stack_offset -= 1;
+		for (size_t i = this->stack_offset; i > max_offset; i--) {
+			this->stack_offset -= 1;
 			ite_ss << "\t" << "incsp" << std::endl;
 		}
 		// we now need to delete all variables that were local to this if/else block -- iterate through the symbol table, removing the symbols in this local scope
@@ -2197,7 +2196,7 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t * stack_offset,
 	// finally, increment the branch number, decrement the scope level, write our ".done" label, and delete all local variables to the branches so we cannot reference them outside the ite
 	this->branch_number += 1;
 	this->current_scope -= 1;
-	this->current_scope_name = parent_scope_name;	// reset the scope name to the parent scope
+	//this->current_scope_name = parent_scope_name;	// reset the scope name to the parent scope
 
 	ite_ss << ite_label_name << ".done:" << std::endl;
 	ite_ss << std::endl;
@@ -2207,7 +2206,7 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t * stack_offset,
 }
 
 
-std::stringstream Compiler::while_loop(WhileLoop while_statement, size_t * stack_offset, size_t max_offset)
+std::stringstream Compiler::while_loop(WhileLoop while_statement, size_t max_offset)
 {
 	/*
 	
@@ -2235,15 +2234,15 @@ std::stringstream Compiler::while_loop(WhileLoop while_statement, size_t * stack
 	while_ss << while_label_name << ":" << std::endl;
 
 	if ((while_statement.get_condition()->get_expression_type() == LITERAL) || (while_statement.get_condition()->get_expression_type() == LVALUE)) {
-		while_ss << this->fetch_value(while_statement.get_condition(), while_statement.get_line_number(), stack_offset, max_offset).str();
+		while_ss << this->fetch_value(while_statement.get_condition(), while_statement.get_line_number(), max_offset).str();
 	}
 	else if (while_statement.get_condition()->get_expression_type() == UNARY) {
 		Unary* unary_expression = dynamic_cast<Unary*>(while_statement.get_condition().get());
-		while_ss << this->evaluate_unary_tree(*unary_expression, while_statement.get_line_number(), stack_offset, max_offset).str();
+		while_ss << this->evaluate_unary_tree(*unary_expression, while_statement.get_line_number(), max_offset).str();
 	}
 	else if (while_statement.get_condition()->get_expression_type() == BINARY) {
 		Binary* binary_expression = dynamic_cast<Binary*>(while_statement.get_condition().get());
-		while_ss << this->evaluate_binary_tree(*binary_expression, while_statement.get_line_number(), stack_offset, max_offset).str();
+		while_ss << this->evaluate_binary_tree(*binary_expression, while_statement.get_line_number(), max_offset).str();
 	}
 	else {
 		throw CompilerException("Invalid expression type in conditional expression", 0, while_statement.get_line_number());
@@ -2254,26 +2253,25 @@ std::stringstream Compiler::while_loop(WhileLoop while_statement, size_t * stack
 	while_ss << "\t" << "breq " << while_label_name << ".done" << std::endl;
 
 	// increment our stack pointer to the end of the current stack frame
-	while_ss << this->move_sp_to_target_address(stack_offset, max_offset).str();
+	while_ss << this->move_sp_to_target_address( max_offset).str();
 	// increment the branch and scope numbers and update the scope name
 	this->current_scope += 1;
-	this->current_scope_name = parent_scope_name + "__WHILE_" + std::to_string(branch_number);
 
 	// put in the label for our loop
 	while_ss << while_label_name << ".loop:" << std::endl;
 
 	// compile the branch code
-	while_ss << this->compile_to_sinasm(*while_statement.get_branch().get(), this->current_scope, this->current_scope_name, stack_offset, max_offset).str();
+	while_ss << this->compile_to_sinasm(*while_statement.get_branch().get(), this->current_scope, this->current_scope_name, max_offset).str();
 
 	// unwind the stack and delete local variables
-	for (size_t i = *stack_offset; i > max_offset; i--) {
-		*stack_offset -= 1;
+	for (size_t i = this->stack_offset; i > max_offset; i--) {
+		this->stack_offset -= 1;
 		while_ss << "\t" << "incsp" << std::endl;
 	}
 	// we now need to delete all variables that were local to this if/else block -- iterate through the symbol table, removing the symbols in this local scope
 	std::vector<Symbol>::iterator it = this->symbol_table.symbols.begin();
 	while (it != this->symbol_table.symbols.end()) {
-		// only delete variables that are in the scope with the same name AND of the same level
+		// only delete variables that are in the current subscope
 		if ((it->scope_name == this->current_scope_name) && (it->scope_level == this->current_scope)) {
 			it = this->symbol_table.symbols.erase(it);	// delete the element at the iterator position, and continue without incrementing the iterator
 		}
@@ -2294,9 +2292,47 @@ std::stringstream Compiler::while_loop(WhileLoop while_statement, size_t * stack
 	return while_ss;
 }
 
+std::stringstream Compiler::return_value(ReturnStatement return_statement, size_t previous_offset, unsigned int line_number)
+{
+	/*
+	
+	If the value can be stored in registers, it will be; otherwise, it will be pushed to the stack (arrays and structs)
+	The return function is responsible for unwinding the stack
+
+	*/
+
+	std::stringstream return_ss;	// the stringstream that contains our compiled code
+
+	// get the return type
+	Type return_type = this->get_expression_data_type(return_statement.get_return_exp());
+
+	// Some types can be loaded into registers
+	if (return_type == INT || return_type == STRING || return_type == BOOL || return_type == FLOAT) {
+		return_ss << this->fetch_value(return_statement.get_return_exp()).str();	// get the expression to return
+
+		return_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;	// move A and B into X and Y to preserve their values
+		return_ss << this->move_sp_to_target_address(previous_offset).str();	// this allows us to use A to unwind the stack, if we need
+		return_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;
+	}
+	else if (return_type == VOID) {
+		return_ss << this->move_sp_to_target_address(previous_offset).str();
+	}
+	else if (return_type == ARRAY)  {
+		// TODO: use stack to return an array
+	}
+	else if (return_type == STRUCT) {
+		// TODO: use stack to return struct type once structs are implemented
+	}
+	else {
+		throw CompilerException("Cannot return an expression of the specified type", 0, line_number);
+	}
+
+	return return_ss;
+}
+
 
 // the actual compilation routine -- it is separate from our entry functions so that we can call it recursively (it is called by our entry functions)
-std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int local_scope_level, std::string local_scope_name, size_t* stack_offset, size_t max_offset) {
+std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int local_scope_level, std::string local_scope_name, size_t max_offset, size_t stack_frame_base) {
 	/*
 	
 	This function takes an AST and produces SINASM that will execute it, stored in a stringstream object.
@@ -2388,7 +2424,7 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 					sinasm_ss << "\t" << "loadb " << to_free->name << std::endl;
 				}
 				else {
-					sinasm_ss << "\t" << this->move_sp_to_target_address(stack_offset, to_free->stack_offset + 1).str();
+					sinasm_ss << "\t" << this->move_sp_to_target_address(to_free->stack_offset + 1).str();
 					sinasm_ss << "\t" << "plb" << std::endl;
 				}
 
@@ -2408,14 +2444,14 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 			Allocation* alloc_statement = dynamic_cast<Allocation*>(current_statement);
 
 			// compile an alloc statement
-			sinasm_ss << this->allocate(*alloc_statement, stack_offset, &max_offset).str();
+			sinasm_ss << this->allocate(*alloc_statement, &max_offset).str();
 		}
 		else if (statement_type == ASSIGNMENT) {
 			// dynamic cast to an Assignment type
 			Assignment* assign_statement = dynamic_cast<Assignment*>(current_statement);
 
-			if (stack_offset) {
-				sinasm_ss << this->assign(*assign_statement, stack_offset, max_offset).str();
+			if (max_offset) {
+				sinasm_ss << this->assign(*assign_statement, max_offset).str();
 			}
 			else {
 				sinasm_ss << this->assign(*assign_statement).str();
@@ -2425,16 +2461,18 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 			// dynamic cast to a Return type
 			ReturnStatement* return_statement = dynamic_cast<ReturnStatement*>(current_statement);
 
-			// TODO: write return routine
+			sinasm_ss << this->return_value(*return_statement, stack_frame_base, return_statement->get_line_number()).str();
+
+			// if the statement is not the last statement, display a warning stating the code is unreachable
+			if (statement_iter + 1 != AST.statements_list.end()) {
+				compiler_warning("Code after return statement is unreachable", return_statement->get_line_number());
+			}
 		}
 		else if (statement_type == IF_THEN_ELSE) {
 			IfThenElse ite_statement = *dynamic_cast<IfThenElse*>(current_statement);
 
-			if (stack_offset && max_offset) {
-				sinasm_ss << this->ite(ite_statement, stack_offset, max_offset).str();
-			}
-			else if (stack_offset) {
-				sinasm_ss << this->ite(ite_statement, stack_offset).str();
+			if (max_offset) {
+				sinasm_ss << this->ite(ite_statement, max_offset).str();
 			}
 			else {
 				sinasm_ss << this->ite(ite_statement).str();
@@ -2443,11 +2481,8 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 		else if (statement_type == WHILE_LOOP) {
 			WhileLoop* while_statement = dynamic_cast<WhileLoop*>(current_statement);
 
-			if (stack_offset && max_offset) {
-				sinasm_ss << this->while_loop(*while_statement, stack_offset, max_offset).str();
-			}
-			else if (stack_offset) {
-				sinasm_ss << this->while_loop(*while_statement, stack_offset).str();
+			if (max_offset) {
+				sinasm_ss << this->while_loop(*while_statement, max_offset).str();
 			}
 			else {
 				sinasm_ss << this->while_loop(*while_statement).str();
@@ -2463,8 +2498,8 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 			Call* call_statement = dynamic_cast<Call*>(current_statement);
 
 			// write the call to the function into the file
-			if (stack_offset) {
-				sinasm_ss << this->call(*call_statement, stack_offset, max_offset).str();
+			if (max_offset) {
+				sinasm_ss << this->call(*call_statement, max_offset).str();
 			}
 			else {
 				sinasm_ss << this->call(*call_statement).str();
@@ -2496,7 +2531,7 @@ void Compiler::produce_sina_file(std::string sina_filename, bool include_builtin
 		}
 
 		// write the body of the program
-		this->sina_file << this->compile_to_sinasm(this->AST, current_scope, current_scope_name, &this->stack_offset).str();
+		this->sina_file << this->compile_to_sinasm(this->AST, current_scope, current_scope_name).str();
 
 		// write a halt statement before our function definitions
 		this->sina_file << "\t" << "halt" << std::endl;
@@ -2530,7 +2565,7 @@ std::stringstream Compiler::compile_to_stringstream(bool include_builtins) {
 	}
 
 	// generate our ASM code
-	generated_asm << this->compile_to_sinasm(this->AST, current_scope, current_scope_name, &this->stack_offset).str();
+	generated_asm << this->compile_to_sinasm(this->AST, current_scope, current_scope_name).str();
 
 	// write a halt statement before our function definitions
 	generated_asm << "\t" << "halt" << std::endl;
@@ -2581,6 +2616,7 @@ Compiler::Compiler() {
 	this->branch_number = 0;
 	this->_DATA_PTR = 0;
 	this->object_file_names = {};
+	this->stack_offset = 0;
 }
 
 Compiler::~Compiler()

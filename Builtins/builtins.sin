@@ -26,6 +26,26 @@ def void memcpy(alloc ptr<int> source, alloc ptr<int> destination, alloc int siz
         decsp 
         decsp 
     }
+
+    // we must return a void 
+    return void;
+}
+
+
+////////////////////           EXPONENT         ////////////////////
+
+def int exp(alloc int base, alloc int exponent) {
+    // returns the expression base^exponent
+    
+    alloc int total: 1;
+    alloc int i: 0;
+
+    while (i < exponent) {
+        let total = total * base;
+        let i = i + 1;
+    }
+
+    return total;
 }
 
 
@@ -78,6 +98,9 @@ def void print(alloc string to_print) {
 
         ;; now we are done with our ASM
     }
+
+    // we must return a value of void
+    return void;
 }
 
 

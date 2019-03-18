@@ -163,13 +163,13 @@ void SINVM::execute_instruction(uint16_t opcode) {
 			bool a_signed = false;
 
 			// perform twos complement if we have signed arithmetic
-			if (multiplier & 0x8000 == 0x8000) {	// if the sign bit is set, perform twos complement
+			if ((multiplier & 0x8000) == 0x8000) {	// if the sign bit is set, perform twos complement
 				multiplier ^= 0xFFFF;	// flip all the bits
 				multiplier += 1;	// add one to finish twos complement
 
 				mult_signed = true;
 			}
-			if (this->REG_A & 0x8000 == 0x8000) {	// do again for REG_A
+			if ((this->REG_A & 0x8000) == 0x8000) {	// do again for REG_A
 				this->REG_A ^= 0xFFFF;
 				this->REG_A += 1;
 
@@ -179,17 +179,17 @@ void SINVM::execute_instruction(uint16_t opcode) {
 			// perform the multiplication
 			this->REG_A *= multiplier;
 
-			// if both numbers were signed, we don't need two's complement
-			if (mult_signed && a_signed) {
+			// if both numbers were signed, or if both numbers were not signed (sign bits are the same), we don't need two's complement
+			if (mult_signed == a_signed) {
 				// clear the N flag
 				this->clear_status_flag('N');
 
 				// check to see if we need to set the overflow flag
-				if (this->REG_A & 0x8000 == 0x8000) {	// if the sign bit is set (it shouldn't be)
+				if ((this->REG_A & 0x8000) == 0x8000) {	// if the sign bit is set (it shouldn't be)
 					this->set_status_flag('V');
 				}
 			}
-			// otherwise, perform twos complement on register A
+			// otherwise, if exactly one number was signed, perform twos complement on register A
 			else {
 				this->REG_A -= 1;
 				this->REG_A ^= 0xFFFF;
@@ -198,7 +198,7 @@ void SINVM::execute_instruction(uint16_t opcode) {
 				this->set_status_flag('N');
 
 				// if the sign flag is clear, set the overflow flag
-				if (this->REG_A & 0x8000 == 0) {
+				if ((this->REG_A & 0x8000) == 0) {
 					this->set_status_flag('V');
 				}
 			}

@@ -390,29 +390,24 @@ std::shared_ptr<Statement> Parser::parse_ite(lexeme current_lex)
 			if_branch = this->create_ast();
 			this->next();	// skip the closing curly brace
 
-			// First, check for an else clause
-			if (!this->is_at_end()) {
-				// Now, check to see if we have an 'else' clause
+			// Check for an else clause
+			if (!this->is_at_end() && this->current_token().value == "else") {
+				// if we have an else clause
+				this->next();
 				next = this->peek();
-				std::cout << std::endl;
-
-				if (next.value == "else") {
+				// Again, check for curlies
+				if (next.value == "{") {
 					this->next();
-					next = this->peek();
-					// Again, check for curlies
-					if (next.value == "{") {
-						this->next();
-						this->next();	// skip ahead to the first character of the statementblock
-						else_branch = this->create_ast();
-						this->next();	// skip the closing curly brace
+					this->next();	// skip ahead to the first character of the statementblock
+					else_branch = this->create_ast();
+					this->next();	// skip the closing curly brace
 
-						stmt = std::make_shared<IfThenElse>(condition, std::make_shared<StatementBlock>(if_branch), std::make_shared<StatementBlock>(else_branch));
-						stmt->set_line_number(current_lex.line_number);
-						return stmt;
-					}
-					else {
-						throw ParserException("Expected '{' after 'else' in conditional", 331, current_lex.line_number);
-					}
+					stmt = std::make_shared<IfThenElse>(condition, std::make_shared<StatementBlock>(if_branch), std::make_shared<StatementBlock>(else_branch));
+					stmt->set_line_number(current_lex.line_number);
+					return stmt;
+				}
+				else {
+					throw ParserException("Expected '{' after 'else' in conditional", 331, current_lex.line_number);
 				}
 			}
 			else {
@@ -765,14 +760,34 @@ std::shared_ptr<Statement> Parser::parse_assignment(lexeme current_lex)
 std::shared_ptr<Statement> Parser::parse_return(lexeme current_lex)
 {
 	std::shared_ptr<Statement> stmt;
-
 	this->next();	// go to the expression
 
-	// get the return expression
-	std::shared_ptr<Expression> return_exp = this->parse_expression();
-	// create a return statement from it and set the line number
-	stmt = std::make_shared<ReturnStatement>(return_exp);
-	stmt->set_line_number(current_lex.line_number);
+	// if the current token is a semicolon, return a Literal Void
+	if (this->current_token().value == ";" || this->current_token().value == "void") {
+		// if we have "void", we need to skip ahead to the semicolon
+		if (this->current_token().value == "void") {
+			if (this->peek().value == ";") {
+				this->next();
+			}
+			else {
+				// we expect a semicolon after the return statement; throw an exception if there isn't one
+				throw ParserException("Syntax error: expected ';'", 0, current_lex.line_number);
+			}
+		}
+
+		// craft the statement
+		stmt = std::make_shared<ReturnStatement>(std::make_shared<Literal>(VOID, "", NONE));
+		stmt->set_line_number(current_lex.line_number);
+	}
+	// otherwise, we must have an expression
+	else {
+		// get the return expression
+		std::shared_ptr<Expression> return_exp = this->parse_expression();
+
+		// create a return statement from it and set the line number
+		stmt = std::make_shared<ReturnStatement>(return_exp);
+		stmt->set_line_number(current_lex.line_number);
+	}
 
 	// return the statement
 	return stmt;

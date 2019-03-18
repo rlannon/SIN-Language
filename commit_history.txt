@@ -5,6 +5,16 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+3/18 commit to Compiler
+
+- Compiler functions no longer take 'size_t* stack_offset' as an argument; it is now a member variable of Compiler because it is used so often.
+- Void functions are now required to have a return statement -- this may either be "return" or "return void". The 'return' statement is what unwinds the stack, and so failing to include one will result in data corruption. The compiler will generate a warning if the last statement is a function is not a return statement, but not if no return statement is present.
+- Fixed a parser bug that didn't correctly parse conditionals without 'else' clauses
+- Fixed logical errors in the SINVM mult and div instructions. Previously, it was treating numbers as signed as long as ((A == signed ) && (B == signed)) evaluated to false; that means if the sign bit in both numbers were clear, it treated the result as signed (essentially because we were using OR logic, not XOR logic). This has been resolved; the result is treated as unsigned as long as the sign bits in both A and B match. If they do not, this means only one number is signed, so we have to perform two's complement.
+- Further, some boolean comparisons needed parens in the SINVM mult/div instructions due to precedence rules that were overlooked.
+
+--------------------------------------------------------------------------------------------
+
 3/17 commit (3) to Compiler
 
 - Changed the algorithm to evaluate binary trees to start evaluation from the left side rather than the right; this allows for string concatenation to be done (evaluating from right is fine for integer expressions, but once we start writing data in the buffer, it must be done from left to right if there are more than two or three strings to concatenate together).
