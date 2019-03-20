@@ -54,8 +54,6 @@ class Compiler
 	size_t strc_number;	// the next available number for a string constant
 	size_t branch_number;	// the next available number for a branch ID
 
-	int _DATA_PTR;	// holds the next memory address to use for a variable in the _DATA section
-
 	/* 
 	The following functions returns the type of the expression passed into it once fully evaluated
 	Note unary and binary trees are not fully parsed, only the first left-hand operand is returned -- any errors in type will be found once the tree or unary value is actually evaluated

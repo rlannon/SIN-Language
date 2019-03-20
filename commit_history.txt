@@ -5,6 +5,13 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+3/20 commit to Compiler
+
+- Fixed parser bug that did not properly parse if/else statements; when an else clause was present, caused an error. This was due to the parser checking whether the _current_ token was 'else', when it should have been using the 'peek' function.
+- Eliminated unused variable Compiler::_DATA_PTR -- its original purpose was to track where variables should go, but this is not the compiler's job and so it was never used.
+
+--------------------------------------------------------------------------------------------
+
 3/18 commit to Compiler
 
 - Compiler functions no longer take 'size_t* stack_offset' as an argument; it is now a member variable of Compiler because it is used so often.

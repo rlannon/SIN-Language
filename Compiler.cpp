@@ -2595,7 +2595,6 @@ Compiler::Compiler(std::istream& sin_file, uint8_t _wordsize, std::vector<std::s
 	this->strc_number = 0;
 	this->branch_number = 0;
 
-	this->_DATA_PTR = 0;	// our first address for variables is $00
 	this->AST_index = 0;	// we use "get_next_statement()" every time, which increments before returning; as such, start at -1 so we fetch the 0th item, not the 1st, when we first call the compilation function
 	
 	symbol_table = SymbolTable();
@@ -2614,7 +2613,6 @@ Compiler::Compiler() {
 	this->current_scope_name = "global";
 	this->strc_number = 0;
 	this->branch_number = 0;
-	this->_DATA_PTR = 0;
 	this->object_file_names = {};
 	this->stack_offset = 0;
 }

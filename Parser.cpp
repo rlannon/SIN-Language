@@ -391,7 +391,7 @@ std::shared_ptr<Statement> Parser::parse_ite(lexeme current_lex)
 			this->next();	// skip the closing curly brace
 
 			// Check for an else clause
-			if (!this->is_at_end() && this->current_token().value == "else") {
+			if (!this->is_at_end() && this->peek().value == "else") {
 				// if we have an else clause
 				this->next();
 				next = this->peek();
