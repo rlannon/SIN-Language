@@ -2,6 +2,15 @@ SOME_COMPILER_CONVENTIONS.TXT
 
 Includes information about naming schemes, global variables for every program, etc..
 
+SYMBOL NAMES:
+	To prevent symbol collisions, symbol names in SIN, like in other languages, get mangled by the compiler. The only mangling done by this compiler is:
+		- Prepend '__@SIN_' to all symbols -- this is done so no collisions can occurr in the generated assembly or with any user defined variables; '@' cannot occur in an identifier in SIN, but they must begin with an underscore for the assembler's recognition
+	Therefore, the code:
+		alloc int myInt;
+	would produce the following symbol:
+		__@SIN_myInt
+	
+
 BUILTINS:
 	All SIN files compiled to SINASM include the "builtins.sina" file, which is the implementation of all of SIN's built-in functions (such as 'print' or 'input'); it can be ommitted in compilation settings, but this is inadvisable as it would require hand-coded assembly using the 'asm' keyword for every single I/O instruction.
 

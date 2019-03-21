@@ -13,7 +13,7 @@ include "builtins-sinasm16.sina"
 ////////////////////            MEMCPY          ////////////////////
 
 def void memcpy(alloc ptr<int> source, alloc ptr<int> destination, alloc int size) {
-    // copies 'size' words at 'source' into 'destination'
+    // copies 'size' bytes at 'source' into 'destination'
 
     // arguments will automatically be pushed onto the stack, so we just need to call the asm function
 
@@ -26,6 +26,52 @@ def void memcpy(alloc ptr<int> source, alloc ptr<int> destination, alloc int siz
         decsp 
         decsp 
     }
+
+    // we must return a void 
+    return void;
+}
+
+
+////////////////////           EXPONENT         ////////////////////
+
+def int exp(alloc int base, alloc int exponent) {
+    // returns the expression base^exponent
+    
+    alloc int total: 1;
+    alloc int i: 0;
+
+    while (i < exponent) {
+        let total = total * base;
+        let i = i + 1;
+    }
+
+    return total;
+}
+
+
+////////////////////            STOI            ////////////////////
+
+def int stoi(alloc string to_convert) {
+    // converts a string of integer characters into the integer they are supposed to represent
+
+    //alloc int result: 0;
+    //alloc int string_index: 0;
+
+    //while (string_index < length(to_convert)) {
+    //    // TODO: implement STOI 
+    //    let string_index = string_index + 1;
+    //}
+    
+    return 0;
+}
+
+
+////////////////////            ITOS            ////////////////////
+
+def string itos(alloc int to_convert) {
+    // converts an integer into a string that represents that integer
+    // TODO: implement itos
+    return "123";
 }
 
 
@@ -52,6 +98,9 @@ def void print(alloc string to_print) {
 
         ;; now we are done with our ASM
     }
+
+    // we must return a value of void
+    return void;
 }
 
 
