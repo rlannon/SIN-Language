@@ -62,7 +62,7 @@ def int stoi(alloc string to_convert) {
     //    let string_index = string_index + 1;
     //}
     
-    //return 0;
+    return 0;
 }
 
 
