@@ -5,6 +5,24 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+3/21 commit to Compiler
+
+- Implemented default parameters in function definitions. Like C, they must be declared last, and all parameters are assigned as declared. That is to say, if you have three default arguments, and you pass in 2, it will assign the first two parameters and the third will be the default
+- Began reorganization process; code is now organized in a few separate folders:
+	- assemble: contains the Assembler class
+	- compile: contains:
+		- the Compiler class and its implementation; began splitting implementation across multiple files for readability
+		- the Symbol class and its implementation; since it's only used by the compiler, it is appropriate for it to be located here
+		- the SymbolTable class and its implementation; like Symbol, it is only used by the compiler, making it appropriate to keep with the compiler
+	- link: contains the Linker and LinkerSymbol classes
+	- parser: contains the SIN Lexer and Parser, including the Statement and Expression classes
+	- util: contains various files that are used by multiple classes within the toolchain. Included here are things like the SinObjectFile class, used by the assembler and linker, the BinaryIO library, our custom Exceptions, our Addressing Mode Constants, our VM Memory Map, and the Enumerated Types
+- Refactored functions. There were many bugs relating to the stack that have been fixed; previously, it was possible for the function to push function arguments to the wrong part of the stack and call the function so that the arguments pulled were not the ones intended for the function. This was a result of the compiler not updating its stack offset when functions were called or when values were retrieved for an argument.
+- The binary tree evaluation now updates the stack offset as well so that it can accurately fetch values from the stack. Without the updates to the stack offset and the max offset, it won't be able to reliably retrieve values from the stack. This is not a problem when dealing with global variables, but it becomes a problem once inside of a function, a conditional block, or a loop block
+- Updated comments
+
+--------------------------------------------------------------------------------------------
+
 3/20 commit to Compiler
 
 - Fixed parser bug that did not properly parse if/else statements; when an else clause was present, caused an error. This was due to the parser checking whether the _current_ token was 'else', when it should have been using the 'peek' function.

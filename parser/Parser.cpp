@@ -36,7 +36,7 @@ const int Parser::get_precedence(std::string symbol) {
 
 // Tells us whether we have run out of tokens
 bool Parser::is_at_end() {
-	if (this->position >= this->num_tokens - 2) {	// the last element is list.size() - 1;  if we are at list.size(), we have gone over
+	if (this->position >= this->num_tokens - 2 || this->num_tokens == 0) {	// the last element is list.size() - 1;  if we are at list.size(), we have gone over
 		return true;
 	}
 	else {
@@ -1035,12 +1035,21 @@ std::shared_ptr<Expression> Parser::parse_expression(size_t prec, std::string gr
 			if (current_lex.type == "ident") {
 				// Same code as is in statement
 				std::vector<std::shared_ptr<Expression>> args;
-				this->next();
-				this->next();
-				while (this->current_token().value != get_closing_grouping_symbol(grouping_symbol)) {
-					args.push_back(this->parse_expression());
-					this->next();
+
+				// make sure we have parens -- if not, throw an exception
+				if (this->peek().value != "(") {
+					throw ParserException("Syntax error; expected parens enclosing arguments in function call.", 0, current_lex.line_number);
 				}
+				else {
+
+					this->next();
+					this->next();
+					while (this->current_token().value != get_closing_grouping_symbol(grouping_symbol)) {
+						args.push_back(this->parse_expression());
+						this->next();
+					}
+				}
+
 				return std::make_shared<ValueReturningFunctionCall>(std::make_shared<LValue>(current_lex.value, "func"), args);
 			}
 			// the "@" character must be followed by an identifier

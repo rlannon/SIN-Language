@@ -5,7 +5,7 @@
 #include <tuple>
 #include <exception>
 
-#include "EnumeratedTypes.h"
+#include "../util/EnumeratedTypes.h"
 
 
 const exp_operator translate_operator(std::string op_string);	// given the string name for an exp_operator, returns that exp_operator

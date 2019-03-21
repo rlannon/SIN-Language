@@ -18,8 +18,8 @@ This file contains the definition for the SinObjectFile class, a class to hold a
 #include <iostream>
 #include <fstream>
 
-#include "BinaryIO.h"
-#include "LinkerSymbols.h"
+#include "BinaryIO/BinaryIO.h"
+#include "../link/LinkerSymbols.h"
 
 
 // to maintain the .sinc file standard

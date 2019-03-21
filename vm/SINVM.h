@@ -7,14 +7,14 @@
 #include <fstream>
 #include <iostream>
 
-#include "Assembler.h"
-#include "SinObjectFile.h"	// to load a .SINC file
-// #include "BinaryIO.h"	// included in Assembler.h, but commenting here to denote that functions from it are being used in this class
-// #include "OpcodeConstants.h"	// included in Assembler.h, but commenting here to serve as a reminder that the constants are used in this class so we don't need to use the hex values whenever referencing an instruction
-#include "VMMemoryMap.h"	// contains the constants that define where various blocks of memory begin and end in the VM
-//#include "AddressingModeConstants.h"	// included in Assembler.h
+#include "../assemble/Assembler.h"
+#include "../util/SinObjectFile.h"	// to load a .SINC file
+// #include "../util/BinaryIO/BinaryIO.h"	// included in Assembler.h, but commenting here to denote that functions from it are being used in this class
+// #include "../util/OpcodeConstants.h"	// included in Assembler.h, but commenting here to serve as a reminder that the constants are used in this class so we don't need to use the hex values whenever referencing an instruction
+#include "../util/VMMemoryMap.h"	// contains the constants that define where various blocks of memory begin and end in the VM
+//#include "../util/AddressingModeConstants.h"	// included in Assembler.h
 #include "DynamicObject.h"	// for use in allocating objects on the heap
-#include "Exceptions.h"	// for VMException
+#include "../util/Exceptions.h"	// for VMException
 
 /*
 	The virtual machine that will be responsible for interpreting SIN bytecode

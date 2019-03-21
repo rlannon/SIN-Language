@@ -1,0 +1,242 @@
+; BUILTINS-SINASM16.SINA
+
+; Copyright 2019 Riley Lannon
+; github.com/rlannon
+
+; 'builtins' is a library to implement all of SIN's built-in functions for compiled SIN in the SIN VM. 
+; This file is, by default, included in /all/ compiled SIN programs; removing this file from the include will remove access to SIN's I/O functions, and the 'asm' keyword will be required in order to do any sort of standard I/O in a SIN application.
+; Further, removing this file will remove the ability to do multiplication, division, and other calculations or functions that are more complex than a few instructions, as the implementations for those within the compiler are included in this file.
+
+; Note that this file is written for a VM of the following specifications:
+;   - SIN VM version 1
+;   - 16-bit mode
+; other versions of the versions will require different file versions if they have different memory layouts
+
+
+
+;;;;;;;;;;      Some Definitions    ;;;;;;;;;;
+
+@db __INPUT_BUFFER_START_ADDR ($1400)   ; defines where our input buffer should start
+@rs 2 __INPUT_LEN     ; a global variable holding the length of the last input
+@rs 2 __MEMCPY_SRC    ; the source location for memcpy 
+@rs 2 __MEMCPY_DEST   ; the destination for memcpy
+@rs 2 __BUFFER_PTR    ; a pointer variable for handling buffer memory 
+@rs 2 __TEMP_A        ; temp variables in the event we can't use the stack and we need all of the registers
+@rs 2 __TEMP_B        ; these are useful for string concatenation, for example
+
+
+
+;;;;;;;;;;      Initialization      ;;;;;;;;;;
+
+; This is the function to initialize the builtins library
+; It initializes all of the built-in environment variables by storing #$00 in them
+
+__builtins_init:
+    loada #$00
+    storea __INPUT_LEN
+    storea __MEMCPY_SRC
+    storea __MEMCPY_DEST
+    storea __BUFFER_PTR
+    storea __TEMP_A
+    storea __TEMP_B
+
+    rts
+
+
+
+;;;;;;;;;;          MEMCPY       ;;;;;;;;;;
+
+; This is the implementation of the memcpy function, and is often called by the compiler when doing memory transfers --
+; It is particularly useful with dynamic memory allocation
+
+__builtins_memcpy:
+    ; The arguments are pushed in the following order:
+    ;   source
+    ;   destination
+    ;   number of bytes
+    pla
+    tax     ; number of bytes goes into the x register 
+    plb     ; destination goes into the b register 
+    pla     ; source goes into the a register
+    
+    ; Store our source and destination in the appropriate variables 
+    storeb __MEMCPY_DEST 
+    storea __MEMCPY_SRC
+    
+    loady #$00  ; our memory index starts at 0
+.memcpy_loop:
+    loada S (__MEMCPY_SRC), y     ; load A with the value at the address indicated by __MEMCPY_SRC, indexed with Y 
+    storea S (__MEMCPY_DEST), y 
+    incy
+    decx
+    cmpx #$00 
+    brne .memcpy_loop
+
+    rts
+
+
+
+;;;;;;;;;;          EQUALS          ;;;;;;;;;;
+
+__builtins_equal:
+    cmpa B
+    breq .true
+.false:
+    loada #$00
+    jmp .done
+.true:
+    loada #$01
+.done:
+    rts
+
+
+
+;;;;;;;;;;          LESS            ;;;;;;;;;;
+
+__builtins_less:
+    cmpa B
+    brlt .true
+.false:
+    loada #$00
+    jmp .done 
+.true:
+    loada #$01
+.done:
+    rts
+
+
+
+;;;;;;;;;;      GREATER             ;;;;;;;;;;
+
+__builtins_greater:
+    cmpa B
+    brgt .true 
+.false:
+    loada #$00
+    jmp .done 
+.true:
+    loada #$01
+.done:
+    rts 
+
+
+
+;;;;;;;;;;       GT / EQUALS        ;;;;;;;;;;
+
+__builtins_gt_equal:
+    cmpa B
+    breq .true
+
+    cmpa B
+    brgt .true
+
+.false:
+    loada #$00
+    jmp .done
+
+.true:
+    loada #$01
+
+.done:
+    rts
+
+
+
+;;;;;;;;;;       LT / EQUALS        ;;;;;;;;;;
+
+__builtins_lt_equal:
+    cmpa B
+    breq .true
+
+    cmpa B
+    brlt .true
+
+.false:
+    loada #$00
+    jmp .done
+
+.true:
+    loada #$01
+
+.done:
+    rts
+
+
+
+;;;;;;;;;;      PRINT (STDOUT)      ;;;;;;;;;;
+
+;; SIN's built-in print function operates like so:
+;;  a) pulls the format specifier to A, and transfers that value to register X
+;;  b) pulls the address of the string literal from the stack, storing in B
+;;  c) pulls the length (in bytes) of the string literal from the stack, storing in A
+;;  d) if X is a valid format specifier:
+;;      1) uses a syscall instruction to print a number of bytes contained in A of data at the address contained in B, of the format given by the value in X
+;;        2) otherwise, prints an error and quits
+
+__builtins_print:
+    ;; arguments are the string length, the string address, and the format; length is always pushed first
+    ;; the stack pointer should point to the next word after our format -- we pull in reverse order
+    
+    pla
+    tax     ; store the format number in x
+    
+    plb     ; pull the address of the string literal
+    pla     ; pull the length
+    
+    cmpx #$14
+    breq .ascii
+    
+    cmpx #$15
+    breq .noformat
+
+.error:
+    ; if we arrive here, we have an invalid format specifier 
+    @db __PRINT_ERR_MSG_INVALIDFORMAT (**** Aborting Execution; error in: BUILTINS::PRINT: Invalid format specifier! Remember that the X register must contain the format specifier for the SYSCALL instruction! ****)
+    
+    loada #$AE
+    loadb #__PRINT_ERR_MSG_INVALIDFORMAT
+    
+    syscall #$14
+    
+    halt
+    
+.ascii:
+    syscall #$14    ; print the data to the screen
+    rts
+    
+.noformat:
+    syscall #$15
+    rts
+
+
+
+;;;;;;;;;;      INPUT (STDIN)      ;;;;;;;;;;
+
+;; the SIN built-in input function:
+;;  a) prints a given message
+;;  b) loads the address for the input buffer into the B register
+;;  c) uses a syscall instruction to get data from the standard input, storing it at the address in B onward
+;;  d) stores the length of what was read (in bytes) in the A register
+
+input:
+    ;; arguments are the string length, the string address, and the format
+    
+    ;; since we are just doing a print before our input, we can call the print function here
+    jsr print
+    
+    ;; now, our message has printed, we can read the data
+    
+    loadb __INPUT_BUFFER_START_ADDR     ; use the macro for our buffer start address
+    syscall #$13
+    
+    ; now, the A register holds the length (in bytes) of the data that was read -- so store it in our gobal variable
+    storea __INPUT_LEN
+    
+    ;; return from the subroutine
+    rts
+
+
+
+;;;;;;;;;;      FILE I/O        ;;;;;;;;;;
+
+; yet to be implemented...

@@ -24,8 +24,8 @@ The definition of the "Symbol" object, used in the Compiler's Symbol Table. Symb
 #include <vector>
 #include <tuple>
 
-#include "Statement.h"
-#include "EnumeratedTypes.h"
+#include "../parser/Statement.h"
+#include "../util/EnumeratedTypes.h"
 
 
 

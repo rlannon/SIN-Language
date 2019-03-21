@@ -13,7 +13,7 @@ The Compiler is a friend of this class; it is the only class which should be abl
 #pragma once
 
 #include "Symbol.h"
-#include "Exceptions.h"
+#include "../util/Exceptions.h"
 
 /*
 

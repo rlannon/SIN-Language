@@ -39,8 +39,8 @@ const size_t _RS_END = 0x03FF;
 const size_t _HEAP_START = 0x0400;
 const size_t _HEAP_MAX = 0x13FF;
 
-const size_t _INPUT_BUFFER_START = 0x1400;	// a ~1K buffer for input data
-const size_t _INPUT_BUFFER_MAX = 0x17FF;
+const size_t _STRING_BUFFER_START = 0x1400;	// a ~1K buffer for string and input data
+const size_t _STRING_BUFFER_MAX = 0x17FF;
 
 // the stack -- this is used for all of our scope data, and so it gets quite a bit of memory
 const size_t _STACK = 0x23FF;	// our stack grows downwards

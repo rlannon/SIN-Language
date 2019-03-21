@@ -1,7 +1,6 @@
 #include "Assembler.h"
 
 
-
 const bool is_standalone(int opcode) {
 	// returns true if the instruction is to be used without a value following
 	int i = 0;

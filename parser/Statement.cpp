@@ -16,12 +16,12 @@ stmt_type Statement::get_statement_type() {
 	return Statement::statement_type;
 }
 
-int Statement::get_line_number()
+unsigned int Statement::get_line_number()
 {
 	return this->line_number;
 }
 
-void Statement::set_line_number(int line_number)
+void Statement::set_line_number(unsigned int line_number)
 {
 	this->line_number = line_number;
 }
@@ -288,11 +288,11 @@ std::string Call::get_func_name() {
 	return this->func->getValue();
 }
 
-int Call::get_args_size() {
+size_t Call::get_args_size() {
 	return this->args.size();
 }
 
-std::shared_ptr<Expression> Call::get_arg(int num) {
+std::shared_ptr<Expression> Call::get_arg(size_t num) {
 	return this->args[num];
 }
 

@@ -10,9 +10,9 @@
 #include <list>
 
 // Our custom headers / classes
-#include "Parser.h"
-#include "Expression.h"
-#include "Statement.h"
+#include "parser/Parser.h"
+#include "parser/Expression.h"
+#include "parser/Statement.h"
 
 // TODO: add line numbers to interpreter error messages
 

@@ -17,7 +17,7 @@ Contains the "Statement" class an its child classes. Such objects are generated 
 #include <sstream>
 
 #include "Expression.h"
-#include "EnumeratedTypes.h"
+#include "../util/EnumeratedTypes.h"
 
 
 // Statement is the base class for all statements
@@ -27,16 +27,16 @@ class Statement
 protected:
 	stmt_type statement_type;	// tells us whether its an Allocation, and Assignment, an ITE...
 	std::string scope_name;	// to track the scope name under which the statement is being executed
-	int scope_level;	// to track the scope level
-	int line_number;	// the line number on which the first token of the statement can be found in the file
+	unsigned int scope_level;	// to track the scope level
+	unsigned int line_number;	// the line number on which the first token of the statement can be found in the file
 
 	// TODO: add scope information to statements in Parser
 
 public:
 	stmt_type get_statement_type();
 
-	int get_line_number();
-	void set_line_number(int line_number);
+	unsigned int get_line_number();
+	void set_line_number(unsigned int line_number);
 
 	Statement();
 	virtual ~Statement();
@@ -192,8 +192,8 @@ class Call : public Statement
 	std::vector<std::shared_ptr<Expression>> args;	// arguments to the function
 public:
 	std::string get_func_name();
-	int get_args_size();
-	std::shared_ptr<Expression> get_arg(int num);
+	size_t get_args_size();
+	std::shared_ptr<Expression> get_arg(size_t num);
 
 	Call(std::shared_ptr<LValue> func, std::vector<std::shared_ptr<Expression>> args);
 	Call();

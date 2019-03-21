@@ -10,12 +10,12 @@
 #include <regex>
 #include <sstream>	// to convert an integer into its hex equivalent string (e.g., convert decimal 10 into the string 'A' (10 in dexadecimal)
 
-#include "SinObjectFile.h"
+#include "../util/SinObjectFile.h"
 //#include "BinaryIO.h"	// all the functions used to write data to binary files (for SIN bytecode/compiled-SIN (.sinc) files) -- included in "LoadSINC.h"
-#include "OpcodeConstants.h"	// so we can reference opcodes by name rather than using hex values every time
-#include "AddressingModeConstants.h"	// so we can reference addressing modes by name
-#include "Exceptions.h"
-#include "LinkerSymbols.h"
+#include "../util/OpcodeConstants.h"	// so we can reference opcodes by name rather than using hex values every time
+#include "../util/AddressingModeConstants.h"	// so we can reference addressing modes by name
+#include "../util/Exceptions.h"
+#include "../link/LinkerSymbols.h"
 
 /*
 

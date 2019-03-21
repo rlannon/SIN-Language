@@ -17,8 +17,8 @@ This file contains the class for the linker, which takes SIN Object files (with 
 #include <iostream>
 #include <fstream>
 
-#include "SinObjectFile.h"
-#include "VMMemoryMap.h"	// the memory map for SINVM version 1
+#include "../util/SinObjectFile.h"
+#include "../util/VMMemoryMap.h"	// the memory map for SINVM version 1
 #include "LinkerSymbols.h"
 
 

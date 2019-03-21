@@ -24,11 +24,11 @@ For a documentation of the language, see either the doc folder in this project o
 //#include "Lexer.h"
 //#include "Parser.h"		// Lexer.h and Parser.h are also included in Interpreter.h, but commenting here to denote they are being used
 #include "Interpreter.h"
-#include "SINVM.h"
+#include "vm/SINVM.h"
 //#include "Assembler.h"	// included by SINVM.h, but included here as a comment to denote that those functions are being used in this file
-#include "Compiler.h"
-#include "Linker.h"
-#include "SinObjectFile.h"
+#include "compile/Compiler.h"
+#include "link/Linker.h"
+#include "util/SinObjectFile.h"
 
 
 
@@ -282,7 +282,7 @@ int main (int argc, char* argv[]) {
 
 					// if we want to produce an asm file
 					if (produce_asm_file) {
-						compiler->produce_sina_file(filename_no_extension + ".sina");
+						compiler->produce_sina_file(filename_no_extension + ".sina", include_builtins);
 
 						// create SinObjectFile objects for each item in object_file_names
 						for (std::vector<std::string>::iterator it = object_file_names.begin(); it != object_file_names.end(); it++) {
@@ -310,7 +310,7 @@ int main (int argc, char* argv[]) {
 					}
 					// if we just want to generate code and assemble it
 					else {
-						sina_code << compiler->compile_to_stringstream().str();
+						sina_code << compiler->compile_to_stringstream(include_builtins).str();
 						saved_stringstream = true;
 
 						// create object files for each object in object_file_names
