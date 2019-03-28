@@ -236,13 +236,21 @@ std::stringstream Compiler::call(Call call_statement, size_t max_offset) {
 
 						// now, push the value -- but it depends on type!
 						if (var_type == INT || var_type == FLOAT || var_type == BOOL || var_type == PTR) {
+							call_ss << "\t" << "tax" << std::endl;
+							call_ss << this->move_sp_to_target_address(max_offset).str();
 							call_ss << "\t" << "pha" << std::endl;
-							//this->stack_offset += 1;
+							this->stack_offset += 1;	// for some reason, this line breaks it -- but it works fine without it
+							max_offset += 1;
 						}
 						else if (var_type == STRING) {
-							// strings push length (A) then address (B)
-							call_ss << "\t" << "pha" << "\n\t" << "phb" << std::endl;
-							//this->stack_offset += 2;
+							call_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;
+							call_ss << this->move_sp_to_target_address(max_offset).str();
+							call_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;
+							// strings push length (A), then address (B)
+							call_ss << "\t" << "pha" << std::endl;
+							call_ss << "\t" << "phb" << std::endl;
+							this->stack_offset += 2;	// breaks it
+							max_offset += 2;
 						}
 						else if (var_type == ARRAY) {
 							// todo: implement arrays as function parameters
@@ -308,6 +316,7 @@ std::stringstream Compiler::return_value(ReturnStatement return_statement, size_
 	Type return_type = this->get_expression_data_type(return_statement.get_return_exp());
 
 	// Some types can be loaded into registers
+	// todo: should strings be returned in the string buffer? A and B would still be loaded with the length and address, but this way it would not need to live in the stack
 	if (return_type == INT || return_type == STRING || return_type == BOOL || return_type == FLOAT) {
 		return_ss << this->fetch_value(return_statement.get_return_exp()).str();	// get the expression to return
 

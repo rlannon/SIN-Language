@@ -5,6 +5,17 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+- Fixed a parser bug that caused the program to crash when a value returning function call was used as a part of another expression (not in all cases, but some, particularly when the call was followed by an operator). This was due to the value returning expression being returned without being passed into the maybe_binary function, as all expressions are supposed to. This change fixed the issue.
+- Fixed a bug in parsing if/else statements that caused bugs when one of the blocks was empty. This has been resolved through skipping closing curly braces only if the statement was not empty; otherwise, we eat through one too many tokens and get errors
+- Added stack fixes into function calls for default arguments
+- Fixed a bug in the SymbolTable::lookup(...) function that returned wrong symbols; if the symbol was found in a different scope, it might return it, which is incorrect (unless that scope is global). The first check (that avoids dereferencing a nullptr) was modified so that it checks to see if the symbol name and scope are the same, or if the symbol is in the global scope
+- Added stack tracking fixes in the string assignment function; the compiler now tracks where it should be in the stack as it does it (as it should) rather than updating it all at the end. Because the stack is used for it, the tracking mechanisms must be updated
+- ITE statements can now evaluate binary conditions (instead of literals and unaries only)
+- Added a fix to assignments through pointer dereferencing; the compiler previously attempted to fetch a dereferenced value twice, which resulted in any assignments to a dereferenced value becoming corrupted--rather than assigning the appropriate value, it would fetch the target address and then write that. This has been fixed; pointers (at least through two levels of dereferencing) work properly.
+	- Note, however, that if an _initial_ assignment is made through a pointer, it does not mark the variable being pointed to as defined, so references to it will generate compiler errors.
+
+--------------------------------------------------------------------------------------------
+
 3/21 commit to Compiler
 
 - Implemented default parameters in function definitions. Like C, they must be declared last, and all parameters are assigned as declared. That is to say, if you have three default arguments, and you pass in 2, it will assign the first two parameters and the third will be the default

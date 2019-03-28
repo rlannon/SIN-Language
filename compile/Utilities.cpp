@@ -531,7 +531,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		}
 
 		// make sure the variable was defined
-		if (variable_symbol->defined) {
+		//if (variable_symbol->defined) {
 			if (is_dynamic) {
 				// Getting the address of a dynamic variable is easy -- we simply move the stack pointer to the proper byte, pull the value into A
 
@@ -559,10 +559,10 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 					fetch_ss << "\t" << "tspa" << std::endl;
 				}
 			}
-		}
-		else {
-			throw CompilerException("Variable '" + variable_symbol->name + "' referenced before assignment", 0, line_number);
-		}
+		//}
+		//else {
+		//	throw CompilerException("Variable '" + variable_symbol->name + "' referenced before assignment", 0, line_number);
+		//}
 	}
 	else if (to_fetch->get_expression_type() == UNARY) {
 		Unary* unary_expression = dynamic_cast<Unary*>(to_fetch.get());
@@ -638,7 +638,7 @@ std::stringstream Compiler::move_sp_to_target_address(size_t target_offset, bool
 		if ((target_offset - this->stack_offset > 3) && !preserve_registers) {
 			// transfer the stack pointer to a, add the difference, and transfer it back
 			size_t difference = target_offset - this->stack_offset;
-			inc_ss << "\t" << "tspa" << "\t; increment sp by using transfers and addca" << std::endl;
+			inc_ss << "\t" << "tspa" << std::endl;
 			inc_ss << "\t" << "addca #$" << std::hex << difference << std::endl;
 			inc_ss << "\t" << "tasp" << std::endl;
 

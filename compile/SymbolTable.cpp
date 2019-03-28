@@ -84,9 +84,9 @@ Symbol* SymbolTable::lookup(std::string symbol_name, std::string scope_name, siz
 
 	while (symbols_iter != this->symbols.end()) {
 
-		// if our name is in the symbol table
-		if (symbol_name == symbols_iter->name) {
-			// the first time we find a symbol, let to_return point to that element
+		// if our name is in the symbol table in the current scope _or_ in the global scope
+		if (symbol_name == symbols_iter->name && (scope_name == symbols_iter->scope_name || symbols_iter->scope_name == "global")) {
+			// the first time we find a symbol, let to_return point to that element so that we don't dereference a nullptr
 			if (!found) {
 				found = true;
 				to_return = &*symbols_iter;

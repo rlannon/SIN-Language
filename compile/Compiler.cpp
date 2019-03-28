@@ -149,10 +149,14 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 	}
 
 	string_assign_ss << "\t" << "phb" << std::endl;	// push the address of the string pointer
+	this->stack_offset += 1;
+	max_offset += 1;
 
 	// add some padding to the string length
 	string_assign_ss << "\t" << "pha" << std::endl;
 	string_assign_ss << "\t" << "addca #$10" << std::endl;
+	this->stack_offset += 1;
+	max_offset += 1;
 
 	/*
 	
@@ -177,9 +181,11 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 		else {
 			// fetch the variable into B
 			size_t former_offset = this->stack_offset;
-			string_assign_ss << this->move_sp_to_target_address(target_symbol->stack_offset + 1);
+			string_assign_ss << this->move_sp_to_target_address(target_symbol->stack_offset + 1).str();
 			string_assign_ss << "\t" << "plb" << std::endl;
-			string_assign_ss << this->move_sp_to_target_address(former_offset);	// move the stack offset back
+			this->stack_offset -= 1;
+			max_offset -= 1;
+			string_assign_ss << this->move_sp_to_target_address(former_offset).str();	// move the stack offset back
 		}
 
 		// move the length back into register A and make the syscall
@@ -195,6 +201,8 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 
 		// get the original value of A -- the actual string length -- back
 		string_assign_ss << "\t" << "pla" << std::endl;
+		this->stack_offset -= 1;
+		max_offset -= 1;
 
 		// next, store the length in the heap
 		string_assign_ss << "\t" << "loady #$00" << std::endl;
@@ -206,13 +214,16 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 
 		// the address of the string variable has already been pushed, so the next thing to push is the address of our destination
 		string_assign_ss << "\t" << "pha" << std::endl;
+		this->stack_offset += 1;
+		max_offset += 1;
 
 		// next, we need to push the length of the string, which we will get from our pointer variable
 		string_assign_ss << "\t" << "loada (" << target_symbol->name << "), y" << std::endl;
 		string_assign_ss << "\t" << "pha" << std::endl;
+		this->stack_offset += 1;
+		max_offset += 1;
 	}
 	else {
-		this->stack_offset += 2;	// increment our stack offset so we can decrement correctly
 		size_t previous_offset = this->stack_offset;	// we want to ensure that we know exactly where to return back to
 
 		// now, we must move the stack pointer to the pointer variable; we don't need to set the retain registers flag because the addca method does not touch the B register and we have nothing valuable in A
@@ -229,6 +240,8 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 
 		// pull the length back into A and store it
 		string_assign_ss << "\t" << "pla" << std::endl;
+		this->stack_offset -= 1;
+		max_offset -= 1;
 
 		string_assign_ss << "\t" << "loady #$00" << std::endl;
 		string_assign_ss << "\t" << "storea ($" << std::hex << _LOCAL_DYNAMIC_POINTER << "), y" << std::endl;
@@ -239,10 +252,13 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 
 		// push the arguments to the stack
 		string_assign_ss << "\t" << "pha" << std::endl;
+		this->stack_offset += 1;
+		max_offset += 1;
+
 		string_assign_ss << "\t" << "loada ($" << std::hex << _LOCAL_DYNAMIC_POINTER << "), y" << std::endl;
 		string_assign_ss << "\t" << "pha" << std::endl;
-
-		this->stack_offset -= 2;
+		this->stack_offset += 1;
+		max_offset += 1;
 	}
 
 	// finally, invoke the subroutine
@@ -377,7 +393,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 				if (this->get_expression_data_type(initial_value) == to_allocate.type) {
 					allocation_ss << "@db " << to_allocate.name << " (0)" << std::endl;
 					// get the evaluated unary
-					this->evaluate_unary_tree(*initializer_unary, allocation_statement.get_line_number(), *max_offset);	// evaluate the unary expression
+					this->evaluate_unary_tree(*initializer_unary, allocation_statement.get_line_number(), *max_offset).str();	// evaluate the unary expression
 					allocation_ss << "storea " << to_allocate.name << std::endl;
 				}
 				else {
@@ -389,7 +405,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 				// if the types match
 				if (this->get_expression_data_type(initial_value) == to_allocate.type) {
 					allocation_ss << "@db " << to_allocate.name << " (0)";
-					this->evaluate_binary_tree(*initializer_binary, allocation_statement.get_line_number(), *max_offset);
+					this->evaluate_binary_tree(*initializer_binary, allocation_statement.get_line_number(), *max_offset).str();
 					allocation_ss << "storea " << to_allocate.name << std::endl;
 				}
 				else {
@@ -561,6 +577,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 		throw CompilerException("Cannot use expression of this type in lvalue!", 0, assignment_statement.get_line_number());
 	}
 
+	// look for the symbol of the specified name in the symbol table
 	if (this->symbol_table.is_in_symbol_table(var_name, this->current_scope_name)) {
 		// get the symbol information
 		Symbol* fetched = this->symbol_table.lookup(var_name, this->current_scope_name, this->current_scope);
@@ -663,8 +680,9 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 						}
 						else {
 							// y register will be zero if lvalue_exp_type is 'DEREFERENCED'
-							Dereferenced* dereferenced_value = dynamic_cast<Dereferenced*>(assignment_statement.get_lvalue().get());
-							assignment_ss << this->fetch_value(dereferenced_value->get_ptr_shared(), assignment_statement.get_line_number()).str();
+							//Dereferenced* dereferenced_value = dynamic_cast<Dereferenced*>(assignment_statement.get_lvalue().get());
+							//assignment_ss << this->fetch_value(dereferenced_value->get_ptr_shared(), assignment_statement.get_line_number()).str();
+							// commented out these lines -- we should have already fetched the proper values
 							assignment_ss << "\t" << "storea (" << var_name << ", y)" << std::endl;
 						}
 					}
@@ -763,6 +781,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 			}
 		}
 	}
+	// if we can't find the symbol table, throw an exception
 	else {
 		throw CompilerException("Could not find '" + var_name + "' in symbol table", 0, assignment_statement.get_line_number());
 	}
@@ -829,6 +848,8 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t max_offset)
 	}
 	else if (ite_statement.get_condition()->get_expression_type() == BINARY) {
 		// TODO: evaluate binary conditions
+		Binary* binary_condition = dynamic_cast<Binary*>(ite_statement.get_condition().get());	// cast to Binary statement
+		ite_ss << this->evaluate_binary_tree(*binary_condition, ite_statement.get_line_number(), max_offset).str();
 	}
 	else {
 		throw CompilerException("Invalid expression type in conditional statement!", 0, ite_statement.get_line_number());

@@ -72,7 +72,13 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 	}
 
 	// By this point, 'left' is not a binary expression; evaluate the left hand side of the tree
-	if (left_exp->get_expression_type() == LVALUE || left_exp->get_expression_type() == INDEXED || left_exp->get_expression_type() == LITERAL || left_exp->get_expression_type() == DEREFERENCED) {
+	if (left_exp->get_expression_type() == LVALUE || left_exp->get_expression_type() == INDEXED || left_exp->get_expression_type() == LITERAL || left_exp->get_expression_type() == DEREFERENCED || left_exp->get_expression_type() == VALUE_RETURNING_CALL) {
+		/*
+		
+		Variables, indexed values, literals, dereferenced values, and value returning functions call be handled with fetch_value
+		
+		*/
+		
 		bool get_sub = (left_exp->get_expression_type() == INDEXED);
 		left_type = this->get_expression_data_type(bin_exp.get_left(), get_sub);
 
@@ -148,7 +154,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 		Type right_type = this->get_expression_data_type(current_tree.get_right());
 
 		if (right_type == left_type) {
-			if (right_exp->get_expression_type() == LVALUE || right_exp->get_expression_type() == LITERAL || right_exp->get_expression_type() == DEREFERENCED) {
+			if (right_exp->get_expression_type() == LVALUE || right_exp->get_expression_type() == LITERAL || right_exp->get_expression_type() == DEREFERENCED || right_exp->get_expression_type() == VALUE_RETURNING_CALL) {
 				binary_ss << this->fetch_value(bin_exp.get_right(), line_number, max_offset).str();
 			}
 			else if (right_exp->get_expression_type() == UNARY) {

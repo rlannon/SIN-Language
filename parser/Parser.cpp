@@ -388,7 +388,12 @@ std::shared_ptr<Statement> Parser::parse_ite(lexeme current_lex)
 			this->next();
 			this->next();	// skip ahead to the first character of the statementblock
 			if_branch = this->create_ast();
-			this->next();	// skip the closing curly brace
+
+			// if we have an empty 'if' clause, we will be on the curly brace; only skip the curly brace if the branch isn't empty
+			if (if_branch.statements_list.size() > 0) {
+				// skip the closing curly brace
+				this->next();
+			}
 
 			// Check for an else clause
 			if (!this->is_at_end() && this->peek().value == "else") {
@@ -400,7 +405,11 @@ std::shared_ptr<Statement> Parser::parse_ite(lexeme current_lex)
 					this->next();
 					this->next();	// skip ahead to the first character of the statementblock
 					else_branch = this->create_ast();
-					this->next();	// skip the closing curly brace
+
+					// if the 'else' clause is empty, the current token will be the curly brace, so we don't need to eat it if the statement list wasn't empty
+					if (else_branch.statements_list.size() > 0) {
+						this->next();	// skip the closing curly brace
+					}
 
 					stmt = std::make_shared<IfThenElse>(condition, std::make_shared<StatementBlock>(if_branch), std::make_shared<StatementBlock>(else_branch));
 					stmt->set_line_number(current_lex.line_number);
@@ -1050,7 +1059,8 @@ std::shared_ptr<Expression> Parser::parse_expression(size_t prec, std::string gr
 					}
 				}
 
-				return std::make_shared<ValueReturningFunctionCall>(std::make_shared<LValue>(current_lex.value, "func"), args);
+				// assemble the value returning call so we can pass into maybe_binary
+				left = std::make_shared<ValueReturningFunctionCall>(std::make_shared<LValue>(current_lex.value, "func"), args);
 			}
 			// the "@" character must be followed by an identifier
 			else {
