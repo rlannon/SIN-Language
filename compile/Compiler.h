@@ -21,6 +21,7 @@ This class defines the SIN Compiler; given an AST produced by the Parser, will p
 #include "SymbolTable.h"	// for our symbol table object
 #include "../assemble/Assembler.h"	// so we can assemble our compiled files into .sinc files
 #include "../util/Exceptions.h"	// so that we can use our custom exceptions
+#include "../util/DataWidths.h"	// for maintainability and avoiding obfuscation, avoid hard coding data widths where possible
 
 
 class Compiler
@@ -88,8 +89,6 @@ class Compiler
 public:
 	void produce_sina_file(std::string sina_filename, bool include_builtins = true);	// opens a file and calls the actual compilation routine; in a separate function so that we can use recursion
 	std::stringstream compile_to_stringstream(bool include_builtins = true);
-
-	// TODO: add a compiler error class so we can automatically print out error messages with codes and line numbers
 
 	Compiler(std::istream& sin_file, uint8_t _wordsize, std::vector<std::string>* object_file_names, std::vector<std::string>* included_libraries, bool include_builtins = true);	// the compiler is initialized using a file, and it will lex and parse it; the parameter 'include_builtins' will default to 'true', but we will be able to supress it
 	Compiler();

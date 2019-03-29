@@ -302,7 +302,6 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 			fetch_ss << "\t" << "loada #$" << std::hex << literal_expression->get_value().length() << std::endl;
 		}
 	}
-	// TODO: fetch other types like lvalues, dereferenced values, etc.
 	else if (to_fetch->get_expression_type() == LVALUE || to_fetch->get_expression_type() == INDEXED) {
 		// get the lvalue's symbol data
 		Symbol* variable_symbol;
@@ -500,7 +499,6 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		}
 	}
 	else if (to_fetch->get_expression_type() == ADDRESS_OF) {
-		// TODO: get the address of a variable
 		// dynamic cast to AddressOf and get the variable's symbol from the symbol table
 		AddressOf* address_of_exp = dynamic_cast<AddressOf*>(to_fetch.get());	// the AddressOf expression
 		LValue address_to_get = address_of_exp->get_target();	// the actual LValue of the address we want
@@ -588,10 +586,10 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 
 		// now, the returned value will be in the registers; if the type is of variable length (array or struct), handle it separately because it is on the stack
 		if (function_symbol->type == ARRAY) {
-			// TODO: implement structs
+			// TODO: implement arrays
 		}
 		else if (function_symbol->type == STRUCT) {
-			// TODO: implement arrays
+			// TODO: implement structs
 		}
 		else if (function_symbol->type == VOID || function_symbol->type == NONE) {
 			// we cannot use void functions as value returning types
@@ -639,7 +637,7 @@ std::stringstream Compiler::move_sp_to_target_address(size_t target_offset, bool
 			// transfer the stack pointer to a, add the difference, and transfer it back
 			size_t difference = target_offset - this->stack_offset;
 			inc_ss << "\t" << "tspa" << std::endl;
-			inc_ss << "\t" << "addca #$" << std::hex << difference << std::endl;
+			inc_ss << "\t" << "subca #$" << std::hex << WORD_W * difference << std::endl;	// advance by the difference between them in _words_, so multiply the difference by WORD_W and add it to the SP
 			inc_ss << "\t" << "tasp" << std::endl;
 
 			this->stack_offset = target_offset;
@@ -654,11 +652,12 @@ std::stringstream Compiler::move_sp_to_target_address(size_t target_offset, bool
 	else if (this->stack_offset > target_offset) {
 		// do the reverse here of what we did above
 		if ((this->stack_offset - target_offset > 3) && !preserve_registers) {
-			// subtract the difference between the stack offset and the target offset from the stack offset
 			size_t difference = this->stack_offset - target_offset;
 			inc_ss << "\t" << "tspa" << std::endl;
-			inc_ss << "\t" << "subca #$" << std::hex << difference << std::endl;
-			inc_ss << "\t" << "tspa" << std::endl;
+			inc_ss << "\t" << "addca #$" << std::hex << WORD_W * difference << std::endl;
+			inc_ss << "\t" << "tasp" << std::endl;
+
+			this->stack_offset = target_offset;
 		}
 		else {
 			while (this->stack_offset > target_offset) {
@@ -666,9 +665,6 @@ std::stringstream Compiler::move_sp_to_target_address(size_t target_offset, bool
 				this->stack_offset -= 1;
 			}
 		}
-	}
-	else {
-		// the values must be equal, so do nothing
 	}
 
 	return inc_ss;

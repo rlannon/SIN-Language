@@ -193,8 +193,6 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 		string_assign_ss << "\t" << "syscall #$22" << std::endl;
 	}
 
-	// TODO: we need to ensure that we don't allocate new memory every time we have a string assignment, but rather only reallocate memory for the object when it is necessary
-
 	// Global and local variables must be handled differently
 	if (target_symbol->scope_level == 0) {
 		string_assign_ss << "\t" << "storeb " << target_symbol->name << std::endl;	// store the address in our pointer variable
@@ -263,6 +261,9 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 
 	// finally, invoke the subroutine
 	string_assign_ss << "\t" << "jsr __builtins_memcpy" << std::endl;
+
+	// move the stack offset back -- the memcpy routine pulls thrice from the stack
+	this->stack_offset -= 3;
 
 	// reset the pointers we used for string assignment
 	string_assign_ss << "\t" << "loada #$00" << std::endl;
@@ -368,7 +369,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 							allocation_ss << "\t" << "phb" << "\n\t" << "loadb #" << to_allocate.name << "\n\t" << "phb" << "\n\t" << "pha" << std::endl;
 							allocation_ss << "\t" << "jsr __builtins_memcpy" << std::endl;
 						}
-						// TODO: add the array type here as well, once that is implemented in SIN
+						// todo: add initializer-lists for arrays
 						else {
 							// now, use fetch_value to get the value of our lvalue and store the value in A at the constant we have defined
 							allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), *max_offset).str();
@@ -412,7 +413,6 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 					throw CompilerException("Types do not match", 0, allocation_statement.get_line_number());
 				}
 			}
-			// TODO: add other const initializer expressions
 		}
 		else {
 			// this error should have been caught by the parser, but just to be safe...
@@ -428,11 +428,11 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 		if (to_allocate.type == ARRAY) {
 			// arrays may only contain the integral types; you can have an array of pointers to arrays or structs, but not of arrays or structs themselves (at this time)
 			if (to_allocate.sub_type == ARRAY || to_allocate.sub_type == STRUCT) {
-				throw CompilerException("Arrays with subtype 'array' or 'struct' are not supported in SIN at this time", 0, allocation_statement.get_line_number());
+				throw CompilerException("Arrays with subtype 'array' or 'struct' are not supported", 0, allocation_statement.get_line_number());
 			}
 			else {
 				// reserve one word for each element
-				size_t num_bytes = to_allocate.array_length * 2;
+				size_t num_bytes = to_allocate.array_length * WORD_W;	// number of bytes = number of elements * number of bytes per word
 				allocation_ss << "@rs " << std::dec << num_bytes << " " << to_allocate.name << std::endl;	// since we have been using std::hex, switch back to decimal mode here to be safe
 			}
 		}
@@ -441,7 +441,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 		}
 		else {
 			// reserve the variable itself first -- it may be a pointer to the variable if we need to dynamically allocate it
-			allocation_ss << "@rs 2 " << to_allocate.name << std::endl;	// syntax is "@rs macro_name"
+			allocation_ss << "@rs " << WORD_W  << " " << to_allocate.name << std::endl;
 
 			// if the variable type is anything with a variable length, we need a different mechanism for handling them
 			if (to_allocate.type == STRING) {
@@ -466,8 +466,8 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 
 	// handle all non-const local variables
 	else {
-		// make sure we have valid pointers
-		if (max_offset != nullptr) {
+		// make sure we have a valid max_offset pointer
+		if (max_offset) {
 			// our local variables will use the stack; they will directly modify the list of variable names and the stack offset
 			allocation_ss << this->move_sp_to_target_address(*max_offset).str();	// make sure the stack pointer is at the end of the stack frame before allocating a local variable (so we don't overwrite anything)
 			
@@ -480,7 +480,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 				if (is_dynamic) {
 					// we don't need to check if the variable has been freed when we are allocating it
 					if (to_allocate.type == STRING) {
-						// allocate a word on the stack for the pointer
+						// allocate a word on the stack for the pointer to the string
 						this->stack_offset += 1;
 						*max_offset += 1;
 						allocation_ss << "\t" << "decsp" << std::endl;
@@ -505,7 +505,6 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 			}
 			else {
 				// update the stack offset -- all types will increment the stack offset by one word; allocate space in the stack and increase our offset
-				// Note that we push 0x00 onto the stack -- this is so that if we try to dereference the pointer there, it's truly a null pointer (the memory is not guaranteed to be initialized to 0x00 except at location 0x00)
 				if (to_allocate.type == ARRAY) {
 					allocation_ss << "\t" << "loada #$00" << std::endl;
 					allocation_ss << "\t" << "loadx #$" << std::hex << to_allocate.array_length << std::endl;
@@ -520,8 +519,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 					(*max_offset) += to_allocate.array_length;
 				}
 				else {
-					allocation_ss << "\t" << "loada #$00" << std::endl;
-					allocation_ss << "\t" << "pha" << std::endl;
+					allocation_ss << "\t" << "decsp" << std::endl;
 					this->stack_offset += 1;
 					(*max_offset) += 1;
 				}
@@ -541,8 +539,6 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_offset) {
 
 	exp_type lvalue_exp_type = assignment_statement.get_lvalue()->get_expression_type();
-
-	// TODO: add support for double/triple/quadruple/etc. ref pointers
 
 	// create a stringstream to which we will write write our generated code
 	std::stringstream assignment_ss;
@@ -636,6 +632,10 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 							assignment_ss << this->string_assignment(fetched, assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str();
 						}
 					}
+					// string arrays will be handled here as well
+					else if (fetched->type == ARRAY && fetched->sub_type == STRING) {
+						std::cout << std::endl;
+					}
 					// TODO: add support for other dynamic types
 				}
 				// automatic memory is easier to handle than dynamic
@@ -656,7 +656,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 							// get the value of the index and push it onto the stack
 							assignment_ss << this->fetch_value(assignment_index, assignment_statement.get_line_number(), max_offset).str();
 							assignment_ss << "\t" << "pha" << std::endl;
-							
+
 							// get the rvalue
 							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str() << std::endl;
 							assignment_ss << "\t" << "tax" << std::endl;
@@ -664,13 +664,13 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 
 							// we have to use an LSL because we need to multiply by 2 (the size of a word), but we want to shift in 0
 							assignment_ss << "\t" << "lsl a" << std::endl;
-							
+
 							// finish getting the index
 							assignment_ss << "\t" << "tay" << std::endl;
 							assignment_ss << "\t" << "txa" << std::endl;
 						}
 						else {
-							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str() << std::endl;	// TODO: add max_offset in the fetch in assignment?
+							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str() << std::endl;
 							assignment_ss << "\t" << "loady #$00" << std::endl;
 						}
 
@@ -847,7 +847,6 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t max_offset)
 		ite_ss << this->evaluate_unary_tree(*unary_condition, ite_statement.get_line_number()).str();	// put the evaluated unary expression in A
 	}
 	else if (ite_statement.get_condition()->get_expression_type() == BINARY) {
-		// TODO: evaluate binary conditions
 		Binary* binary_condition = dynamic_cast<Binary*>(ite_statement.get_condition().get());	// cast to Binary statement
 		ite_ss << this->evaluate_binary_tree(*binary_condition, ite_statement.get_line_number(), max_offset).str();
 	}

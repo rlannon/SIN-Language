@@ -5,6 +5,23 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+3/29 commit to Compiler
+
+- Updated README.md
+- Removed some TODO comments that have already been addressed (or are otherwise no longer necessary) and updated some other existing ones
+- Added "DataWidths.h", to allow references to the widths of different data types (in bytes) without hard-coding them; this makes the code more maintainable and more readable
+- Updated the Compiler::string_assignment(...) function to modify stack offsets properly; previously, it was not adjusting the stack offset after calling __builtins_memcpy, which makes three pulls from the stack. As such, the compiler _thought_ the offset was three greater than it actually was, resulting in stack underflows when the .sml file was executed. This has been fixed.
+- Fixed many bugs in Compiler::move_sp_to_target_address(...):
+	- Fixed a typo that moved the stack pointer to A, adjusted it, and then failed to move it back, resulting in the stack pointer never being moved, which caused corruption with local variables. This has been fixed.
+	- One of the conditions in the aforementioned function did not update the stack offset, which resulted in further stack data corruption. This has been fixed.
+	- When the difference between locations the SP needs to move is more than three words, it uses the TSPA/ADDCA/TASP instructions; there were a few issues with the way this was being done before:
+		- It was previously moving the SP by _bytes_ when it should have been moving it by _words_, which resulted in stack data corruption. This has been resolved.
+		- It was adding and subtracting incorrectly -- although we were using INCSP and DECSP correctly, we were inverting the uses of ADDCA and SUBCA. This has been resolved
+
+--------------------------------------------------------------------------------------------
+
+3/27 commit to Compiler
+
 - Fixed a parser bug that caused the program to crash when a value returning function call was used as a part of another expression (not in all cases, but some, particularly when the call was followed by an operator). This was due to the value returning expression being returned without being passed into the maybe_binary function, as all expressions are supposed to. This change fixed the issue.
 - Fixed a bug in parsing if/else statements that caused bugs when one of the blocks was empty. This has been resolved through skipping closing curly braces only if the statement was not empty; otherwise, we eat through one too many tokens and get errors
 - Added stack fixes into function calls for default arguments
