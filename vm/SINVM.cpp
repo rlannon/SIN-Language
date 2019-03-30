@@ -569,7 +569,10 @@ void SINVM::execute_instruction(uint16_t opcode) {
 				this->allocate_heap_memory();
 			}
 			else if (syscall_number == 0x22) {
-				this->reallocate_heap_memory();
+				this->reallocate_heap_memory();	// reallocates heap memory, returning NULL if the object isn't found
+			}
+			else if (syscall_number == 0x23) {
+				this->reallocate_heap_memory(false);	// reallocates heap memory, creating a new object if one isn't found
 			}
 			// if it is not a valid syscall number, throw an error
 			else {
@@ -1258,12 +1261,15 @@ void SINVM::allocate_heap_memory()
 	}
 }
 
-void SINVM::reallocate_heap_memory()
+void SINVM::reallocate_heap_memory(bool error_if_not_found)
 {
 	/*
 	
 	Attempts to reallocate the dynamic object at the location specified by REG_B with the number of bytes in REG_A.
 	If there is room for the new size where the object is currently allocated, then it will leave it where it is and simply change the size in the VM. If not, it will try to find a new place. If it can't reallocate the memory, it will load REG_A and REG_B with 0x00.
+	If the VM cannot find an object at the location specified, it will:
+		- Load the registers with 0x00 and set the D flag if 'error_if_not_found' is true
+		- Allocate a new heap object if 'error_if_not_found' is false
 
 	*/
 	
@@ -1326,9 +1332,15 @@ void SINVM::reallocate_heap_memory()
 		}
 	}
 	else {
-		this->REG_A = 0x00;	// we can't find the object, so set the registers to 0x00
-		this->REG_B = 0x00;
-		this->set_status_flag('D');
+		// depending on our parameter, the SINVM will behave differently -- load registers with NULL vs allocating a new object
+		if (error_if_not_found) {
+			this->REG_A = 0x00;	// we can't find the object, so set the registers to 0x00
+			this->REG_B = 0x00;
+			this->set_status_flag('D');
+		}
+		else {
+			this->allocate_heap_memory();	// allocate heap memory for the object if we can't find it
+		}
 	}
 }
 

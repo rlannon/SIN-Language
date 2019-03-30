@@ -5,6 +5,13 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+3/30 commit to Compiler
+
+- Added support for string arrays in both local and global scopes
+- Added a "safe reallocation" syscall in the SINVM that will allocate a new dynamic object if it cannot find the dynamic object specified; this is used in string arrays, but nothing else at this point
+
+--------------------------------------------------------------------------------------------
+
 3/29 commit to Compiler
 
 - Updated README.md

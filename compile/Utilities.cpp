@@ -316,6 +316,8 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 
 			// now, use fetch_value to get the index value in the A register
 			fetch_ss << this->fetch_value(variable_to_get->get_index_value(), line_number, max_offset).str();
+			// move the value into the Y register to preserve it if we need the A register
+			fetch_ss << "\t" << "tay" << std::endl;
 		}
 
 		// now that the variable has been fetched, check its qualities
@@ -356,7 +358,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 						throw CompilerException("Cannot reference dynamic memory that has already been freed", 0, line_number);
 					}
 					else {
-						// if we are indexing
+						// if we are indexing a string
 						if (to_fetch->get_expression_type() == INDEXED) {
 							// transfer the index offset from A to B
 							fetch_ss << "\t" << "tab" << std::endl;
@@ -389,10 +391,25 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 				else {
 					// if we are loading an indexed value, index it
 					if (to_fetch->get_expression_type() == INDEXED) {
-						// multiply the index offset by 2 with lsl and transfer it from A to Y
-						fetch_ss << "\t" << "lsl a" << std::endl;
-						fetch_ss << "\t" << "tay" << std::endl;
-						fetch_ss << "\t" << "loada " << variable_symbol->name << ", y" << std::endl;
+						// check to see if we have an array of strings or of something else
+						if (variable_symbol->sub_type == STRING) {
+							// multiply the index offset by 2 with lsl and transfer to Y
+							fetch_ss << "\t" << "lsl a" << std::endl;
+							fetch_ss << "\t" << "tay" << std::endl;
+
+							// use indexed indirect addressing to get the length
+							fetch_ss << "\t" << "loada (" << variable_symbol->name << ", y)" << std::endl;
+
+							// get the value at "name, y" -- this is the address of the dynamic object; increment it by 2 (to skip the length)
+							fetch_ss << "\t" << "loadb " << variable_symbol->name << ", y" << std::endl;
+							fetch_ss << "\t" << "incb" << "\n\t" << "incb" << std::endl;
+						}
+						else {
+							// multiply the index offset by 2 with lsl and transfer it from A to Y
+							fetch_ss << "\t" << "lsl a" << std::endl;
+							fetch_ss << "\t" << "tay" << std::endl;
+							fetch_ss << "\t" << "loada " << variable_symbol->name << ", y" << std::endl;
+						}
 					}
 					else {
 						fetch_ss << "\t" << "loada " << variable_symbol->name << std::endl;
@@ -402,6 +419,10 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 			// if it's a local variable, use the stack
 			else {
 				fetch_ss << this->move_sp_to_target_address(variable_symbol->stack_offset + 1).str();
+
+				if (to_fetch->get_expression_type() == INDEXED) {
+					fetch_ss << "\t" << "tya" << std::endl;	// move the index value back into A after we move the stack pointer, if it's indexed
+				}
 
 				// now, the offsets are the same; get the variable's value
 				if (is_dynamic) {
@@ -457,7 +478,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 
 						// get the value
 						fetch_ss << "\t" << "pla" << std::endl;
-						fetch_ss << "\t" << "decsp" << std::endl;
+						this->stack_offset -= 1;
 						fetch_ss << "\t" << "tax" << std::endl;
 
 						// re-adjust the SP
@@ -465,6 +486,15 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 						fetch_ss << "\t" << "addca b" << std::endl;
 						fetch_ss << "\t" << "tasp" << std::endl;
 						fetch_ss << "\t" << "txa" << std::endl;
+
+						// if we have a string, we need to get the length and address into A and B
+						if (variable_symbol->sub_type == STRING) {
+							// right now, A contains the address of the dynamic object; transfer to Y and use indirect addressing to load the value
+							fetch_ss << "\t" << "tay" << std::endl;
+							fetch_ss << "\t" << "tab" << std::endl;	// now the B register contains the address as well
+							fetch_ss << "\t" << "loada $00, y" << std::endl;	// use indexed addressing to get the value at the address indicated by the Y register; note we don't need the indirect mode for this, as we don't want the value at the address indicated by "$00, y", we want the value at "$00, y"
+							fetch_ss << "\t" << "incb" << "\n\t" << "incb" << std::endl;	// increment the address by 2, skipping the length
+						}
 					}
 					else {
 						// pull the value into the A register

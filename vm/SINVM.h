@@ -93,7 +93,7 @@ class SINVM
 	// syscall utility
 	void free_heap_memory();
 	void allocate_heap_memory();
-	void reallocate_heap_memory();
+	void reallocate_heap_memory(bool error_if_not_found = true);
 
 	// status flag utility
 	void set_status_flag(char flag); // set the status flag whose abbreviation is equal to the character 'flag'

@@ -75,6 +75,26 @@ def string itos(alloc int to_convert) {
 }
 
 
+////////////////////        STRING LENGTH       ////////////////////
+
+def int length(alloc string to_check)
+{
+    alloc int _len: 0;
+
+    asm<sinasm16>
+    {
+        incsp
+        incsp
+        pla
+        decsp 
+        decsp
+        pha
+    }
+
+    return _len;
+}
+
+
 ////////////////////      PRINT (STDOUT)        ////////////////////
 
 def void print(alloc string to_print) {
