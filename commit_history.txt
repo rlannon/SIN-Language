@@ -5,6 +5,12 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+4/1 commit to Compiler
+
+- String concatenation with string array indexing is now supported. Previously, there was no check in the tree evaluation for the right side to allow for indexed expressions, so the right value was never fetched. This resulted in a concatenation of the first value onto itself, as the register values were never updated. This has been resolved.
+
+--------------------------------------------------------------------------------------------
+
 3/30 commit to Compiler
 
 - Added support for string arrays in both local and global scopes

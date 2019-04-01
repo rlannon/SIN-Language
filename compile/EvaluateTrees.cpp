@@ -154,7 +154,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 		Type right_type = this->get_expression_data_type(current_tree.get_right());
 
 		if (right_type == left_type) {
-			if (right_exp->get_expression_type() == LVALUE || right_exp->get_expression_type() == LITERAL || right_exp->get_expression_type() == DEREFERENCED || right_exp->get_expression_type() == VALUE_RETURNING_CALL) {
+			if (right_exp->get_expression_type() == LVALUE || right_exp->get_expression_type() == INDEXED ||  right_exp->get_expression_type() == LITERAL || right_exp->get_expression_type() == DEREFERENCED || right_exp->get_expression_type() == VALUE_RETURNING_CALL) {
 				binary_ss << this->fetch_value(bin_exp.get_right(), line_number, max_offset).str();
 			}
 			else if (right_exp->get_expression_type() == UNARY) {
@@ -216,7 +216,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 			// store the length of the string in __INPUT_LEN so we can index the buffer's start address
 			binary_ss << "\t" << "storea __INPUT_LEN" << std::endl;
 
-			// if our left expression is binary, we don't need to do this -- the string data is already in the buffer
+			// if our left expression is binary, we don't need to do this -- the string data is already in the buffer from the evaluation of that tree
 			if (bin_exp.get_left()->get_expression_type() != BINARY) {
 				// copy the left argument into the string buffer
 				binary_ss << "\t" << "phb" << std::endl;	// push the source
