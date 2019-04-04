@@ -70,60 +70,60 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 			max_offset += 1;
 		}
 	}
+	else {
+		// By this point, 'left' is not a binary expression; evaluate the left hand side of the tree
+		if (left_exp->get_expression_type() == LVALUE || left_exp->get_expression_type() == INDEXED || left_exp->get_expression_type() == LITERAL || left_exp->get_expression_type() == DEREFERENCED || left_exp->get_expression_type() == VALUE_RETURNING_CALL) {
+			/*
 
-	// By this point, 'left' is not a binary expression; evaluate the left hand side of the tree
-	if (left_exp->get_expression_type() == LVALUE || left_exp->get_expression_type() == INDEXED || left_exp->get_expression_type() == LITERAL || left_exp->get_expression_type() == DEREFERENCED || left_exp->get_expression_type() == VALUE_RETURNING_CALL) {
-		/*
-		
-		Variables, indexed values, literals, dereferenced values, and value returning functions call be handled with fetch_value
-		
-		*/
-		
-		bool get_sub = (left_exp->get_expression_type() == INDEXED);
-		left_type = this->get_expression_data_type(bin_exp.get_left(), get_sub);
+			Variables, indexed values, literals, dereferenced values, and value returning functions call be handled with fetch_value
 
-		binary_ss << this->fetch_value(bin_exp.get_left(), line_number, max_offset).str();
+			*/
 
-		if (left_type == STRING) {
-			binary_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;
-			binary_ss << this->move_sp_to_target_address(max_offset).str();
-			binary_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;
-			binary_ss << "\t" << "pha" << "\n\t" << "phb" << std::endl;
-			this->stack_offset += 2;
-			max_offset += 2;
+			left_type = this->get_expression_data_type(bin_exp.get_left(), (left_exp->get_expression_type() == INDEXED));	// get the subtype if the expression is an indexed expression
+
+			binary_ss << this->fetch_value(bin_exp.get_left(), line_number, max_offset).str();	// get the left operand
+
+			if (left_type == STRING) {
+				binary_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;
+				binary_ss << this->move_sp_to_target_address(max_offset).str();
+				binary_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;
+				binary_ss << "\t" << "pha" << "\n\t" << "phb" << std::endl;
+				this->stack_offset += 2;
+				max_offset += 2;
+			}
+			else {
+				binary_ss << "\t" << "tax" << std::endl;
+				binary_ss << this->move_sp_to_target_address(max_offset).str();
+				binary_ss << "\t" << "txa" << std::endl;
+				binary_ss << "\t" << "pha" << std::endl;
+				this->stack_offset += 1;
+				max_offset += 1;
+			}
 		}
-		else {
+		else if (left_exp->get_expression_type() == UNARY) {
+			Unary* unary_operand = dynamic_cast<Unary*>(left_exp);
+
+			left_type = get_expression_data_type(unary_operand->get_operand());
+
+			// signed arithmetic will depend on the evaluation of a unary expression; if there are no unaries, there is no sign
+			// if the quality is "minus", set the "N" flag
+			if (unary_operand->get_operator() == MINUS) {
+				binary_ss << "\t" << "tay" << std::endl;
+				binary_ss << "\t" << "tstatusa" << std::endl;
+				binary_ss << "\t" << "ora #%10000000" << std::endl;
+				binary_ss << "\t" << "tastatus" << std::endl;
+				binary_ss << "\t" << "tya" << std::endl;
+			}
+
+			binary_ss << this->evaluate_unary_tree(*unary_operand, line_number, max_offset).str();
 			binary_ss << "\t" << "tax" << std::endl;
 			binary_ss << this->move_sp_to_target_address(max_offset).str();
 			binary_ss << "\t" << "txa" << std::endl;
 			binary_ss << "\t" << "pha" << std::endl;
+
 			this->stack_offset += 1;
 			max_offset += 1;
 		}
-	}
-	else if (left_exp->get_expression_type() == UNARY) {
-		Unary* unary_operand = dynamic_cast<Unary*>(left_exp);
-
-		left_type = get_expression_data_type(unary_operand->get_operand());
-
-		// signed arithmetic will depend on the evaluation of a unary expression; if there are no unaries, there is no sign
-		// if the quality is "minus", set the "N" flag
-		if (unary_operand->get_operator() == MINUS) {
-			binary_ss << "\t" << "tay" << std::endl;
-			binary_ss << "\t" << "tstatusa" << std::endl;
-			binary_ss << "\t" << "ora #%10000000" << std::endl;
-			binary_ss << "\t" << "tastatus" << std::endl;
-			binary_ss << "\t" << "tya" << std::endl;
-		}
-
-		binary_ss << this->evaluate_unary_tree(*unary_operand, line_number, max_offset).str();
-		binary_ss << "\t" << "tax" << std::endl;
-		binary_ss << this->move_sp_to_target_address(max_offset).str();
-		binary_ss << "\t" << "txa" << std::endl;
-		binary_ss << "\t" << "pha" << std::endl;
-
-		this->stack_offset += 1;
-		max_offset += 1;
 	}
 
 	// Now that we have evaluated the left side, check to see if 'right' is a binary tree; if so, we will do the same thing we did for left

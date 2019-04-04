@@ -795,7 +795,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 						}
 					}
 					else {
-						// get the value
+						// if we are assigning to an index, we must do that differently than if it's to a non-indexed variable
 						if (lvalue_exp_type == INDEXED) {
 							// first, fetch the index value and push it to the stack
 							assignment_ss << this->fetch_value(assignment_index, assignment_statement.get_line_number(), max_offset).str();
@@ -805,7 +805,6 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 								assignment_ss << "\t" << "lsl a" << std::endl;
 								assignment_ss << "\t" << "tay" << std::endl;
 								assignment_ss << this->string_assignment(fetched, assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str();
-
 							}
 							else {
 								assignment_ss << "\t" << "tay" << std::endl;	// transfer A to Y so we don't have to set the preserve_registers flag
@@ -814,7 +813,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 								this->stack_offset += 1;
 
 								// now, get the value we want
-								assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number()).str() << std::endl;
+								assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str() << std::endl;
 
 								// move the stack pointer back to where it was, but preserve our registers
 								assignment_ss << "\t" << "tax" << std::endl;
@@ -864,7 +863,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 							}
 						}
 						else {
-							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number()).str() << std::endl;
+							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str() << std::endl;
 
 							// move the SP to the target address, but store A and B in X and Y, respectively, before we move it
 							assignment_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;
@@ -1100,7 +1099,7 @@ std::stringstream Compiler::while_loop(WhileLoop while_statement, size_t max_off
 	while_ss << "\t" << "breq " << while_label_name << ".done" << std::endl;
 
 	// increment our stack pointer to the end of the current stack frame
-	while_ss << this->move_sp_to_target_address( max_offset).str();
+	while_ss << this->move_sp_to_target_address(max_offset).str();
 	// increment the branch and scope numbers and update the scope name
 	this->current_scope += 1;
 
@@ -1108,13 +1107,11 @@ std::stringstream Compiler::while_loop(WhileLoop while_statement, size_t max_off
 	while_ss << while_label_name << ".loop:" << std::endl;
 
 	// compile the branch code
-	while_ss << this->compile_to_sinasm(*while_statement.get_branch().get(), this->current_scope, this->current_scope_name, max_offset).str();
+	while_ss << this->compile_to_sinasm(*while_statement.get_branch().get(), this->current_scope, this->current_scope_name, max_offset, max_offset).str();
 
 	// unwind the stack and delete local variables
-	for (size_t i = this->stack_offset; i > max_offset; i--) {
-		this->stack_offset -= 1;
-		while_ss << "\t" << "incsp" << std::endl;
-	}
+	while_ss << this->move_sp_to_target_address(max_offset).str();
+
 	// we now need to delete all variables that were local to this if/else block -- iterate through the symbol table, removing the symbols in this local scope
 	std::vector<Symbol>::iterator it = this->symbol_table.symbols.begin();
 	while (it != this->symbol_table.symbols.end()) {
@@ -1140,18 +1137,17 @@ std::stringstream Compiler::while_loop(WhileLoop while_statement, size_t max_off
 }
 
 
-// the actual compilation routine -- it is separate from our entry functions so that we can call it recursively (it is called by our entry functions)
 std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int local_scope_level, std::string local_scope_name, size_t max_offset, size_t stack_frame_base) {
 	/*
 	
-	This function takes an AST and produces SINASM that will execute it, stored in a stringstream object.
+	This function takes an AST and produces SINASM that will execute it, stored in a stringstream object. This can be converted into a .sina file, or passed directly to an assembler object.
 
 	Parameters:
 		AST - the abstract syntax tree we want to compile into assembly
 		local_scope_level - the level of scope we are in
 		local_scope_name - default to "global", only necessary if we are working with a function
-		size_t* stack_offset - the current stack offset (for local variables to a function)
-		size_t* max_offset - the maximum offset for local function variables (increments by one per local function variable)
+		max_offset - the maximum offset for local function variables (increments by one per local function variable)
+		stack_frame_base - the base offset for our current stack frame
 	
 	*/
 	
@@ -1257,15 +1253,9 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 			sinasm_ss << this->allocate(*alloc_statement, &max_offset).str();
 		}
 		else if (statement_type == ASSIGNMENT) {
-			// dynamic cast to an Assignment type
+			// dynamic cast to an Assignment type and compile an assignment
 			Assignment* assign_statement = dynamic_cast<Assignment*>(current_statement);
-
-			if (max_offset) {
-				sinasm_ss << this->assign(*assign_statement, max_offset).str();
-			}
-			else {
-				sinasm_ss << this->assign(*assign_statement).str();
-			}
+			sinasm_ss << this->assign(*assign_statement, max_offset).str();
 		}
 		else if (statement_type == RETURN_STATEMENT) {
 			// if the current scope name is "global", throw an error
@@ -1286,23 +1276,11 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 		}
 		else if (statement_type == IF_THEN_ELSE) {
 			IfThenElse ite_statement = *dynamic_cast<IfThenElse*>(current_statement);
-
-			if (max_offset) {
-				sinasm_ss << this->ite(ite_statement, max_offset).str();
-			}
-			else {
-				sinasm_ss << this->ite(ite_statement).str();
-			}
+			sinasm_ss << this->ite(ite_statement, max_offset).str();
 		}
 		else if (statement_type == WHILE_LOOP) {
 			WhileLoop* while_statement = dynamic_cast<WhileLoop*>(current_statement);
-
-			if (max_offset) {
-				sinasm_ss << this->while_loop(*while_statement, max_offset).str();
-			}
-			else {
-				sinasm_ss << this->while_loop(*while_statement).str();
-			}
+			sinasm_ss << this->while_loop(*while_statement, max_offset).str();
 		}
 		else if (statement_type == DEFINITION) {
 			Definition* def_statement = dynamic_cast<Definition*>(current_statement);
@@ -1313,13 +1291,13 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 		else if (statement_type == CALL) {
 			Call* call_statement = dynamic_cast<Call*>(current_statement);
 
-			// write the call to the function into the file
-			if (max_offset) {
-				sinasm_ss << this->call(*call_statement, max_offset).str();
-			}
-			else {
-				sinasm_ss << this->call(*call_statement).str();
-			}
+			// compile a call to a function
+			sinasm_ss << this->call(*call_statement, max_offset).str();
+		}
+		// if we have a STATEMENT_GENERAL, we had an explicit pass or some sort of parser error
+		else if (statement_type == STATEMENT_GENERAL) {
+			// generate a compiler warning stating we found an empty statement
+			compiler_warning("Empty statement found; could be the result of a parser error or a 'pass' statement", current_statement->get_line_number());
 		}
 	}
 

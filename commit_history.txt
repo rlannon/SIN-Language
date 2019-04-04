@@ -5,9 +5,31 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+4/4 commit to Compiler
+
+- Fixed a bug that would cause errors in the parser if the block in a while statement was empty; this was the same problem faced in empty if/else blocks, and has been resolved
+- Empty statement blocks in loops or conditions generate compiler warnings
+- Fixed a bug that would cause stack corruption in while loops; a single call to Compiler::fetch_value(...) did not pass max_offset as a parameter, which caused the fetch_value function to think the max offset was 0 when it may have been higher. This caused the compiler to fetch and assign values to incorrect places in while loops, which caused data corruption. This has been amended by passing max_offset to fetch_value
+- Removed some checks for max_offset's validity in the Compiler::compile_to_sinasm(...) function; since it is no longer a pointer, but rather a value, we don't need to check to see if it is a nullptr
+- Added a way to initialize an empty statement of type STATEMENT_GENERAL
+- Added a "pass" statement to the language; these will not be turned into any code by the compiler, and is equivalent to a NOOP in assembly or a pass statement in Python. The compiler will generate a warning if it finds any empty statements, so putting pass statements in a program will cause compiler warnings (but not errors)
+- 'unsigned int line_number' and 'size_t max_offset' are no longer default parameters in the Compiler::fetch_value(...) function. The call to fetch_value in Compiler::return_value(...) passes in 0, as it passed in nothing before. This may be changed in the future if it ends up causing problems
+- Updated the SINVM::push_stack(...) and SINVM::pop_stack() functions; updated data types (from int to size_t or uint16_t) and cleaned up the data writing functions in order to make it easier to understand how they work. These functions may be updated so that reading from a location in the stack can be understood in big-endian format, rather than little endian. For example:
+		$23FF: $04
+		$23FE: $00
+	Pulling from the stack will cause no problem; it creates a word ($23FF)($23FE); if you try to do something like
+		loada $23FE
+	or
+		loada $23FF
+	there will be an error; the former will reverse the bytes, as it will create a byte ($23FE)($23FF), which is backwards from how a pull instruction does it; the latter will try to create a word using ($23FF)($2400)
+	The reason it works as it currently does it due to the fact that the stack grows downwards.
+
+--------------------------------------------------------------------------------------------
+
 4/1 commit to Compiler
 
 - String concatenation with string array indexing is now supported. Previously, there was no check in the tree evaluation for the right side to allow for indexed expressions, so the right value was never fetched. This resulted in a concatenation of the first value onto itself, as the register values were never updated. This has been resolved.
+- Local strings can now be indexed in addition to globals.
 
 --------------------------------------------------------------------------------------------
 

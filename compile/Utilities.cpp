@@ -421,7 +421,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 				fetch_ss << this->move_sp_to_target_address(variable_symbol->stack_offset + 1).str();
 
 				if (to_fetch->get_expression_type() == INDEXED) {
-					fetch_ss << "\t" << "tya" << std::endl;	// move the index value back into A after we move the stack pointer, if it's indexed
+					fetch_ss << "\t" << "tya" << std::endl;	// move the index value back into A
 				}
 
 				// now, the offsets are the same; get the variable's value
@@ -432,7 +432,22 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 					else {
 						// if we are indexing the string, get the value within the string in A
 						if (to_fetch->get_expression_type() == INDEXED) {
-							// TODO: index local string
+							// Note that when we index a local string, we do _not_ use the lsl instruction; since characters are a single byte, the index number and the character number will be 
+							// the index value is in the A register; we need to add two to it to skip the address of the string
+							fetch_ss << "\t" << "addca #$02" << std::endl;
+
+							// now, we need to pull the address of the string into B
+							fetch_ss << "\t" << "plb" << std::endl;
+							this->stack_offset -= 1;
+
+							// now, add that address to our index offset
+							fetch_ss << "\t" << "addca B" << std::endl;
+
+							// now, transfer A into B and load A with 1 -- indexing a string gives a string consisting of one character
+							fetch_ss << "\t" << "tab" << std::endl;
+							fetch_ss << "\t" << "loada #$01" << std::endl;
+
+							// A now contains the length (1) and B contains the address (string address + length offset + index offset)
 						}
 						else {
 							// dynamic variables must use pointer dereferencing

@@ -299,6 +299,7 @@ std::shared_ptr<Statement> Parser::parse_statement() {
 		else if (current_lex.value == "if") {
 			return this->parse_ite(current_lex);
 		}
+		// pare an allocation
 		else if (current_lex.value == "alloc") {
 			return this->parse_allocation(current_lex);
 		}
@@ -317,6 +318,10 @@ std::shared_ptr<Statement> Parser::parse_statement() {
 		// Parse a function declaration
 		else if (current_lex.value == "def") {
 			return this->parse_definition(current_lex);
+		}
+		else if (current_lex.value == "pass") {
+			this->next();
+			return std::make_shared<Statement>(STATEMENT_GENERAL, current_lex.line_number);	// an explicit pass will, essentially, be ignored by the compiler; it does nothing
 		}
 		// if none of the keywords were valid, throw an error
 		else {
@@ -394,6 +399,9 @@ std::shared_ptr<Statement> Parser::parse_ite(lexeme current_lex)
 				// skip the closing curly brace
 				this->next();
 			}
+			else {
+				compiler_warning("Empty statement block in if condition", this->current_token().line_number);
+			}
 
 			// Check for an else clause
 			if (!this->is_at_end() && this->peek().value == "else") {
@@ -409,6 +417,9 @@ std::shared_ptr<Statement> Parser::parse_ite(lexeme current_lex)
 					// if the 'else' clause is empty, the current token will be the curly brace, so we don't need to eat it if the statement list wasn't empty
 					if (else_branch.statements_list.size() > 0) {
 						this->next();	// skip the closing curly brace
+					}
+					else {
+						compiler_warning("Empty statement block in else condition", this->current_token().line_number);
 					}
 
 					stmt = std::make_shared<IfThenElse>(condition, std::make_shared<StatementBlock>(if_branch), std::make_shared<StatementBlock>(else_branch));
@@ -815,12 +826,20 @@ std::shared_ptr<Statement> Parser::parse_while(lexeme current_lex)
 		condition = this->parse_expression();
 		if (this->peek().value == "{") {
 			this->next();
-			this->next();	// skip opening curly
-			branch = this->create_ast();
 
-			// If we are not at the end, go to the next token
-			if (!(this->is_at_end())) {
+			// so that we don't get errors if we have an empty statement block
+			if (this->peek().value == "}") {
+				compiler_warning("Empty statement block in while loop", this->current_token().line_number);
 				this->next();
+			}
+			else {
+				this->next();	// skip opening curly
+				branch = this->create_ast();
+
+				// If we are not at the end, go to the next token
+				if (!(this->is_at_end())) {
+					this->next();
+				}
 			}
 
 			// Make a pointer to our branch

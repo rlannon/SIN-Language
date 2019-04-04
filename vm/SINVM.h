@@ -86,9 +86,9 @@ class SINVM
 	void execute_comparison(int reg_to_compare);
 	void execute_jmp();
 
-	// stack functions; ALWAYS use register A
-	void push_stack(int reg_to_push);
-	int pop_stack();
+	// stack functions
+	void push_stack(uint16_t reg_to_push);
+	uint16_t pop_stack();
 
 	// syscall utility
 	void free_heap_memory();

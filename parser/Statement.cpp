@@ -33,6 +33,10 @@ Statement::Statement() {
 	this->scope_name = "global";
 }
 
+Statement::Statement(stmt_type statement_type, unsigned int line_number) : statement_type(statement_type), line_number(line_number) {
+	
+}
+
 Statement::~Statement() {
 }
 

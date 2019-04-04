@@ -182,7 +182,7 @@ std::stringstream Compiler::call(Call call_statement, size_t max_offset) {
 					call_ss << "\t" << "tax" << std::endl;
 					call_ss << this->move_sp_to_target_address(max_offset).str();
 					call_ss << "\t" << "pha" << std::endl;
-					this->stack_offset += 1;	// for some reason, this line breaks it -- but it works fine without it
+					this->stack_offset += 1;
 					max_offset += 1;
 				}
 				else if (formal_type == STRING) {
@@ -192,7 +192,7 @@ std::stringstream Compiler::call(Call call_statement, size_t max_offset) {
 					// strings push length (A), then address (B)
 					call_ss << "\t" << "pha" << std::endl;
 					call_ss << "\t" << "phb" << std::endl;
-					this->stack_offset += 2;	// breaks it
+					this->stack_offset += 2;
 					max_offset += 2;
 				}
 				else if (formal_type == ARRAY) {
@@ -239,7 +239,7 @@ std::stringstream Compiler::call(Call call_statement, size_t max_offset) {
 							call_ss << "\t" << "tax" << std::endl;
 							call_ss << this->move_sp_to_target_address(max_offset).str();
 							call_ss << "\t" << "pha" << std::endl;
-							this->stack_offset += 1;	// for some reason, this line breaks it -- but it works fine without it
+							this->stack_offset += 1;
 							max_offset += 1;
 						}
 						else if (var_type == STRING) {
@@ -249,7 +249,7 @@ std::stringstream Compiler::call(Call call_statement, size_t max_offset) {
 							// strings push length (A), then address (B)
 							call_ss << "\t" << "pha" << std::endl;
 							call_ss << "\t" << "phb" << std::endl;
-							this->stack_offset += 2;	// breaks it
+							this->stack_offset += 2;
 							max_offset += 2;
 						}
 						else if (var_type == ARRAY) {
@@ -318,7 +318,7 @@ std::stringstream Compiler::return_value(ReturnStatement return_statement, size_
 	// Some types can be loaded into registers
 	// todo: should strings be returned in the string buffer? A and B would still be loaded with the length and address, but this way it would not need to live in the stack
 	if (return_type == INT || return_type == STRING || return_type == BOOL || return_type == FLOAT) {
-		return_ss << this->fetch_value(return_statement.get_return_exp()).str();	// get the expression to return
+		return_ss << this->fetch_value(return_statement.get_return_exp(), line_number, 0).str();	// get the expression to return
 
 		return_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;	// move A and B into X and Y to preserve their values
 		return_ss << this->move_sp_to_target_address(previous_offset).str();	// this allows us to use A to unwind the stack, if we need

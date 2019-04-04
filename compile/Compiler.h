@@ -71,7 +71,7 @@ class Compiler
 	std::vector<std::string>* object_file_names;
 	void include_file(Include include_statement);	// add a file to the solution
 
-	std::stringstream fetch_value(std::shared_ptr<Expression> to_fetch, unsigned int line_number = 0, size_t max_offset = 0);	// produces asm code to put the result of the specified expression in A
+	std::stringstream fetch_value(std::shared_ptr<Expression> to_fetch, unsigned int line_number, size_t max_offset);	// produces asm code to put the result of the specified expression in A
 
 	std::stringstream move_sp_to_target_address(size_t target_offset, bool preserve_registers = false);
 
