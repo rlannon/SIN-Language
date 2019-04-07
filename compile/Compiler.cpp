@@ -159,6 +159,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 
 	// add some padding to the string length
 	string_assign_ss << "\t" << "pha" << std::endl;
+	string_assign_ss << "\t" << "clc" << std::endl;
 	string_assign_ss << "\t" << "addca #$10" << std::endl;
 	this->stack_offset += 1;
 	max_offset += 1;
@@ -206,6 +207,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 			if (target_symbol->type == ARRAY) {
 				// subtract the offset from the stack pointer
 				string_assign_ss << "\t" << "tspa" << std::endl;
+				string_assign_ss << "\t" << "sec" << std::endl;
 				string_assign_ss << "\t" << "subca $" << _LOCAL_DYNAMIC_POINTER << std::endl;
 				string_assign_ss << "\t" << "tasp" << std::endl;
 
@@ -216,6 +218,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 
 				// move the stack pointer back as many bytes as we advanced it
 				string_assign_ss << "\t" << "tspa" << std::endl;
+				string_assign_ss << "\t" << "clc" << std::endl;
 				string_assign_ss << "\t" << "addca $" << _LOCAL_DYNAMIC_POINTER << std::endl;
 				string_assign_ss << "\t" << "tasp" << std::endl;
 			}
@@ -283,6 +286,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 
 		// next, get the value of our pointer and increment by 2 for memcpy
 		string_assign_ss << "\t" << "loada $" << _LOCAL_DYNAMIC_POINTER << std::endl;
+		string_assign_ss << "\t" << "clc" << std::endl;
 		string_assign_ss << "\t" << "addca #$02" << std::endl;
 
 		// the address of the string variable has already been pushed, so the next thing to push is the address of our destination
@@ -311,6 +315,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 			string_assign_ss << "\t" << "tspa" << std::endl;
 			string_assign_ss << "\t" << "loadb $" << std::hex << _LOCAL_DYNAMIC_POINTER << std::endl;
 			// _subtract_ the value from A; stack grows downwards and the 0th element is highest up
+			string_assign_ss << "\t" << "sec" << std::endl;
 			string_assign_ss << "\t" << "subca b" << std::endl;
 			string_assign_ss << "\t" << "tasp" << std::endl;
 
@@ -322,6 +327,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 
 			// now, the index offset is still in the B register; we must add it back to where it was before so we don't mess up the compiler's stack offset counter
 			string_assign_ss << "\t" << "tspa" << std::endl;
+			string_assign_ss << "\t" << "clc" << std::endl;
 			string_assign_ss << "\t" << "addca b" << std::endl;
 			string_assign_ss << "\t" << "tasp" << std::endl;
 
@@ -349,6 +355,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 
 		// get the address of the dynamic memory and increment it by 2, for memcpy
 		string_assign_ss << "\t" << "loada $" << _LOCAL_DYNAMIC_POINTER << std::endl;
+		string_assign_ss << "\t" << "clc" << std::endl;
 		string_assign_ss << "\t" << "addca #$02" << std::endl;
 
 		// push the arguments to the stack
@@ -848,6 +855,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 
 								// update the stack pointer value
 								assignment_ss << "\t" << "tspa" << std::endl;
+								assignment_ss << "\t" << "sec" << std::endl;
 								assignment_ss << "\t" << "subca b" << std::endl;	// the B register holds the index
 								assignment_ss << "\t" << "tasp" << std::endl;
 
@@ -858,6 +866,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 								// move the stack pointer back to where it was (for the compiler's sake)
 								assignment_ss << "\t" << "incsp" << std::endl;	// move it back to where it was before the push
 								assignment_ss << "\t" << "tspa" << std::endl;
+								assignment_ss << "\t" << "clc" << std::endl;
 								assignment_ss << "\t" << "addca b" << std::endl;	// subtract the index from it
 								assignment_ss << "\t" << "tasp" << std::endl;	// move the pointer value back
 							}

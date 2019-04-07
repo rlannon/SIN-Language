@@ -111,31 +111,14 @@ void SINVM::execute_instruction(uint16_t opcode) {
 			break;
 
 		// ALU instructions
-		// For these, we will use our load function to get the data we want in addition to the A register; we won't put it in the a register, but we will use the function because it will give it to us no problem
+		// For these, we will use our load function to get the right operand, which will be the function parameter for the ALU functions
 		case ADDCA:
 		{
 			// get the addend
-			int addend = this->execute_load();
+			uint16_t addend = this->execute_load();
 
-			// add the fetched data to A
-			REG_A += addend;
-
-			// if the MSB is set, set the N flag
-			if (REG_A >= 0x8000) {
-				this->set_status_flag('N');
-			}
-			else {
-				this->clear_status_flag('N');
-			}
-
-			// set the Z flag if both values are 0
-			if ((REG_A == 0) && (addend == 0)) {
-				this->set_status_flag('Z');
-			}
-			else {
-				this->clear_status_flag('Z');
-			}
-
+			// call the alu.add(...) function using the value we just fetched
+			this->alu.add(addend);
 			break;
 		}
 		case SUBCA:
@@ -143,14 +126,8 @@ void SINVM::execute_instruction(uint16_t opcode) {
 			// in subtraction, REG_A is the minuend and the value supplied is the subtrahend
 			uint16_t subtrahend = this->execute_load();
 
-			if (subtrahend > REG_A) {
-				this->set_status_flag('N');	// set the N flag if the result is negative, which will be the case if subtrahend > REG_A
-			}
-			else if (subtrahend == REG_A) {
-				this->set_status_flag('Z');	// set the Z flag if the two are equal, as the result will be 0
-			}
-
-			this->REG_A -= subtrahend;
+			// call the alu.sub function using the value we just fetched
+			this->alu.sub(subtrahend);
 			break;
 		}
 		case MULTA:
@@ -158,89 +135,38 @@ void SINVM::execute_instruction(uint16_t opcode) {
 			// Multiply A by some value; treat both integers as signed
 			uint16_t multiplier = this->execute_load();
 
-			// if both of these are true, we don't need to perform twos complement on the result
-			bool mult_signed = false;
-			bool a_signed = false;
-
-			// perform twos complement if we have signed arithmetic
-			if ((multiplier & 0x8000) == 0x8000) {	// if the sign bit is set, perform twos complement
-				multiplier ^= 0xFFFF;	// flip all the bits
-				multiplier += 1;	// add one to finish twos complement
-
-				mult_signed = true;
-			}
-			if ((this->REG_A & 0x8000) == 0x8000) {	// do again for REG_A
-				this->REG_A ^= 0xFFFF;
-				this->REG_A += 1;
-
-				a_signed = true;
-			}
-
-			// perform the multiplication
-			this->REG_A *= multiplier;
-
-			// if both numbers were signed, or if both numbers were not signed (sign bits are the same), we don't need two's complement
-			if (mult_signed == a_signed) {
-				// clear the N flag
-				this->clear_status_flag('N');
-
-				// check to see if we need to set the overflow flag
-				if ((this->REG_A & 0x8000) == 0x8000) {	// if the sign bit is set (it shouldn't be)
-					this->set_status_flag('V');
-				}
-			}
-			// otherwise, if exactly one number was signed, perform twos complement on register A
-			else {
-				this->REG_A -= 1;
-				this->REG_A ^= 0xFFFF;
-
-				// set the N flag
-				this->set_status_flag('N');
-
-				// if the sign flag is clear, set the overflow flag
-				if ((this->REG_A & 0x8000) == 0) {
-					this->set_status_flag('V');
-				}
-			}
-
+			// call alu.mult_signed using the multiplier value we just fetched
+			this->alu.mult_signed(multiplier);
 			break;
 		}
 		case DIVA:
 		{
-			// Divide A by some value; this uses _integer division_ where B will hold the remainder of the operation
-			// TODO: implement DIVA instruction
+			// Signed division on A by some value; this uses _integer division_ where B will hold the remainder of the operation
+			// fetch the right operand and call the ALU div_signed function using said operand as an argument
+			uint16_t divisor = this->execute_load();
+			this->alu.div_signed(divisor);
+			break;
 		}
 		case MULTUA:
 		{
 			// Unsigned multiplication
-
+			// fetch the value and call ALU::mult_unsigned(...) using the value we fetched as our argument
 			uint16_t multiplier = this->execute_load();
-
-			// if the result overflows, set the V flag
-			if ((int)REG_A * (int)multiplier > 0xFFFF) {
-				this->set_status_flag('V');
-			}
-
-			// execute the multiplication
-			this->REG_A = this->REG_A * multiplier;
+			this->alu.mult_unsigned(multiplier);
 			break;
 		}
 		case DIVUA:
 		{
-			// Unsigned division
+			// Unsigned division; B will hold the remainder from the operation
 
+			// fetch the right operand
 			uint16_t divisor = this->execute_load();
 
-			uint16_t result = REG_A / divisor;
-			uint16_t remainder = REG_A % divisor;	// TODO: keep remainder in B or not?
-
-			this->REG_A = result;
-			this->REG_B = remainder;
-
-			// TODO: manage flags in division
-
+			// call the ALU's div_unsigned function using the value we just fetched as the parameter
+			this->alu.div_unsigned(divisor);
 			break;
 		}
+		// todo: update logical operations to use the ALU
 		case ANDA:
 		{
 			uint16_t and_value = this->execute_load();
@@ -392,12 +318,12 @@ void SINVM::execute_instruction(uint16_t opcode) {
 			this->PC++;
 			uint16_t address_to_jump = this->get_data_of_wordsize();
 
-			int return_address = this->PC;
+			uint16_t return_address = this->PC;
 
 			// if the CALL_SP is greater than _CALL_STACK_BOTTOM, we have not written past the end of it
 			if (this->CALL_SP >= _CALL_STACK_BOTTOM) {
 				// memory size is 16 bits but...do this anyways
-				for (int i = 0; i < (this->_WORDSIZE / 8);  i++) {
+				for (size_t i = 0; i < (this->_WORDSIZE / 8);  i++) {
 					uint8_t memory_byte = return_address >> (i * 8);
 					this->memory[CALL_SP] = memory_byte;
 					this->CALL_SP--;
@@ -413,9 +339,9 @@ void SINVM::execute_instruction(uint16_t opcode) {
 		}
 		case RTS:
 		{
-			int return_address = 0;
+			uint16_t return_address = 0;
 			if (this->CALL_SP <= _CALL_STACK) {
-				for (int i = (this->_WORDSIZE / 8); i > 0; i--) {
+				for (size_t i = (this->_WORDSIZE / 8); i > 0; i--) {
 					CALL_SP++;
 					return_address += memory[CALL_SP];
 					return_address = return_address << ((i - 1) * 8);
@@ -436,10 +362,10 @@ void SINVM::execute_instruction(uint16_t opcode) {
 			REG_A = REG_Y;
 			break;
 		case TSPA:
-			REG_A = (int)SP;	// SP holds the address to which the next element in the stack will go, and is incremented every time something is pushed, and decremented every time something is popped
+			REG_A = (uint16_t)SP;	// SP holds the address to which the next element in the stack will go, and is incremented every time something is pushed, and decremented every time something is popped
 			break;
 		case TSTATUSA:
-			REG_A = (int)STATUS;
+			REG_A = (uint16_t)STATUS;
 			break;
 		case TAB:
 			REG_B = REG_A;
@@ -451,7 +377,7 @@ void SINVM::execute_instruction(uint16_t opcode) {
 			REG_Y = REG_A;
 			break;
 		case TASP:
-			SP = (size_t)REG_A;
+			SP = (uint16_t)REG_A;
 			break;
 		case TASTATUS:
 			STATUS = (uint8_t)REG_A;
@@ -475,110 +401,7 @@ void SINVM::execute_instruction(uint16_t opcode) {
 		// Note the syscall instruction serves many purposes; see "Doc/syscall.txt" for more information
 		case SYSCALL:
 		{
-			// get the addressing mode
-			this->PC++;
-			uint8_t addressing_mode = this->memory[this->PC];
-
-			// increment the PC to point at the data and get the syscall number
-			this->PC++;
-			uint16_t syscall_number = this->get_data_of_wordsize();
-
-			// TODO: implement more syscalls and split them into their own functions
-
-			// If our syscall is for stdin or stdout
-			if (syscall_number == 0x13) {
-				// get user input
-				// first, the program will look in the B register for the address where it should put the data
-				unsigned int start_address = REG_B;
-
-				// all input comes in as a string, but we want to save it as a series of bytes
-				std::string input;
-				std::getline(std::cin, input);
-				input.push_back('\0');	// add a null terminator
-
-				// input will always return a series of ASCII-encoded bytes
-				
-				// make a vector of uint8_t to hold our input data, always encoded as ASCII text
-				std::vector<uint8_t> input_bytes;
-
-				// iterate over the string and store the characters in 'input_bytes'
-				for (std::string::iterator string_character = input.begin(); string_character != input.end(); string_character++) {
-					input_bytes.push_back(*string_character);
-				}
-
-				// the length of the input buffer is the max - min + 1, as we start at 0x00 and end at 0xFF
-				size_t buffer_length = _STRING_BUFFER_MAX - _STRING_BUFFER_START + 1;
-
-				// check to make sure the input data won't overflow the buffer
-				if (input_bytes.size() <= buffer_length) {
-					// store those bytes in memory
-					// use size() here because we want to index
-					for (int i = 0; i < input_bytes.size(); i++) {
-						this->memory[start_address + i] = input_bytes[i];
-					}
-
-					// finally, store the length of input_bytes (in bytes) in register A
-					this->REG_A = input_bytes.size();
-				}
-				// if the data is longer than the input buffer, only copy in as many bytes as we have available in the buffer, truncating the input data; if we don't do this, the data could overflow into the stack
-				else {
-					for (int i = 0; i < buffer_length; i++) {
-						this->memory[start_address + i] = input_bytes[i];
-					}
-
-					// store the length of the memory buffer in register A
-					this->REG_A = buffer_length;
-				}
-			}
-			else if (syscall_number == 0x14) {
-				// If we want to print something to the screen, we must specify the address where it starts
-				// It will print a number of bytes from memory as specified by REG_A, formatted as ASCII
-				// The system will use the ASCII value corresponding to the hex value stored in memory and print that
-
-				size_t num_bytes = REG_A;
-				// the current address from which we are reading data
-				unsigned int current_address = REG_B;
-				// the current character we are on; start at 'start_address'
-				uint8_t current_char = this->memory[current_address];
-
-				std::string output_string;
-
-				for (size_t i = 0; i < num_bytes; i++) {
-					output_string.push_back(current_char);	// add the character to our output string
-					current_address++;	// increment the address by one byte
-					current_char = this->memory[current_address];	// get the next character
-				}
-
-				// print the string
-				std::cout << output_string << std::endl;
-			}
-			else if (syscall_number == 0x15) {
-				// Read out the number of bytes stored in A, starting at the address stored in B, and print them (as raw hex values) to the standard output
-				int num_bytes = REG_A;	// number of bytes is in A
-				int start_address = REG_B;	// start address is in B
-
-				for (int i = 0; i < num_bytes; i++) {
-					// note -- must cast to int before output -- otherwise, it will print the character, not the hex value
-					std::cout << "$" << std::hex << (int)this->memory[start_address + i] << std::endl;
-				}
-			}
-			else if (syscall_number == 0x20) {
-				this->free_heap_memory();
-			}
-			else if (syscall_number == 0x21) {
-				this->allocate_heap_memory();
-			}
-			else if (syscall_number == 0x22) {
-				this->reallocate_heap_memory();	// reallocates heap memory, returning NULL if the object isn't found
-			}
-			else if (syscall_number == 0x23) {
-				this->reallocate_heap_memory(false);	// reallocates heap memory, creating a new object if one isn't found
-			}
-			// if it is not a valid syscall number, throw an error
-			else {
-				throw VMException("Unknown syscall number; halting execution.", this->PC);
-			}
-
+			this->execute_syscall();	// call the execute_syscall function; this will handle everything for us
 			break;
 		}
 
@@ -801,7 +624,7 @@ void SINVM::execute_store(uint16_t reg_to_store) {
 }
 
 
-int SINVM::get_data_from_memory(uint16_t address, bool is_short) {
+uint16_t SINVM::get_data_from_memory(uint16_t address, bool is_short) {
 	// read value of _WORDSIZE in memory and return it in the form of an int
 	// different from "execute_load()" in that it doesn't affect the program counter and does not take addressing mode into consideration
 
@@ -1360,25 +1183,29 @@ void SINVM::set_status_flag(char flag) {
 	*/
 
 	if (flag == 'N') {
-		this->STATUS |= 128;
+		this->STATUS |= StatusConstants::negative;
 	}
 	else if (flag == 'V') {
-		this->STATUS |= 64;
+		this->STATUS |= StatusConstants::overflow;
 	}
 	else if (flag == 'H') {
-		this->STATUS |= 16;
+		this->STATUS |= StatusConstants::halt;
 	}
 	else if (flag == 'D') {
-		this->STATUS |= 8;
+		this->STATUS |= StatusConstants::dynamic_fail;
+	}
+	else if (flag == 'F') {
+		this->STATUS |= StatusConstants::floating_point;
 	}
 	else if (flag == 'Z') {
-		this->STATUS |= 2;
+		this->STATUS |= StatusConstants::zero;
 	}
 	else if (flag == 'C') {
-		this->STATUS |= 1;
+		this->STATUS |= StatusConstants::carry;
 	}
-
-	// this should never throw an exception
+	else {
+		throw std::runtime_error("Invalid STATUS flag selection in");	// throw an exception if we call the function with an invalid flag
+	}
 
 	return;
 }
@@ -1400,22 +1227,29 @@ void SINVM::clear_status_flag(char flag) {
 	*/
 
 	if (flag == 'N') {
-		this->STATUS = this->STATUS & 0b01111111;
+		this->STATUS = this->STATUS & (255 - StatusConstants::negative);
 	}
 	else if (flag == 'V') {
-		this->STATUS = this->STATUS & 0b10111111;
+		this->STATUS = this->STATUS & (255 - StatusConstants::overflow);
 	}
 	else if (flag == 'H') {
-		this->STATUS = this->STATUS & 0b11101111;
+		this->STATUS = this->STATUS & (255 - StatusConstants::halt);
+	}
+	else if (flag == 'D') {
+		this->STATUS = this->STATUS & (255 - StatusConstants::dynamic_fail);
+	}
+	else if (flag == 'F') {
+		this->STATUS = this->STATUS & (255 - StatusConstants::floating_point);
 	}
 	else if (flag == 'Z') {
-		this->STATUS = this->STATUS & 0b11111101;
+		this->STATUS = this->STATUS & (255 - StatusConstants::zero);
 	}
 	else if (flag == 'C') {
-		this->STATUS = this->STATUS & 0b11111110;
+		this->STATUS = this->STATUS & (255 - StatusConstants::carry);
 	}
-
-	// this should never throw an exception
+	else {
+		throw std::runtime_error("Invalid STATUS flag selection");	// throw an exception if we call the function with an invalid flag
+	}
 
 	return;
 }
@@ -1430,22 +1264,29 @@ bool SINVM::is_flag_set(char flag) {
 	// return the status of a single flag in the status register
 	// do this by performing an AND operation on that bit; if set, we will get true (the only bit that can be set is the bit in question)
 	if (flag == 'N') {
-		return this->STATUS & 128; // will only return true if N is set; if any other bit is set, it will be AND'd against a 0
+		return this->STATUS & StatusConstants::negative; // will only return true if N is set; if any other bit is set, it will be AND'd against a 0
 	}
 	else if (flag == 'V') {
-		return this->STATUS & 64;
+		return this->STATUS & StatusConstants::overflow;
 	}
 	else if (flag == 'H') {
-		return this->STATUS & 16;
+		return this->STATUS & StatusConstants::halt;
+	}
+	else if (flag == 'D') {
+		return this->STATUS & StatusConstants::dynamic_fail;
+	}
+	else if (flag == 'F') {
+		return this->STATUS & StatusConstants::floating_point;
 	}
 	else if (flag == 'Z') {
-		return this->STATUS & 2;
+		return this->STATUS & StatusConstants::zero;
 	}
 	else if (flag == 'C') {
-		return this->STATUS & 1;
+		return this->STATUS & StatusConstants::carry;
 	}
-
-	// this should never throw an exception
+	else {
+		throw std::runtime_error("Invalid STATUS flag selection");	// throw an exception if we call the function with an invalid flag
+	}
 }
 
 
@@ -1498,7 +1339,15 @@ void SINVM::_debug_values() {
 SINVM::SINVM(std::istream& file)
 {
 	// TODO: redo the SINVM constructor...
-	this->_WORDSIZE = BinaryIO::readU8(file);
+
+	// initialize our ALU
+	this->alu = ALU(&this->REG_A, &this->REG_B, &this->STATUS);
+
+	// get the wordsize, make sure it is compatible with this VM
+	uint8_t file_wordsize = BinaryIO::readU8(file);
+	if (file_wordsize != _WORDSIZE) {
+		throw VMException("Incompatible word sizes; the VM uses a " + std::to_string(_WORDSIZE) + "-bit wordsize; file to execute uses a " + std::to_string(file_wordsize) + "-bit word.");
+	}
 
 	size_t prg_size = (size_t)BinaryIO::readU32(file);
 	std::vector<uint8_t> prg_data;

@@ -5,6 +5,21 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+4/7 commit to VM
+
+- Began splitting the SINVM's implementation across multiple source files for organization purposes
+- Added SINVM_INT_MIN and SINVM_INT_MAX constants, for future use in the compiler
+- Previously, SINVM exceptions did not display the hexadecimal prefix (0x) before the address of the PC when the exception occurred; this has been modified
+- Added a StatusConstants namespace to contain numeric constants for the various bit positions of the flags in the STATUS register
+- All bit-manipulation functions in the VM now throw exceptions if the function is called using an invalid flag
+- Added an ALU class, to be used by the SINVM for all mathematical and logical functionality
+- Updated the addition, subtraction, multiplication, and division algorithms to use the N, V, Z, and C flags appropriately
+- ADDCA and SUBCA actually /use/ the carry now, unlike before:
+	- The carry flag (C) is _always_ used in these instructions, so it is necessary to clear/set (addition/subtraction, respectively) before operations that do not want to take a carry or borrow operation into account; when working with 32-bit integers (instead of 16), this is only done once. However, since 32-bit addition and subtraction have not been implemented in the compiler, this is a moot point for now
+- Modified all occurrences of the ADDCA and SUBCA instructions to include appropriate CLC/SEC instruction
+
+--------------------------------------------------------------------------------------------
+
 4/4 commit to Compiler
 
 - Fixed a bug that would cause errors in the parser if the block in a while statement was empty; this was the same problem faced in empty if/else blocks, and has been resolved

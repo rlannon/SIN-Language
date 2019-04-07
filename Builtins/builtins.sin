@@ -40,10 +40,10 @@ def int exp(alloc int base, alloc int exponent) {
     alloc int total: 1;
     alloc int i: 0;
 
-    while (i < exponent) {
-        let total = total * base;
-        let i = i + 1;
-    }
+    //while (i < exponent) {
+    //    let total = total * base;
+    //    let i = i + 1;
+    //}
 
     return total;
 }

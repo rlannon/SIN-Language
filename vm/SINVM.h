@@ -1,3 +1,13 @@
+/*
+
+SIN Toolchain
+SINVM.h
+Copyright 2019 Riley Lannon
+
+The virtual machine that will be responsible for interpreting SIN bytecode.
+
+*/
+
 #pragma once
 
 #include <vector>
@@ -9,23 +19,23 @@
 
 #include "../assemble/Assembler.h"
 #include "../util/SinObjectFile.h"	// to load a .SINC file
-// #include "../util/BinaryIO/BinaryIO.h"	// included in Assembler.h, but commenting here to denote that functions from it are being used in this class
-// #include "../util/OpcodeConstants.h"	// included in Assembler.h, but commenting here to serve as a reminder that the constants are used in this class so we don't need to use the hex values whenever referencing an instruction
 #include "../util/VMMemoryMap.h"	// contains the constants that define where various blocks of memory begin and end in the VM
-//#include "../util/AddressingModeConstants.h"	// included in Assembler.h
 #include "DynamicObject.h"	// for use in allocating objects on the heap
 #include "../util/Exceptions.h"	// for VMException
+#include "StatusConstants.h"
+#include "ALU.h"
 
-/*
-	The virtual machine that will be responsible for interpreting SIN bytecode
-*/
+// Note there is functionality from other headers that are not included here because they are included in headers we have already included in this file, and although we are using #pragma once, they don't need to be included again
+
 
 class SINVM
 {
 
 	// the VM's word size
-	// TODO: use initializer list so that this can be a const member?
-	uint8_t _WORDSIZE;
+	const uint8_t _WORDSIZE = 16;
+
+	// the VM will contain an ALU instance
+	ALU alu;
 
 	// create objects for our program counter and stack pointer
 	uint16_t PC;	// points to the memory address in the VM containing the next byte we want
@@ -37,22 +47,6 @@ class SINVM
 	uint16_t REG_B;
 	uint16_t REG_X;
 	uint16_t REG_Y;
-
-	/*
-	The status register has the following layout:
-		7	6	5	4	3	2	1	0
-		N	V	0	H	D	F	Z	C
-	Flag meanings:
-		N: Negative
-		V: Overflow
-		H: HALT instruction executed
-		D: Dynamic memory failbit
-		F: Floating-point
-		Z: Zero
-		C: Carry
-	Notes:
-		- The Z flag is also used for equality; compare instructions will set the zero flag if the operands are equal
-	*/
 
 	uint8_t STATUS;	// our byte to hold our status information
 
@@ -78,13 +72,15 @@ class SINVM
 	void execute_store(uint16_t reg_to_store);
 
 	// generic load/store functions
-	int get_data_from_memory(uint16_t address, bool is_short = false);
+	uint16_t get_data_from_memory(uint16_t address, bool is_short = false);
 	void store_in_memory(uint16_t address, uint16_t new_value, bool is_short = false);
 
 	void execute_bitshift(int opcode);
 
 	void execute_comparison(int reg_to_compare);
 	void execute_jmp();
+
+	void execute_syscall();
 
 	// stack functions
 	void push_stack(uint16_t reg_to_push);
