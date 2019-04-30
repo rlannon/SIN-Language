@@ -5,6 +5,15 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+4/29 commit to VM
+
+- Expanded the ALU class, implementing the DIV instructions
+- Added an "undefined" flag in the STATUS register to signal the result of an expression is undefined (e.g., if a division by zero is attempted)
+- Added and began implementation of an 'Interrupt' flag in the STATUS register; this may be eliminated/replaced in future if it does not get used
+- Updated some occurrences of 'int' in the SINVM to 'uint16_t' (built-in 'int' type is not necessary for the VM, as it is a 16-bit machine and unsigned values are represented with two's complement in a 16-bit word)
+
+--------------------------------------------------------------------------------------------
+
 4/7 commit to VM
 
 - Began splitting the SINVM's implementation across multiple source files for organization purposes

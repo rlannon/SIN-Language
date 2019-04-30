@@ -18,25 +18,32 @@ namespace StatusConstants
 
 	The status register has the following layout:
 		7	6	5	4	3	2	1	0
-		N	V	0	H	D	F	Z	C
+		N	V	U	H	I	F	Z	C
 	Flag meanings:
 		N: Negative
+			Set when the result of the previous operation was negative
 		V: Overflow
-		H: HALT instruction executed
-		D: Dynamic memory failbit
+			Set when there was an integer overflow, or when the sign of the result of an ADDCA or SUBCA instruction is incorrect
+		U: Undefined
+			Generated when the result of an operation is undefined
+		H: HALT Signal
+			The processor received a HALT signal and will stop execution
+		I: Interrupt Signal
+			When an interrupt is requested, this flag will be set
 		F: Floating-point
+			Indicates the result of an operation is a floating-point number
 		Z: Zero
+			The result of the operation was zero; used in comparison and conditional branching. If the operands are equal, the Z flag will be set
 		C: Carry
-	Notes:
-		- The Z flag is also used for equality; compare instructions will set the zero flag if the operands are equal
+			The carry bit from an ADDCA instruction, or the borrow bit from a SUBCA instruction. This flag is also set when the result of a CMP yielded a result of "greater", and cleared when the result is "less"
 	
 	*/
 
 	const uint8_t negative = 128;
 	const uint8_t overflow = 64;
-	// currently, the 5th bit is unused
+	const uint8_t undefined = 32;
 	const uint8_t halt = 16;
-	const uint8_t dynamic_fail = 8;
+	const uint8_t interrupt = 8;
 	const uint8_t floating_point = 4;
 	const uint8_t zero = 2;
 	const uint8_t carry = 1;

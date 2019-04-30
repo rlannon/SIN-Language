@@ -40,9 +40,9 @@ uint16_t SINVM::get_data_of_wordsize() {
 	return data_to_load;
 }
 
-std::vector<uint8_t> SINVM::get_properly_ordered_bytes(int value) {
+std::vector<uint8_t> SINVM::get_properly_ordered_bytes(uint16_t value) {
 	std::vector<uint8_t> ordered_bytes;
-	for (int i = (this->_WORDSIZE / 8); i > 0; i--) {
+	for (uint8_t i = (this->_WORDSIZE / 8); i > 0; i--) {
 		ordered_bytes.push_back(value >> ((i - 1) * 8));
 	}
 	return ordered_bytes;
@@ -688,7 +688,7 @@ void SINVM::store_in_memory(uint16_t address, uint16_t new_value, bool is_short)
 	return;
 }
 
-void SINVM::execute_bitshift(int opcode)
+void SINVM::execute_bitshift(uint16_t opcode)
 {
 
 	// TODO: correct for wordsize -- currently, highest bit is always 7; should be highest bit in the wordsize
@@ -698,10 +698,10 @@ void SINVM::execute_bitshift(int opcode)
 
 	// check our addressing mode
 	this->PC++;
-	int addressing_mode = this->memory[this->PC];
+	uint8_t addressing_mode = this->memory[this->PC];
 
 	if (addressing_mode != addressingmode::reg_a) {
-		int value_at_address;
+		uint16_t value_at_address;
 		uint8_t high_byte_address;
 		bool carry_set_before_bitshift = false;
 
@@ -870,8 +870,8 @@ void SINVM::execute_bitshift(int opcode)
 }
 
 
-void SINVM::execute_comparison(int reg_to_compare) {
-	int to_compare = this->execute_load();
+void SINVM::execute_comparison(uint16_t reg_to_compare) {
+	uint16_t to_compare = this->execute_load();
 
 	// if the values are equal, set the Z flag; if they are not, clear it
 	if (reg_to_compare == to_compare) {
@@ -1078,7 +1078,6 @@ void SINVM::allocate_heap_memory()
 		// if the memory allocation fails, return a NULL pointer
 		REG_B = 0x00;
 		REG_A = 0x00;
-		this->set_status_flag('D');
 	}
 }
 
@@ -1089,7 +1088,7 @@ void SINVM::reallocate_heap_memory(bool error_if_not_found)
 	Attempts to reallocate the dynamic object at the location specified by REG_B with the number of bytes in REG_A.
 	If there is room for the new size where the object is currently allocated, then it will leave it where it is and simply change the size in the VM. If not, it will try to find a new place. If it can't reallocate the memory, it will load REG_A and REG_B with 0x00.
 	If the VM cannot find an object at the location specified, it will:
-		- Load the registers with 0x00 and set the D flag if 'error_if_not_found' is true
+		- Load the registers with 0x00 if 'error_if_not_found' is true
 		- Allocate a new heap object if 'error_if_not_found' is false
 
 	*/
@@ -1148,7 +1147,6 @@ void SINVM::reallocate_heap_memory(bool error_if_not_found)
 			else {
 				this->REG_A = 0x00;	// there's no room, so load them with 0x00
 				this->REG_B = 0x00;
-				this->set_status_flag('D');
 			}
 		}
 	}
@@ -1157,7 +1155,6 @@ void SINVM::reallocate_heap_memory(bool error_if_not_found)
 		if (error_if_not_found) {
 			this->REG_A = 0x00;	// we can't find the object, so set the registers to 0x00
 			this->REG_B = 0x00;
-			this->set_status_flag('D');
 		}
 		else {
 			this->allocate_heap_memory();	// allocate heap memory for the object if we can't find it
@@ -1166,21 +1163,9 @@ void SINVM::reallocate_heap_memory(bool error_if_not_found)
 }
 
 
+// STATUS register operations
 void SINVM::set_status_flag(char flag) {
 	// sets the flag equal to 'flag' in the status register
-	
-	/*
-	Reminder of the layout of the status register (bit number / flag):
-		7	6	5	4	3	2	1	0
-		N	V	0	H	0	0	Z	C
-	
-	Flag meanings:
-		N: Negative
-		V: Overflow
-		H: HALT instruction executed
-		Z: Zero
-		C: Carry
-	*/
 
 	if (flag == 'N') {
 		this->STATUS |= StatusConstants::negative;
@@ -1188,11 +1173,14 @@ void SINVM::set_status_flag(char flag) {
 	else if (flag == 'V') {
 		this->STATUS |= StatusConstants::overflow;
 	}
+	else if (flag == 'U') {
+		this->STATUS |= StatusConstants::undefined;
+	}
 	else if (flag == 'H') {
 		this->STATUS |= StatusConstants::halt;
 	}
-	else if (flag == 'D') {
-		this->STATUS |= StatusConstants::dynamic_fail;
+	else if (flag == 'I') {
+		this->STATUS |= StatusConstants::interrupt;
 	}
 	else if (flag == 'F') {
 		this->STATUS |= StatusConstants::floating_point;
@@ -1213,30 +1201,20 @@ void SINVM::set_status_flag(char flag) {
 void SINVM::clear_status_flag(char flag) {
 	// sets the flag equal to 'flag' in the status register
 
-	/*
-	Reminder of the layout of the status register (bit number / flag):
-	7	6	5	4	3	2	1	0
-	N	V	0	H	0	0	Z	C
-
-	Flag meanings:
-	N: Negative
-	V: Overflow
-	H: HALT instruction executed
-	Z: Zero
-	C: Carry
-	*/
-
 	if (flag == 'N') {
 		this->STATUS = this->STATUS & (255 - StatusConstants::negative);
 	}
 	else if (flag == 'V') {
 		this->STATUS = this->STATUS & (255 - StatusConstants::overflow);
 	}
+	else if (flag == 'U') {
+		this->STATUS = this->STATUS & (255 - StatusConstants::undefined);
+	}
 	else if (flag == 'H') {
 		this->STATUS = this->STATUS & (255 - StatusConstants::halt);
 	}
-	else if (flag == 'D') {
-		this->STATUS = this->STATUS & (255 - StatusConstants::dynamic_fail);
+	else if (flag == 'I') {
+		this->STATUS = this->STATUS & (255 - StatusConstants::interrupt);
 	}
 	else if (flag == 'F') {
 		this->STATUS = this->STATUS & (255 - StatusConstants::floating_point);
@@ -1269,11 +1247,14 @@ bool SINVM::is_flag_set(char flag) {
 	else if (flag == 'V') {
 		return this->STATUS & StatusConstants::overflow;
 	}
+	else if (flag == 'U') {
+		return this->STATUS & StatusConstants::undefined;
+	}
 	else if (flag == 'H') {
 		return this->STATUS & StatusConstants::halt;
 	}
-	else if (flag == 'D') {
-		return this->STATUS & StatusConstants::dynamic_fail;
+	else if (flag == 'I') {
+		return this->STATUS & StatusConstants::interrupt;
 	}
 	else if (flag == 'F') {
 		return this->STATUS & StatusConstants::floating_point;
@@ -1311,13 +1292,13 @@ void SINVM::_debug_values() {
 	std::cout << "\t\tB: $" << std::hex << this->REG_B << std::endl;
 	std::cout << "\t\tX: $" << std::hex << this->REG_X << std::endl;
 	std::cout << "\t\tY: $" << std::hex << this->REG_Y << std::endl;
-	std::cout << "\t\tSP: $" << std::hex << (int)this->SP << std::endl;
-	std::cout << "\t\tSTATUS: $" << std::hex << (int)this->STATUS << std::endl << std::endl;
+	std::cout << "\t\tSP: $" << std::hex << this->SP << std::endl;
+	std::cout << "\t\tSTATUS: $" << std::hex << (uint16_t)this->STATUS << std::endl << std::endl;
 
 	std::cout << "Memory: " << std::endl;
 	for (size_t i = 0; i < 0xFF; i++) {
 		// display the first two pages of memory
-		std::cout << "\t$000" << i << ": $" << std::hex << (int)this->memory[i] << "\t\t$0" << 0x100 + i << ": $" << (int)this->memory[256 + i] << std::endl;
+		std::cout << "\t$000" << i << ": $" << std::hex << (uint16_t)this->memory[i] << "\t\t$0" << 0x100 + i << ": $" << (uint16_t)this->memory[256 + i] << std::endl;
 	}
 
 	std::cout << "\nStack: " << std::endl;

@@ -135,7 +135,7 @@ void ALU::mult_signed(uint16_t right)
 		To convert to signed, subtract one and flip all of the bits
 		Note bits can be flipped simply by using XOR 0xFFFF (all 1s will become 0 and all 0s will become 1)
 	Next, perform the multiplication
-	Next, check to see if the sign bit on the result is set; if so, we have integer overflow. Also, check to see if the REG_A is equal to result / right
+	Next, check to see if the sign bit on the result is set; if so, we have integer overflow. Also, check to see if REG_A is equal to result / right
 	Finally, if exactly one of the sign bits was set, perform two's complement on the result; else, leave it
 
 	*/
@@ -180,12 +180,96 @@ void ALU::mult_signed(uint16_t right)
 
 void ALU::div_unsigned(uint16_t right)
 {
+	/*
+	
+	Perform unsigned division on two values, A_REG by 'right'.
+	It is not possible for there to be integer overflow/underflow on division, so we don't need to do what we did with multiplication.
+	The result of the operation will be stored in the A register, while the remainder from the operation will be stored in the B register.
+	If 'right' is equal to zero, set the U flag, load A and B with 0xFFFF, and continue
+	
+	*/
 
+	if (right == 0) {
+		*this->STATUS |= StatusConstants::undefined;
+		*this->REG_A = 0xFFFF;
+		*this->REG_B = 0xFFFF;
+	}
+	else {
+		uint16_t result = *this->REG_A / right;
+		uint16_t remainder = *this->REG_A % right;
+
+		*this->REG_A = result;
+		*this->REG_B = remainder;
+	}
+
+	return;
 }
 
 void ALU::div_signed(uint16_t right)
 {
+	/*
+	
+	Similar to div_unsigned, except both numbers are treated as being in signed integer notation.
+		First, perform two's complement on the numbers if they are signed
+		Next, perform the division
+		If the sign values of each number are the same, leave the result; else, use two's complement to convert the result.
+	
+	If the right value is zero, 0xFFFF is loaded into A and B registers and the U flag is set. 
+	
+	*/
 
+	if (right == 0) {
+		*this->STATUS |= StatusConstants::undefined;	// set the U flag
+		*this->REG_A = 0xFFFF;
+		*this->REG_B = 0xFFFF;
+	}
+	else {
+		bool left_signed = *this->REG_A & 0x8000;
+		bool right_signed = right & 0x8000;
+
+		if (left_signed) {
+			*this->REG_A ^= 0xFFFF;
+			*this->REG_A += 1;
+		}
+		if (right_signed) {
+			right ^= 0xFFFF;
+			right += 1;
+		}
+
+		uint16_t result = *this->REG_A / right;
+
+		/*
+		
+		Where / is the quotient of a by b, with the fractional part discarded, and % is the remainder of a by b, the remainder can be calculated using the formula:
+			(a / b) * b + a % b = a
+		therefore,
+			a - ((a / b) * b) = a % b
+		
+		*/
+
+		uint16_t remainder = *this->REG_A - result * right;
+
+		if (left_signed == right_signed) {
+			*this->REG_A = result;
+			*this->REG_B = remainder;
+		}
+		else {
+			// two's complement on the result
+			result -= 1;
+			result ^= 0xFFFF;
+
+			// ...and on the remainder
+			remainder -= 1;
+			remainder ^= 0xFFFF;
+
+			// update our registers
+			*this->REG_A = result;
+			*this->REG_B = remainder;
+			*this->STATUS |= StatusConstants::negative;
+		}
+	}
+
+	return;
 }
 
 ALU::ALU(uint16_t * REG_A, uint16_t* REG_B, uint8_t * STATUS) : REG_A(REG_A), REG_B(REG_B), STATUS(STATUS)

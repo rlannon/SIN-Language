@@ -35,7 +35,8 @@ class SINVM
 	const uint8_t _WORDSIZE = 16;
 
 	// the VM will contain an ALU instance
-	ALU alu;
+	ALU alu;	// todo: allocate this on heap?
+	// todo: add FPU
 
 	// create objects for our program counter and stack pointer
 	uint16_t PC;	// points to the memory address in the VM containing the next byte we want
@@ -62,7 +63,7 @@ class SINVM
 
 	// read a value in memory
 	uint16_t get_data_of_wordsize();
-	std::vector<uint8_t> get_properly_ordered_bytes(int value);
+	std::vector<uint8_t> get_properly_ordered_bytes(uint16_t value);
 
 	// execute a single instruction
 	void execute_instruction(uint16_t opcode);
@@ -75,9 +76,9 @@ class SINVM
 	uint16_t get_data_from_memory(uint16_t address, bool is_short = false);
 	void store_in_memory(uint16_t address, uint16_t new_value, bool is_short = false);
 
-	void execute_bitshift(int opcode);
+	void execute_bitshift(uint16_t opcode);
 
-	void execute_comparison(int reg_to_compare);
+	void execute_comparison(uint16_t reg_to_compare);
 	void execute_jmp();
 
 	void execute_syscall();

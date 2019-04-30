@@ -6,6 +6,8 @@ Copyright 2019 Riley Lannon
 
 This includes the implementation of the syscall instruction, including functionality for some of the syscall operations.
 
+Note the SYSCALL instruction is akin to an INT instruction in Unix; it is like an interrupt request, but it triggers the VM to perform some interaction with the host system. This allows the VM to be very separated from the host, and only interact with it in very specific and well-defined ways.
+
 */
 
 #include "SINVM.h"
