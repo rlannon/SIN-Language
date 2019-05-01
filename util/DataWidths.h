@@ -11,6 +11,9 @@ This is to be used in lieu of hard-coded values (wherever they may be used) with
 
 #pragma once
 
+const size_t SINVM_INT_MIN = 0;
+const size_t SINVM_INT_MAX = 0xFFFF;
+
 const size_t WORD_W = 2;	// the SINVM uses a 16-bit word
 
 const size_t BOOL_W = 2;	// a boolean is one word, though it _can_ be stored in a single byte

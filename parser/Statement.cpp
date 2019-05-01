@@ -56,7 +56,6 @@ StatementBlock::~StatementBlock() {
 /*******************		INCLUDE CLASS		********************/
 
 
-
 std::string Include::get_filename() {
 	return this->filename;
 }
@@ -69,7 +68,38 @@ Include::Include() {
 	this->statement_type = INCLUDE;
 }
 
+/*******************		DECLARATION CLASS		********************/
 
+
+Type Declaration::get_data_type() {
+	return this->data_type;
+}
+
+Type Declaration::get_subtype() {
+	return this->subtype;
+}
+
+size_t Declaration::get_length() {
+	return this->array_length;
+}
+
+std::vector<SymbolQuality> Declaration::get_qualities() {
+	return this->qualities;
+}
+
+std::vector<std::shared_ptr<Statement>> Declaration::get_formal_parameters() {
+	return this->formal_parameters;
+}
+
+// Constructors
+Declaration::Declaration(Type data_type, std::string var_name, Type subtype, size_t array_length, std::vector<SymbolQuality> qualities, std::vector<std::shared_ptr<Statement>> formal_parameters) : data_type(data_type), var_name(var_name), subtype(subtype), array_length(array_length), qualities(qualities), formal_parameters(formal_parameters)
+{
+	this->statement_type = DECLARATION;
+}
+
+Declaration::Declaration() {
+	this->statement_type = DECLARATION;
+}
 
 /*******************	ALLOCATION CLASS	********************/
 

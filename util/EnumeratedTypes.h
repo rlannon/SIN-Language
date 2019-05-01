@@ -16,6 +16,7 @@ These are to be used so that this code might be more maintainable and less error
 enum stmt_type {
 	STATEMENT_GENERAL,
 	INCLUDE,
+	DECLARATION,
 	ALLOCATION,
 	ASSIGNMENT,
 	RETURN_STATEMENT,

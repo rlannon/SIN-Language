@@ -1,11 +1,11 @@
 #include "Parser.h"
 
 
-
 // Define our symbols and their precedences as a vector of tuples
 const std::vector<std::tuple<std::string, int>> Parser::precedence{ std::make_tuple("or", 2), std::make_tuple("and", 2), std::make_tuple("!", 2), \
-	std::make_tuple("<", 4), std::make_tuple(">", 7), std::make_tuple("<", 7), std::make_tuple(">=", 7), std::make_tuple("<=", 7), std::make_tuple("=", 7),\
-	std::make_tuple("!=", 7), std::make_tuple("|", 8), std::make_tuple("^", 8), std::make_tuple("&", 9), std::make_tuple("+", 10), std::make_tuple("-", 10), std::make_tuple("$", 15), std::make_tuple("*", 20), std::make_tuple("/", 20), std::make_tuple("%", 20) };
+	std::make_tuple("<", 4), std::make_tuple(">", 7), std::make_tuple("<", 7), std::make_tuple(">=", 7), std::make_tuple("<=", 7), std::make_tuple("=", 7),
+	std::make_tuple("!=", 7), std::make_tuple("|", 8), std::make_tuple("^", 8), std::make_tuple("&", 9), std::make_tuple("+", 10), 
+	std::make_tuple("-", 10),std::make_tuple("$", 15), std::make_tuple("*", 20), std::make_tuple("/", 20), std::make_tuple("%", 20) };
 
 // Iterate through the vector and find the tuple that matches our symbol; if found, return its precedence; if not, return -1
 const int Parser::get_precedence(std::string symbol) {
@@ -139,6 +139,168 @@ std::string Parser::get_closing_grouping_symbol(std::string beginning_symbol)
 bool Parser::is_opening_grouping_symbol(std::string to_test)
 {
 	return (to_test == "(" || to_test == "[");
+}
+
+TypeData Parser::get_type()
+{
+	/*
+	
+	Gets the qualities and type data about a symbol in an allocation or declaration. The tuple contains:
+		0 - Type	-	The data type
+		1 - Type	-	The subtype
+		2 - vector	-	Symbol qualities
+		3 - size_t	-	The array size, if applicable
+	
+	*/
+
+	// the parse function that calls this one will have advanced the token iterator to the first token in the type data
+	lexeme current_lex = this->current_token();
+
+	// check our quality, if any
+	std::vector<SymbolQuality> qualities;
+	if (current_lex.value == "const") {
+		// change the variable quality
+		qualities.push_back(CONSTANT);
+
+		// get the actual variable type
+		current_lex = this->next();
+	}
+	else if (current_lex.value == "dynamic") {
+		qualities.push_back(DYNAMIC);
+		current_lex = this->next();
+	}
+	else if (current_lex.value == "static") {
+		qualities.push_back(STATIC);
+		current_lex = this->next();
+	}
+
+	// check to see if we have a sign quality; this always comes immediately before the type
+	if (current_lex.value == "unsigned") {
+		// make sure the next value is 'int' by checking the 
+		if (this->peek().value == "int") {
+			qualities.push_back(UNSIGNED);
+			current_lex = this->next();
+		}
+		else {
+			throw ParserException("Cannot use sign qualifier for variable of this type", 0, current_lex.line_number);
+		}
+	}
+	else if (current_lex.value == "signed") {
+		// make sure the next value is 'int'
+		if (this->peek().value == "int") {
+			qualities.push_back(SIGNED);
+			current_lex = this->next();
+		}
+		else {
+			throw ParserException("Cannot use sign qualifier for variable of this type", 0, current_lex.line_number);
+		}
+	}
+
+	// set the quality to DYNAMIC if we have a string
+	if (current_lex.value == "string") {
+		qualities.push_back(DYNAMIC);
+	}
+
+	Type new_var_type;
+	Type new_var_subtype = NONE;
+	size_t array_length = 0;
+
+	if (current_lex.value == "ptr") {
+		// set the type
+		new_var_type = PTR;
+
+		// 'ptr' must be followed by '<'
+		if (this->peek().value == "<") {
+			this->next();
+			// a keyword must be in the angle brackets following 'ptr'
+			if (this->peek().type == "kwd") {
+				lexeme subtype = this->next();
+				new_var_subtype = get_type_from_string(subtype.value);
+
+				// the next character must be ">"
+				if (this->peek().value == ">") {
+					// skip the angle bracket
+					this->next();
+				}
+				// if it isn't, throw an exception
+				else if (this->peek().value != ">") {
+					throw ParserException("Pointer type must be enclosed in angle brackets", 212, current_lex.line_number);
+				}
+			}
+		}
+		// if it's not, we have a syntax error
+		else {
+			throw ParserException("Proper syntax is 'alloc ptr<type>'", 212, current_lex.line_number);
+		}
+	}
+	// otherwise, if it's an array,
+	else if (current_lex.value == "array") {
+		new_var_type = ARRAY;
+		// check to make sure we have the size and type in angle brackets
+		if (this->peek().value == "<") {
+			this->next();	// eat the angle bracket
+
+			// we must see the size next; must be an int
+			if (this->peek().type == "int") {
+				array_length = (size_t)std::stoi(this->next().value);	// get the array length
+
+				// a comma should follow the size
+				if (this->peek().value == ",") {
+					this->next();
+					std::shared_ptr<LValue> new_var_struct_name;	// in case we have a struct
+
+					// next, we should see a keyword or an identifier (we can have an array of structs, which the lexer would see as an ident)
+					if (this->peek().type == "kwd") {
+						// new_var_subtype will be the type indicated
+						new_var_subtype = get_type_from_string(this->next().value);
+					}
+					else if (this->peek().type == "ident") {
+						// the subtype will be struct, and we should set the struct type as the identifier
+						new_var_subtype = STRUCT;
+						new_var_struct_name = std::make_shared<LValue>(this->next().value);
+					}
+					else {
+						throw ParserException("Invalid subtype in array allocation", 0, this->peek().line_number);
+					}
+
+					// now, we should see a closing angle bracket and the name of the array
+					if (this->peek().value == ">") {
+						this->next();	// eat the angle bracket
+					}
+				}
+				else {
+					throw ParserException("The size of an array must be followed by the type", 0, current_lex.line_number);
+				}
+			}
+			else {
+				throw ParserException("The size of an array must be a positive integer expression", 0, current_lex.line_number);
+			}
+		}
+		else {
+			throw ParserException("You must specify the size and type of an array", 0, current_lex.line_number);
+		}
+	}
+	// otherwise, if it is not a pointer or an array,
+	else {
+		// if we have an int, but we haven't pushed back signed/unsigned, default to signed
+		if (current_lex.value == "int") {
+			// if the last quality in the list (which is our signed/unsigned specifier, if we have one) is not signed and also not unsigned, push back 'signed'
+			if (qualities.size() != 0 && (qualities[qualities.size() - 1] != SIGNED && qualities[qualities.size() - 1] != UNSIGNED)) {
+				qualities.push_back(SIGNED);
+			}
+			// if we don't have _any_ qualities, push back 'signed'
+			else if (qualities.size() == 0) {
+				qualities.push_back(SIGNED);
+			}
+		}
+
+		// store the type name in our Type object
+		new_var_type = get_type_from_string(current_lex.value); // note: Type get_type_from_string() is found in "Expression" (.h and .cpp)
+	}
+
+	// create the symbol type data
+	TypeData symbol_type_data(new_var_type, new_var_subtype, array_length, qualities);
+	return symbol_type_data;
 }
 
 
@@ -288,12 +450,16 @@ std::shared_ptr<Statement> Parser::parse_statement() {
 					return stmt;
 				}
 				else {
-					throw ParserException("Syntax error: expected ';'", 0, current_lex.line_number);
+					throw MissingSemicolonError(current_lex.line_number);
 				}
 			}
 			else {
 				throw ParserException("Expected identifier after 'free'", 0, current_lex.line_number);
 			}
+		}
+		// parse a declaration
+		else if (current_lex.value == "decl") {
+			return this->parse_declaration(current_lex);
 		}
 		// parse an ITE
 		else if (current_lex.value == "if") {
@@ -370,6 +536,83 @@ std::shared_ptr<Statement> Parser::parse_include(lexeme current_lex)
 	}
 	else {
 		throw ParserException("Include statements must come at the top of the file.", 0, current_lex.line_number);
+	}
+}
+
+std::shared_ptr<Statement> Parser::parse_declaration(lexeme current_lex) {
+	/*
+	
+	Parse a declaration statement. Appropriate syntax is:
+		decl <type> <name>;
+	or
+		decl <type> <name>(<formal parameters>);
+	where the formal parameters are also declarations
+	
+	*/
+
+	lexeme next_lexeme = this->peek();
+
+	// the next lexeme must be a keyword (specifically, a type)
+	if (next_lexeme.type == "kwd") {
+		next_lexeme = this->next();
+		TypeData symbol_type_data = this->get_type();
+
+		// get the variable name
+		next_lexeme = this->next();
+		if (next_lexeme.type == "ident") {		// variable names must be identifiers; if an identifier doesn't follow the type, we have an error
+			// get our variable name
+			std::string var_name = next_lexeme.value;
+			std::vector<std::shared_ptr<Statement>> formal_parameters = {};
+
+			// next, check to see if we have a paren following the name; if so, it's a function, so we need to get the formal parameters
+			if (this->peek().value == "(") {
+				// todo: parse function declarations
+				this->next();	// eat the opening paren
+
+				// so long as we haven't hit the end of the formal parameters, continue parsing
+				while (this->peek().value != ")") {
+					this->next();
+					std::shared_ptr<Statement> next = this->parse_statement();
+
+					// the statement _must_ be a declaration, not an allocation
+					if (next->get_statement_type() == DECLARATION) {
+						formal_parameters.push_back(next);
+					}
+					else {
+						throw ParserException("Definitions of formal parameters in a declaration of a function must use 'decl' (not 'alloc'", 0,
+							this->current_token().line_number);
+					}
+
+					if (this->peek().value == ",") {
+						this->next();
+					}
+				}
+
+				this->next();	// eat the closing paren
+			}
+
+			// finally, we must have a semicolon, a comma, or a closing paren
+			if (this->peek().value == ";" || this->peek().value == "," || this->peek().value == ")") {
+				Declaration decl_statement(symbol_type_data.data_type, var_name, symbol_type_data.subtype, symbol_type_data.array_length,
+					symbol_type_data.qualities, formal_parameters);
+				decl_statement.set_line_number(next_lexeme.line_number);
+
+				return std::make_shared<Declaration>(decl_statement);
+			}
+			else if (this->peek().value == ":") {
+				throw ParserException("Initializations are forbidden in declaration statements", 0, next_lexeme.line_number);
+			}
+			else {
+				throw MissingSemicolonError(next_lexeme.line_number);
+			}
+		}
+		else {
+			throw ParserException("Expected variable name after type in Declaration", 0, next_lexeme.line_number);
+		}
+	}
+	// if it is not followed by a type name, throw an exception
+	else {
+		throw ParserException("Expected type name following 'decl' in variable declaration", 0, current_lex.line_number);
 	}
 }
 
@@ -450,251 +693,46 @@ std::shared_ptr<Statement> Parser::parse_ite(lexeme current_lex)
 
 std::shared_ptr<Statement> Parser::parse_allocation(lexeme current_lex)
 {
+	// create an object for the statement as well as the variable's name
 	std::shared_ptr<Statement> stmt;
-
-	// Create objects for our variable's type and name
-	Type new_var_type;
-	Type new_var_subtype = NONE;	// if we have a type that requires a subtype, this will be modified
-
 	std::string new_var_name = "";
 
 	// check our next token; it must be a keyword
-	lexeme var_type = this->next();
-	if (var_type.type == "kwd") {
+	lexeme next_token = this->next();
+	if (next_token.type == "kwd") {
+		// get the type data using Parser::get_type()
+		TypeData symbol_type_data = this->get_type();
 
-		// check our quality, if any
-		std::vector<SymbolQuality> qualities;
-		if (var_type.value == "const") {
-			// change the variable quality
-			qualities.push_back(CONSTANT);
-
-			// get the actual variable type
-			var_type = this->next();
-		}
-		else if (var_type.value == "dynamic") {
-			qualities.push_back(DYNAMIC);
-			var_type = this->next();
-		}
-		else if (var_type.value == "static") {
-			qualities.push_back(STATIC);
-			var_type = this->next();
-		}
-
-		// check to see if we have a sign quality; this always comes immediately before the type
-		if (var_type.value == "unsigned") {
-			// make sure the next value is 'int'
-			if (this->peek().value != "int") {
-				throw ParserException("Cannot use sign qualifier for variable of this type", 0, var_type.line_number);
-			}
-			else {
-				qualities.push_back(UNSIGNED);
-				var_type = this->next();
-			}
-		}
-		else if (var_type.value == "signed") {
-			// make sure the next value is 'int'
-			if (this->peek().value != "int") {
-				throw ParserException("Cannot use sign qualifier for variable of this type", 0, var_type.line_number);
-			}
-			else {
-				qualities.push_back(SIGNED);
-				var_type = this->next();
-			}
-		}
-
-		if (var_type.value == "int" || var_type.value == "float" || var_type.value == "bool" || var_type.value == "string" || var_type.value == "raw" || var_type.value == "ptr") {
-			// Note: pointers, consts, and RAWs must be treated a little bit differently than other fundamental types
-
-			// set the quality to DYNAMIC if we have a string
-			if (var_type.value == "string") {
-				qualities.push_back(DYNAMIC);
-			}
-
+		// next, get the name
+		if (this->peek().type == "ident") {
+			next_token = this->next();
+			new_var_name = next_token.value;
 			bool initialized = false;
-			std::shared_ptr<Expression> initial_value = std::make_shared<Expression>();	// empty expression by default
-			
-			if (var_type.value == "ptr") {
-				// set the type
-				new_var_type = PTR;
+			std::shared_ptr<Expression> initial_value = std::make_shared<Expression>();
 
-				// 'ptr' must be followed by '<'
-				if (this->peek().value == "<") {
-					this->next();
-					// a keyword must be in the angle brackets following 'ptr'
-					if (this->peek().type == "kwd") {
-						lexeme subtype = this->next();
-						new_var_subtype = get_type_from_string(subtype.value);
-
-						// the next character must be ">"
-						if (this->peek().value == ">") {
-							// skip the angle bracket
-							this->next();
-						}
-						// if it isn't, throw an exception
-						else if (this->peek().value != ">") {
-							throw ParserException("Pointer type must be enclosed in angle brackets", 212, current_lex.line_number);
-						}
-					}
-				}
-				// if it's not, we have a syntax error
-				else {
-					throw ParserException("Proper syntax is 'alloc ptr<type>'", 212, current_lex.line_number);
-				}
+			// the name can be followed by a semicolon, a comma, a closing paren, or a colon
+			// if it's a colon, we have an initial value
+			if (this->peek().value == ":") {
+				this->next();
+				this->next();	// advance the iterator so it points to the first character of the expression
+				initialized = true;
+				initial_value = this->parse_expression();
 			}
-			// otherwise, if it is not a pointer,
+
+			// if it's a semicolon, comma, or closing paren, then we can return it; otherwise, we must
+			if (this->peek().value == ";" || this->peek().value == "," || this->peek().value == ")") {
+				// craft the statement
+				stmt = std::make_shared<Allocation>(symbol_type_data.data_type, new_var_name, symbol_type_data.subtype, initialized, initial_value,
+					symbol_type_data.qualities, symbol_type_data.array_length);
+				stmt->set_line_number(next_token.line_number);	// set the line number
+			}
+			// otherwise, it's an invalid character
 			else {
-				// if we have an int, but we haven't pushed back signed/unsigned, default to signed
-				if (var_type.value == "int") {
-					// if the last quality in the list (which is our signed/unsigned specifier, if we have one) is not signed and also not unsigned, push back 'signed'
-					if (qualities.size() != 0 && (qualities[qualities.size() - 1] != SIGNED && qualities[qualities.size() - 1] != UNSIGNED)) {
-						qualities.push_back(SIGNED);
-					}
-					// if we don't have _any_ qualities, push back 'signed'
-					else if (qualities.size() == 0) {
-						qualities.push_back(SIGNED);
-					}
-				}
-
-				// store the type name in our Type object
-				new_var_type = get_type_from_string(var_type.value); // note: Type get_type_from_string() is found in "Expression" (.h and .cpp)
-			}
-
-			// next, get the variable's name
-			// the following token must be an identifier
-			lexeme var_name = this->next();
-			if (var_name.type == "ident") {
-				new_var_name = var_name.value;
-
-				// we must check to see if we have the allloc-assign syntax:
-				if (this->peek().value == ":") {
-					// the variable was initialized
-					initialized = true;
-
-					// assign the initial value
-					this->next();
-
-					// move ahead to the first lexeme of the expression and parse the expression
-					this->next();
-					initial_value = this->parse_expression();
-
-					// return the allocation
-					stmt = std::make_shared<Allocation>(new_var_type, new_var_name, new_var_subtype, initialized, initial_value, qualities);
-					stmt->set_line_number(current_lex.line_number);
-				}
-				// we can only ever have a semicolon, comma, or end paren at the end of an allocation statement
-				else if (this->peek().value == ";" || this->peek().value == "," || this->peek().value == ")") {
-					// if it is NOT allloc-assign syntax, we have to make sure the variable is not const before allocating it -- all const variables MUST be defined in the allocation
-					bool is_constant = false;
-					std::vector<SymbolQuality>::iterator quality_iter = qualities.begin();
-					while (quality_iter != qualities.end() && !is_constant) {
-						if (*quality_iter == CONSTANT) {
-							is_constant = true;
-						}
-						else {
-							quality_iter++;
-						}
-					}
-
-					if (is_constant) {
-						throw ParserException("Const variables must use allloc-assign syntax (e.g., 'alloc const int a: 5').", 000, current_lex.line_number);
-					}
-					else {
-						// Otherwise, if it is not const, return our new variable
-						Allocation allocation_statement(new_var_type, new_var_name, new_var_subtype);
-						allocation_statement.set_symbol_qualities(qualities);
-						allocation_statement.set_line_number(current_lex.line_number);
-
-						stmt = std::make_shared<Allocation>(allocation_statement);
-					}
-				}
-				else {
-					throw ParserException("Unrecognized token.", 0, current_lex.line_number);
-				}
-			}
-			else {
-				throw ParserException("Expected an identifier", 111, current_lex.line_number);
-			}
-		}
-		else if (var_type.value == "array") {
-			// TODO: parse array allocation
-			// set the variable type
-			new_var_type = ARRAY;
-			// check to make sure we have the size and type in angle brackets
-			if (this->peek().value == "<") {
-				this->next();	// eat the angle bracket
-
-				// we must see the size next; must be an int
-				if (this->peek().type == "int") {
-					size_t array_length = (size_t)std::stoi(this->next().value);	// get the array length
-
-					// a comma should follow the size
-					if (this->peek().value == ",") {
-						this->next();
-						std::shared_ptr<LValue> new_var_struct_name;	// in case we have a struct
-
-						// next, we should see a keyword or an identifier (we can have an array of structs, which the lexer would see as an ident)
-						if (this->peek().type == "kwd") {
-							// new_var_subtype will be the type indicated
-							new_var_subtype = get_type_from_string(this->next().value);
-						}
-						else if (this->peek().type == "ident") {
-							// the subtype will be struct, and we should set the struct type as the identifier
-							new_var_subtype = STRUCT;
-							new_var_struct_name = std::make_shared<LValue>(this->next().value);
-						}
-						else {
-							throw ParserException("Invalid subtype in array allocation", 0, this->peek().line_number);
-						}
-
-						// now, we should see a closing angle bracket and the name of the array
-						if (this->peek().value == ">") {
-							this->next();	// eat the angle bracket
-
-							if (this->peek().type == "ident") {
-								new_var_name = this->next().value;	// get the name
-							}
-							else {
-								throw ParserException("Invalid name for a struct", 0, this->peek().line_number);
-							}
-
-							bool initialized = false;
-							std::shared_ptr<Expression> initial_value;
-							// now, check to see if we have alloc-assign syntax
-							if (this->peek().value == ":") {
-								initialized = true;
-							}
-							else {
-								initial_value = std::make_shared<Expression>();
-							}
-
-							// check to make sure the next character is a semicolon
-							if (this->peek().value != ";") {
-								throw ParserException("Syntax error; expected ';'", 0, current_lex.line_number);
-							}
-							else {
-								// finally, create the allocation statement
-								stmt = std::make_shared<Allocation>(new_var_type, new_var_name, new_var_subtype, initialized, initial_value, qualities, array_length);
-								stmt->set_line_number(current_lex.line_number);
-							}
-						}
-						else {
-							throw ParserException("Syntax error; expected '>'", 0, this->peek().line_number);
-						}
-					}
-					else {
-						throw ParserException("Syntax error; expected ','", 0, this->peek().line_number);
-					}
-				}
-				else {
-					throw ParserException("Invalid syntax; array allocation must specify <size, type>", 0, this->peek().line_number);
-				}
-			}
-			else {
-				throw ParserException("You must specify the size and type of array in its allocation", 0, var_type.line_number);
+				throw ParserException("Syntax error; invalid character following allocation", 0, next_token.line_number);
 			}
 		}
 		else {
-			throw ParserException("Expected a variable type; must be int, float, bool, or string", 211, current_lex.line_number);
+			throw ParserException("The variable's type must be followed by a valid identifier", 0, next_token.line_number);
 		}
 	}
 	else {
@@ -791,7 +829,7 @@ std::shared_ptr<Statement> Parser::parse_return(lexeme current_lex)
 			}
 			else {
 				// we expect a semicolon after the return statement; throw an exception if there isn't one
-				throw ParserException("Syntax error: expected ';'", 0, current_lex.line_number);
+				throw MissingSemicolonError(current_lex.line_number);
 			}
 		}
 

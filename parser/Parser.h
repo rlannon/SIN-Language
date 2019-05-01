@@ -10,6 +10,7 @@
 #include "Statement.h"
 #include "Expression.h"
 #include "Lexer.h"
+#include "TypeData.h"
 #include "../util/Exceptions.h"	// ParserException
 
 
@@ -41,9 +42,13 @@ class Parser
 	std::string get_closing_grouping_symbol(std::string beginning_symbol);
 	bool is_opening_grouping_symbol(std::string to_test);
 
-	// Parsing statements
+	// we have to fetch a type (and its qualities) more than once; use a tuple for this
+	TypeData get_type();
+
+	// Parsing statements -- each statement type will use its own function to return a statement of that type
 	std::shared_ptr<Statement> parse_statement();	// entry function to parse a statement
 	std::shared_ptr<Statement> parse_include(lexeme current_lex);
+	std::shared_ptr<Statement> parse_declaration(lexeme current_lex);
 	std::shared_ptr<Statement> parse_ite(lexeme current_lex);
 	std::shared_ptr<Statement> parse_allocation(lexeme current_lex);
 	std::shared_ptr<Statement> parse_assignment(lexeme current_lex);
@@ -52,7 +57,8 @@ class Parser
 	std::shared_ptr<Statement> parse_definition(lexeme current_lex);
 	std::shared_ptr<Statement> parse_function_call(lexeme current_lex);
 
-	// Parseing expressions
+	// Parsing expressions
+
 	/*
 	put default argument here because we call "parse_expression" in "maybe_binary"; as a reuslt, "his_prec" appears as if it is being passed to the next maybe_binary, but isn't because we parse an expression before we parse the binary, meaning my_prec gets set to 0, and not to his_prec as it should
 	Note we also have a 'not_binary' flag here; if the expression is indexed, we may not want to have a binary expression parsed

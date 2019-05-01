@@ -61,6 +61,39 @@ public:
 	Include();
 };
 
+class Declaration : public Statement
+{
+	/*
+	
+	When we want to add a symbol to our symbol table, but not include an implementation of that symbol, the 'decl' keyword is used; e.g.,
+		decl int myInt;	<- declares an integer variable 'myInt'
+		decl int length(alloc string to_get);	<- declares a function called 'length'
+	
+	This allows a program to add symbols to its table without the implementation of those symbols; they can be added to the executable file at link time.
+	This is useful for compiled libraries, removing the requirement of compiling said library every time a project using it is compiled.
+	
+	*/
+
+	Type data_type;	// the data type of the symbol
+	Type subtype;	// the subtype of the data
+
+	std::string var_name;
+
+	size_t array_length;
+	std::vector<SymbolQuality> qualities;
+	std::vector<std::shared_ptr<Statement>> formal_parameters;
+public:
+	Type get_data_type();
+	Type get_subtype();
+
+	size_t get_length();
+	std::vector<SymbolQuality> get_qualities();
+	std::vector<std::shared_ptr<Statement>> get_formal_parameters();
+
+	Declaration(Type data_type, std::string var_name, Type subtype = NONE, size_t array_length = 0, std::vector<SymbolQuality> qualities = {}, std::vector<std::shared_ptr<Statement>> formal_parameters = {});
+	Declaration();
+};
+
 class Allocation : public Statement
 {
 	/*
@@ -98,7 +131,7 @@ class Allocation : public Statement
 
 	std::shared_ptr<LValue> struct_name;	// structs will require a name
 
-	std::shared_ptr<Expression> initial_value;
+	std::shared_ptr<Expression> initial_value;	// todo: use the parser to expand allocations with initial values into two statements
 public:
 	Type get_var_type();
 	Type get_var_subtype();
@@ -171,7 +204,7 @@ public:
 
 class Definition : public Statement
 {
-	std::shared_ptr<Expression> name;
+	std::shared_ptr<Expression> name;	// todo: why are function names Expressions but names in allocations are strings?
 	Type return_type;
 	std::vector<std::shared_ptr<Statement>> args;
 	std::shared_ptr<StatementBlock> procedure;

@@ -47,6 +47,12 @@ ParserException::ParserException(const std::string& message, const unsigned int&
 	message_ = "**** Parser Error " + std::to_string(code_) + ": " + message_ + " (line " + std::to_string(line_) + ")";
 }
 
+// Parser Exception -- missing semicolon error
+
+MissingSemicolonError::MissingSemicolonError(const unsigned int& line) : ParserException("Syntax error; expected ';'", 0, line) {
+
+}
+
 
 
 // SINVM Exceptions
@@ -58,7 +64,7 @@ const char* VMException::what() const noexcept {
 VMException::VMException(const std::string& message, const uint16_t& address, const uint16_t& status) : message(message), address(address), status(status) {
 	// we must construct the message here, in the constructor
 	std::stringstream err_ss;
-	err_ss << "**** SINVM Error: " << this->message << std::endl << "Error was encountered at memory location " << std::hex << this->address << std::endl << "STATUS register was " << std::hex << this->status << std::dec << std::endl;
+	err_ss << "**** SINVM Error: " << this->message << std::endl << "Error was encountered at memory location 0x" << std::hex << this->address << std::endl << "STATUS register was " << std::hex << this->status << std::dec << std::endl;
 	this->message = err_ss.str();
 }
 
