@@ -71,6 +71,10 @@ Include::Include() {
 /*******************		DECLARATION CLASS		********************/
 
 
+std::string Declaration::get_var_name() {
+	return this->var_name;
+}
+
 Type Declaration::get_data_type() {
 	return this->data_type;
 }
@@ -87,12 +91,25 @@ std::vector<SymbolQuality> Declaration::get_qualities() {
 	return this->qualities;
 }
 
+std::shared_ptr<Expression> Declaration::get_initial_value()
+{
+	return this->initial_value;
+}
+
 std::vector<std::shared_ptr<Statement>> Declaration::get_formal_parameters() {
 	return this->formal_parameters;
 }
 
 // Constructors
-Declaration::Declaration(Type data_type, std::string var_name, Type subtype, size_t array_length, std::vector<SymbolQuality> qualities, std::vector<std::shared_ptr<Statement>> formal_parameters) : data_type(data_type), var_name(var_name), subtype(subtype), array_length(array_length), qualities(qualities), formal_parameters(formal_parameters)
+Declaration::Declaration(Type data_type, std::string var_name, Type subtype, size_t array_length, std::vector<SymbolQuality> qualities,
+	std::shared_ptr<Expression> initial_value, std::vector<std::shared_ptr<Statement>> formal_parameters) :
+	data_type(data_type),
+	var_name(var_name),
+	subtype(subtype),
+	array_length(array_length),
+	qualities(qualities),
+	initial_value(initial_value),
+	formal_parameters(formal_parameters)
 {
 	this->statement_type = DECLARATION;
 }
@@ -172,7 +189,16 @@ void Allocation::set_symbol_qualities(std::vector<SymbolQuality> qualities)
 	this->qualities = qualities;
 }
 
-Allocation::Allocation(Type type, std::string value, Type subtype, bool initialized, std::shared_ptr<Expression> initial_value, std::vector<SymbolQuality> quality, size_t length) : type(type), value(value), subtype(subtype), initialized(initialized), initial_value(initial_value), qualities(quality), array_length(length) {
+Allocation::Allocation(Type type, std::string value, Type subtype, bool initialized, std::shared_ptr<Expression> initial_value,
+	std::vector<SymbolQuality> quality, size_t length) :
+	type(type),
+	value(value),
+	subtype(subtype),
+	initialized(initialized),
+	initial_value(initial_value),
+	qualities(quality),
+	array_length(length)
+{
 	Allocation::statement_type = ALLOCATION;
 }
 

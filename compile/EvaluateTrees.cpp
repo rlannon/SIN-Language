@@ -230,6 +230,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 
 			// load A with the length of the last string written and add the address of _STRING_BUFFER_START; this is our destination
 			binary_ss << "\t" << "loada __INPUT_LEN" << std::endl;
+			binary_ss << "\t" << "clc" << std::endl;
 			binary_ss << "\t" << "addca __INPUT_BUFFER_START_ADDR" << std::endl;
 
 			// load B with the source address
@@ -243,6 +244,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 			binary_ss << "\t" << "pha" << std::endl;
 
 			// add that length to the length of the other string, which is in __INPUT_LEN
+			binary_ss << "\t" << "clc" << std::endl;
 			binary_ss << "\t" << "addca __INPUT_LEN" << std::endl;
 			binary_ss << "\t" << "storea __INPUT_LEN" << std::endl;
 
@@ -255,10 +257,14 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 			binary_ss << "\t" << "loada __INPUT_LEN" << std::endl;
 		}
 		else {
+			// todo: update the addition routine to support 32-bit addition as well
+			binary_ss << "\t" << "clc" << std::endl;	// we must clear the carry bit before addition
 			binary_ss << "\t" << "addca b" << std::endl;
 		}
 	}
 	else if (bin_exp.get_operator() == MINUS) {
+		// todo: update the subtraction compilation routine to support 32-bit subtraction
+		binary_ss << "\t" << "sec" << std::endl;	// we must set the carry bit before subtraction or we will get an off-by-one error
 		binary_ss << "\t" << "subca b" << std::endl;
 	}
 	else if (bin_exp.get_operator() == MULT) {
@@ -280,13 +286,20 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 		}
 	}
 	else if (bin_exp.get_operator() == MODULO) {
-		// to get the modulo, simply use a mult instruction and transfer B (the remainder) into A
-		binary_ss << "\t" << "diva b" << std::endl;
+		// to get the modulo, simply use a div instruction and transfer B (the remainder) into A -- use diva/divua depending on whether the operands are signed or not
+		if (this->is_signed(std::make_shared<Binary>(bin_exp), line_number)) {
+			binary_ss << "\t" << "diva b" << std::endl;
+		}
+		else {
+			binary_ss << "\t" << "divua b" << std::endl;
+		}
+
 		binary_ss << "\t" << "tba" << std::endl;
 	}
 	else if (bin_exp.get_operator() == EQUAL) {
 		binary_ss << "\t" << "jsr __builtins_equal" << std::endl;
 	}
+	// todo: modify these in/equality expressions to account for whether the operands are signed or not
 	else if (bin_exp.get_operator() == GREATER) {
 		binary_ss << "\t" << "jsr __builtins_greater" << std::endl;
 	}
@@ -382,6 +395,7 @@ std::stringstream Compiler::evaluate_unary_tree(Unary unary_exp, unsigned int li
 		// the N and Z flags will automatically be set or cleared by the ADDCA instruction
 
 		unary_ss << "\t" << "xora #$FFFF" << std::endl;	// using XOR on A with the value 0xFFFF will flip all bits (0110 XOR 1111 => 1001)
+		unary_ss << "\t" << "clc" << std::endl;
 		unary_ss << "\t" << "addca #$01" << std::endl;	// adding 1 finishes two's complement
 	}
 	else if (unary_exp.get_operator() == NOT) {

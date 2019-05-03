@@ -81,16 +81,24 @@ class Declaration : public Statement
 
 	size_t array_length;
 	std::vector<SymbolQuality> qualities;
+
+	std::shared_ptr<Expression> initial_value;
 	std::vector<std::shared_ptr<Statement>> formal_parameters;
 public:
+	std::string get_var_name();
+
 	Type get_data_type();
 	Type get_subtype();
 
 	size_t get_length();
 	std::vector<SymbolQuality> get_qualities();
+
+	std::shared_ptr<Expression> get_initial_value();
 	std::vector<std::shared_ptr<Statement>> get_formal_parameters();
 
-	Declaration(Type data_type, std::string var_name, Type subtype = NONE, size_t array_length = 0, std::vector<SymbolQuality> qualities = {}, std::vector<std::shared_ptr<Statement>> formal_parameters = {});
+	Declaration(Type data_type, std::string var_name, Type subtype = NONE, size_t array_length = 0, std::vector<SymbolQuality> qualities = {},
+		std::shared_ptr<Expression> initial_value = std::make_shared<Expression>(EXPRESSION_GENERAL),
+		std::vector<std::shared_ptr<Statement>> formal_parameters = {});
 	Declaration();
 };
 

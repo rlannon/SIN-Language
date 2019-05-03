@@ -367,6 +367,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 							fetch_ss << "\t" << "loada " << variable_symbol->name << std::endl;
 
 							// add the index offset, transfer to b, and increment it by 2 (to skip the length)
+							fetch_ss << "\t" << "clc" << std::endl;
 							fetch_ss << "\t" << "addca b" << std::endl;
 							fetch_ss << "\t" << "tab" << "\n\t" << "incb" << "\n\t" << "incb" << std::endl;
 
@@ -434,6 +435,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 						if (to_fetch->get_expression_type() == INDEXED) {
 							// Note that when we index a local string, we do _not_ use the lsl instruction; since characters are a single byte, the index number and the character number will be 
 							// the index value is in the A register; we need to add two to it to skip the address of the string
+							fetch_ss << "\t" << "clc" << std::endl;
 							fetch_ss << "\t" << "addca #$02" << std::endl;
 
 							// now, we need to pull the address of the string into B
@@ -441,6 +443,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 							this->stack_offset -= 1;
 
 							// now, add that address to our index offset
+							fetch_ss << "\t" << "clc" << std::endl;
 							fetch_ss << "\t" << "addca B" << std::endl;
 
 							// now, transfer A into B and load A with 1 -- indexing a string gives a string consisting of one character
@@ -488,6 +491,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 
 						// adjust the SP
 						fetch_ss << "\t" << "tspa" << std::endl;
+						fetch_ss << "\t" << "sec" << std::endl;
 						fetch_ss << "\t" << "subca b" << std::endl;
 						fetch_ss << "\t" << "tasp" << std::endl;
 
@@ -498,6 +502,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 
 						// re-adjust the SP
 						fetch_ss << "\t" << "tspa" << std::endl;
+						fetch_ss << "\t" << "clc" << std::endl;
 						fetch_ss << "\t" << "addca b" << std::endl;
 						fetch_ss << "\t" << "tasp" << std::endl;
 						fetch_ss << "\t" << "txa" << std::endl;
@@ -682,6 +687,7 @@ std::stringstream Compiler::move_sp_to_target_address(size_t target_offset, bool
 			// transfer the stack pointer to a, add the difference, and transfer it back
 			size_t difference = target_offset - this->stack_offset;
 			inc_ss << "\t" << "tspa" << std::endl;
+			inc_ss << "\t" << "sec" << std::endl;
 			inc_ss << "\t" << "subca #$" << std::hex << WORD_W * difference << std::endl;	// advance by the difference between them in _words_, so multiply the difference by WORD_W and add it to the SP
 			inc_ss << "\t" << "tasp" << std::endl;
 
@@ -699,6 +705,7 @@ std::stringstream Compiler::move_sp_to_target_address(size_t target_offset, bool
 		if ((this->stack_offset - target_offset > 3) && !preserve_registers) {
 			size_t difference = this->stack_offset - target_offset;
 			inc_ss << "\t" << "tspa" << std::endl;
+			inc_ss << "\t" << "clc" << std::endl;
 			inc_ss << "\t" << "addca #$" << std::hex << WORD_W * difference << std::endl;
 			inc_ss << "\t" << "tasp" << std::endl;
 

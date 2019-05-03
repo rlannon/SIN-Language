@@ -168,9 +168,22 @@ std::stringstream Compiler::call(Call call_statement, size_t max_offset) {
 			std::shared_ptr<Expression> argument = call_statement.get_arg(i);
 			Type argument_type = this->get_expression_data_type(argument);
 
-			// and the expression for the formal parameter
-			Allocation* formal_parameter = dynamic_cast<Allocation*>(formal_parameters[i].get());
-			Type formal_type = formal_parameter->get_var_type();
+			// a variable to hold our formal type
+			Type formal_type = NONE;
+
+			// and the expression for the formal parameter -- since they can be allocations or declarations, we must base it on the statement type
+			if (formal_parameters[i]->get_statement_type() == ALLOCATION) {
+				Allocation* formal_parameter = dynamic_cast<Allocation*>(formal_parameters[i].get());
+				formal_type = formal_parameter->get_var_type();
+			}
+			else if (formal_parameters[i]->get_statement_type() == DECLARATION) {
+				Declaration* formal_parameter = dynamic_cast<Declaration*>(formal_parameters[i].get());
+				formal_type = formal_parameter->get_data_type();
+			}
+			else {
+				throw CompilerException("Functions must must allocation statements or declaration statements for their formal parameter declarations", 0,
+					call_statement.get_line_number());
+			}
 
 			// now, ensure the types match
 			if (argument_type == formal_type) {
@@ -215,20 +228,33 @@ std::stringstream Compiler::call(Call call_statement, size_t max_offset) {
 		if (call_statement.get_args_size() < func_to_call_symbol.formal_parameters.size()) {
 			// start pushing the default values, starting at the index "call_statement.get_args_size
 			for (size_t i = call_statement.get_args_size(); i < func_to_call_symbol.formal_parameters.size(); i++) {
-				if (func_to_call_symbol.formal_parameters[i]->get_statement_type() != ALLOCATION) {
-					throw CompilerException("Expected allocation statement in parameter list", 0, call_statement.get_line_number());
+				stmt_type parameter_statement_type = func_to_call_symbol.formal_parameters[i]->get_statement_type();
+				if (parameter_statement_type != ALLOCATION && parameter_statement_type != DECLARATION) {
+					throw CompilerException("Expected allocation or declaration statement in parameter list", 0, call_statement.get_line_number());
 				}
 				else {
-					Allocation* arg_allocation = dynamic_cast<Allocation*>(func_to_call_symbol.formal_parameters[i].get());
+					// the argument we want to push to the stack and the name of that variable
+					std::shared_ptr<Expression> arg_to_push;
+					std::string default_arg_name;
+
+					if (func_to_call_symbol.formal_parameters[i]->get_statement_type() == ALLOCATION) {
+						Allocation* arg_allocation = dynamic_cast<Allocation*>(func_to_call_symbol.formal_parameters[i].get());
+						arg_to_push = arg_allocation->get_initial_value();
+						default_arg_name = arg_allocation->get_var_name();
+					}
+					else if (func_to_call_symbol.formal_parameters[i]->get_statement_type() == DECLARATION) {
+						Declaration* arg_allocation = dynamic_cast<Declaration*>(func_to_call_symbol.formal_parameters[i].get());
+						arg_to_push = arg_allocation->get_initial_value();
+						default_arg_name = arg_allocation->get_var_name();
+					}
 
 					// make sure we actually have a value -- if the user simply hasn't supplied enough values, we must throw an exception
-					if (arg_allocation->get_initial_value()->get_expression_type() == EXPRESSION_GENERAL) {	// it is 'EXPRESSION_GENERAL' if it wasn't initialized to anything, which it won't be if there wasn't a default value given
+					if (arg_to_push->get_expression_type() == EXPRESSION_GENERAL) {	// it is 'EXPRESSION_GENERAL' if it wasn't initialized to anything, which it won't be if there wasn't a default value given
 						throw CompilerException("Not enough arguments supplied in call to '" + call_statement.get_func_name() +
-							"'; expected '" + arg_allocation->get_var_name() + "'", 0, call_statement.get_line_number());
+							"'; expected '" + default_arg_name + "'", 0, call_statement.get_line_number());
 					}
 					// if we have a default value, proceed
 					else {
-						std::shared_ptr<Expression> arg_to_push = arg_allocation->get_initial_value();
 						Type var_type = this->get_expression_data_type(arg_to_push);
 
 						// fetch the value

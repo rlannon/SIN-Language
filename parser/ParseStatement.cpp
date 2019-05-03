@@ -22,7 +22,7 @@ Keeping the statement parsing functions together makes for a smaller 'Parser.cpp
 
 #include "Parser.h"
 
-std::shared_ptr<Statement> Parser::parse_statement() {
+std::shared_ptr<Statement> Parser::parse_statement(bool is_function_parameter) {
 	// get our current lexeme and its information so we don't need to call these functions every time we need to reference it
 	lexeme current_lex = this->current_token();
 
@@ -130,7 +130,7 @@ std::shared_ptr<Statement> Parser::parse_statement() {
 		}
 		// parse a declaration
 		else if (current_lex.value == "decl") {
-			return this->parse_declaration(current_lex);
+			return this->parse_declaration(current_lex, is_function_parameter);
 		}
 		// parse an ITE
 		else if (current_lex.value == "if") {
@@ -210,7 +210,7 @@ std::shared_ptr<Statement> Parser::parse_include(lexeme current_lex)
 	}
 }
 
-std::shared_ptr<Statement> Parser::parse_declaration(lexeme current_lex) {
+std::shared_ptr<Statement> Parser::parse_declaration(lexeme current_lex, bool is_function_parameter) {
 	/*
 
 	Parse a declaration statement. Appropriate syntax is:
@@ -227,6 +227,7 @@ std::shared_ptr<Statement> Parser::parse_declaration(lexeme current_lex) {
 	if (next_lexeme.type == "kwd") {
 		next_lexeme = this->next();
 		TypeData symbol_type_data = this->get_type();
+		std::shared_ptr<Expression> initial_value = std::make_shared<Expression>(EXPRESSION_GENERAL);
 
 		// get the variable name
 		next_lexeme = this->next();
@@ -243,7 +244,7 @@ std::shared_ptr<Statement> Parser::parse_declaration(lexeme current_lex) {
 				// so long as we haven't hit the end of the formal parameters, continue parsing
 				while (this->peek().value != ")") {
 					this->next();
-					std::shared_ptr<Statement> next = this->parse_statement();
+					std::shared_ptr<Statement> next = this->parse_statement(true);
 
 					// the statement _must_ be a declaration, not an allocation
 					if (next->get_statement_type() == DECLARATION) {
@@ -261,11 +262,24 @@ std::shared_ptr<Statement> Parser::parse_declaration(lexeme current_lex) {
 
 				this->next();	// eat the closing paren
 			}
-
+			// otherwise, if the name is followed by a colon, we have a default value
+			else if (this->peek().value == ":") {
+				// however, we may only use alloc-assign syntax if the 'decl' is part of a function parameter
+				if (is_function_parameter) {
+					this->next();
+					this->next();	// parse_expression(...) begins on the _first token_ of the expression
+					initial_value = this->parse_expression();
+				}
+				else {
+					throw CompilerException("Cannot use alloc-assign syntax in declarations unless said declaration is a default function parameter",
+						this->current_token().line_number);
+				}
+			}
+			
 			// finally, we must have a semicolon, a comma, or a closing paren
 			if (this->peek().value == ";" || this->peek().value == "," || this->peek().value == ")") {
 				Declaration decl_statement(symbol_type_data.data_type, var_name, symbol_type_data.subtype, symbol_type_data.array_length,
-					symbol_type_data.qualities, formal_parameters);
+					symbol_type_data.qualities, initial_value, formal_parameters);
 				decl_statement.set_line_number(next_lexeme.line_number);
 
 				return std::make_shared<Declaration>(decl_statement);

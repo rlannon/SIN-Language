@@ -11,9 +11,7 @@ This class defines the SIN Compiler; given an AST produced by the Parser, will p
 #pragma once
 
 #include <vector>
-#include <list>
 #include <string>
-#include <tuple>
 #include <sstream>
 
 #include "../util/VMMemoryMap.h"	// define where the blocks of memory begin and end in our target VM
@@ -55,7 +53,6 @@ class Compiler
 	size_t strc_number;	// the next available number for a string constant
 	size_t branch_number;	// the next available number for a branch ID
 
-
 	/* 
 	The following functions returns the type of the expression passed into it once fully evaluated
 	Note unary and binary trees are not fully parsed, only the first left-hand operand is returned -- any errors in type will be found once the tree or unary value is actually evaluated
@@ -63,13 +60,14 @@ class Compiler
 	Type get_expression_data_type(std::shared_ptr<Expression> to_evaluate, bool get_subtype = false);
 	bool is_signed(std::shared_ptr<Expression> to_evaluate, unsigned int line_number = 0);	// we may need to determine whether an expression is signed or not
 
-
 	// Evaluate trees
 	std::stringstream evaluate_binary_tree(Binary bin_exp, unsigned int line_number, size_t max_offset = 0, Type left_type = NONE);
 	std::stringstream evaluate_unary_tree(Unary unary_exp, unsigned int line_number, size_t max_offset = 0);
 
 	std::vector<std::string>* object_file_names;
 	void include_file(Include include_statement);	// add a file to the solution
+
+	void handle_declaration(Declaration declaration_statement);		// adds the symbol from the Declaration to the symbol table
 
 	std::stringstream fetch_value(std::shared_ptr<Expression> to_fetch, unsigned int line_number, size_t max_offset);	// produces asm code to put the result of the specified expression in A
 
