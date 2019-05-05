@@ -76,6 +76,8 @@ class Declaration : public Statement
 
 	Type data_type;	// the data type of the symbol
 	Type subtype;	// the subtype of the data
+	bool function_definition;	// whether it's the declaration of a function
+	bool struct_definition;	// whether it's the declaration of a struct
 
 	std::string var_name;
 
@@ -89,6 +91,8 @@ public:
 
 	Type get_data_type();
 	Type get_subtype();
+	bool is_function();
+	bool is_struct();
 
 	size_t get_length();
 	std::vector<SymbolQuality> get_qualities();
@@ -97,7 +101,7 @@ public:
 	std::vector<std::shared_ptr<Statement>> get_formal_parameters();
 
 	Declaration(Type data_type, std::string var_name, Type subtype = NONE, size_t array_length = 0, std::vector<SymbolQuality> qualities = {},
-		std::shared_ptr<Expression> initial_value = std::make_shared<Expression>(EXPRESSION_GENERAL),
+		std::shared_ptr<Expression> initial_value = std::make_shared<Expression>(EXPRESSION_GENERAL), bool is_function = false, bool is_struct = false,
 		std::vector<std::shared_ptr<Statement>> formal_parameters = {});
 	Declaration();
 };
@@ -213,18 +217,22 @@ public:
 class Definition : public Statement
 {
 	std::shared_ptr<Expression> name;	// todo: why are function names Expressions but names in allocations are strings?
+	std::vector<SymbolQuality> qualities;
 	Type return_type;
+	Type return_subtype;
 	std::vector<std::shared_ptr<Statement>> args;
 	std::shared_ptr<StatementBlock> procedure;
 
 	// TODO: add function qualities? currently, definitions just put "none" for the symbol's quality
 public:
 	std::shared_ptr<Expression> get_name();
+	std::vector<SymbolQuality> get_qualities();
 	Type get_return_type();
+	Type get_return_subtype();
 	std::shared_ptr<StatementBlock> get_procedure();
 	std::vector<std::shared_ptr<Statement>> get_args();
 
-	Definition(std::shared_ptr<Expression> name_ptr, Type return_type_ptr, std::vector<std::shared_ptr<Statement>> args_ptr, std::shared_ptr<StatementBlock> procedure_ptr);
+	Definition(std::shared_ptr<Expression> name_ptr, Type return_type, Type return_subtype, std::vector<SymbolQuality> qualities, std::vector<std::shared_ptr<Statement>> args_ptr, std::shared_ptr<StatementBlock> procedure_ptr);
 	Definition();
 };
 

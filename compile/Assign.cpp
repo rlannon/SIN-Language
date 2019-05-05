@@ -321,7 +321,16 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 	// look for the symbol of the specified name in the symbol table
 	if (this->symbol_table.is_in_symbol_table(var_name, this->current_scope_name)) {
 		// get the symbol information
-		Symbol* fetched = this->symbol_table.lookup(var_name, this->current_scope_name, this->current_scope);
+		std::shared_ptr<Symbol> fetched_shared = this->symbol_table.lookup(var_name, this->current_scope_name, this->current_scope);
+		Symbol* fetched;
+
+		// make sure the symbol is a variable; else, throw an exception
+		if (fetched_shared->symbol_type == VARIABLE) {
+			fetched = dynamic_cast<Symbol*>(fetched_shared.get());
+		}
+		else {
+			throw CompilerException("Expected modifiable-lvalue", 0, assignment_statement.get_line_number());
+		}
 
 		bool is_const = false;
 		bool is_dynamic = false;

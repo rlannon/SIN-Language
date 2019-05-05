@@ -12,8 +12,8 @@ These are to be used so that this code might be more maintainable and less error
 */
 
 
-// The various types of statements we can have in SIN
 enum stmt_type {
+	// The various types of statements we can have in SIN
 	STATEMENT_GENERAL,
 	INCLUDE,
 	DECLARATION,
@@ -28,8 +28,9 @@ enum stmt_type {
 	FREE_MEMORY
 };
 
-// Defined so that we can list all of the various expression types in one place
+
 enum exp_type {
+	// So that we can list all of the various expression types in one place
 	EXPRESSION_GENERAL,
 	LITERAL,
 	LVALUE,
@@ -42,8 +43,16 @@ enum exp_type {
 	SIZE_OF
 };
 
-// So that the symbol's quality does not need to be stored as a string
+enum SymbolType {
+	// So that we know whether a symbol is a variable, function definition, struct definition...
+	VARIABLE,
+	FUNCTION_DEFINITION,
+	STRUCT_DEFINITION
+};
+
+
 enum SymbolQuality {
+	// So that the symbol's quality does not need to be stored as a string
 	NO_QUALITY,
 	CONSTANT,
 	STATIC,
@@ -52,8 +61,9 @@ enum SymbolQuality {
 	UNSIGNED
 };
 
-// Defined so that we have a clear list of operators
+
 enum exp_operator {
+	// So that we have a clear list of operators
 	PLUS,
 	MINUS,
 	MULT,
@@ -73,8 +83,9 @@ enum exp_operator {
 	NO_OP
 };
 
-// Defined so that our types are all clearly defined
+
 enum Type {
+	// So that our types are all clearly defined
 	NONE,
 	INT,
 	FLOAT,

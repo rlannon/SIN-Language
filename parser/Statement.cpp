@@ -83,6 +83,16 @@ Type Declaration::get_subtype() {
 	return this->subtype;
 }
 
+bool Declaration::is_function()
+{
+	return this->function_definition;
+}
+
+bool Declaration::is_struct()
+{
+	return this->struct_definition;
+}
+
 size_t Declaration::get_length() {
 	return this->array_length;
 }
@@ -102,13 +112,15 @@ std::vector<std::shared_ptr<Statement>> Declaration::get_formal_parameters() {
 
 // Constructors
 Declaration::Declaration(Type data_type, std::string var_name, Type subtype, size_t array_length, std::vector<SymbolQuality> qualities,
-	std::shared_ptr<Expression> initial_value, std::vector<std::shared_ptr<Statement>> formal_parameters) :
+	std::shared_ptr<Expression> initial_value, bool is_function, bool is_struct, std::vector<std::shared_ptr<Statement>> formal_parameters) :
 	data_type(data_type),
 	var_name(var_name),
 	subtype(subtype),
 	array_length(array_length),
 	qualities(qualities),
 	initial_value(initial_value),
+	function_definition(is_function),
+	struct_definition(is_struct),
 	formal_parameters(formal_parameters)
 {
 	this->statement_type = DECLARATION;
@@ -316,9 +328,19 @@ std::shared_ptr<Expression> Definition::get_name() {
 	return this->name;
 }
 
+std::vector<SymbolQuality> Definition::get_qualities()
+{
+	return this->qualities;
+}
+
 Type Definition::get_return_type()
 {
 	return this->return_type;
+}
+
+Type Definition::get_return_subtype()
+{
+	return this->return_subtype;
 }
 
 std::shared_ptr<StatementBlock> Definition::get_procedure() {
@@ -329,11 +351,14 @@ std::vector<std::shared_ptr<Statement>> Definition::get_args() {
 	return this->args;
 }
 
-Definition::Definition(std::shared_ptr<Expression> name_ptr, Type return_type_ptr, std::vector<std::shared_ptr<Statement>> args_ptr, std::shared_ptr<StatementBlock> procedure_ptr) {
-	Definition::name = name_ptr;
-	Definition::args = args_ptr;
-	Definition::procedure = procedure_ptr;
-	Definition::return_type = return_type_ptr;
+Definition::Definition(std::shared_ptr<Expression> name_ptr, Type return_type, Type return_subtype, std::vector<SymbolQuality> qualities, std::vector<std::shared_ptr<Statement>> args_ptr, std::shared_ptr<StatementBlock> procedure_ptr):
+	name(name_ptr),
+	return_type(return_type),
+	return_subtype(return_subtype),
+	qualities(qualities),
+	args(args_ptr),
+	procedure(procedure_ptr)
+{
 	Definition::statement_type = DEFINITION;
 }
 

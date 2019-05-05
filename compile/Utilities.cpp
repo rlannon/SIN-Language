@@ -53,11 +53,21 @@ Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate,
 	}
 	else if (to_evaluate->get_expression_type() == LVALUE || to_evaluate->get_expression_type() == INDEXED) {
 		LValue* lvalue_exp = dynamic_cast<LValue*>(to_evaluate.get());
+		std::shared_ptr<Symbol> fetched;
+		Symbol* lvalue_symbol = nullptr;
 
 		// make sure it's in the symbol table
 		if (this->symbol_table.is_in_symbol_table(lvalue_exp->getValue(), this->current_scope_name)) {
 			// get the variable's symbol and return the type
-			Symbol* lvalue_symbol = this->symbol_table.lookup(lvalue_exp->getValue(), this->current_scope_name, this->current_scope);
+			fetched = this->symbol_table.lookup(lvalue_exp->getValue(), this->current_scope_name, this->current_scope);
+
+			// ensure we got a Symbol, and not something else
+			if (fetched->symbol_type == VARIABLE) {
+				lvalue_symbol = dynamic_cast<Symbol*>(fetched.get());
+			}
+			else {
+				throw CompilerException("Expected modifiable-lvalue");
+			}
 
 			// if the expression is not indexed
 			if (to_evaluate->get_expression_type() != INDEXED) {
@@ -109,7 +119,16 @@ Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate,
 		ValueReturningFunctionCall* val_ret_exp = dynamic_cast<ValueReturningFunctionCall*>(to_evaluate.get());
 
 		// get the symbol and return its type
-		Symbol* func_symbol = this->symbol_table.lookup(val_ret_exp->get_func_name());
+		std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(val_ret_exp->get_func_name());
+		FunctionSymbol* func_symbol = nullptr;
+
+		if (fetched->symbol_type == FUNCTION_DEFINITION) {
+			func_symbol = dynamic_cast<FunctionSymbol*>(fetched.get());
+		}
+		else {
+			throw CompilerException("Expected function definition symbol");
+		}
+
 		return func_symbol->type;
 	}
 	else if (to_evaluate->get_expression_type() == SIZE_OF) {
@@ -154,7 +173,8 @@ bool Compiler::is_signed(std::shared_ptr<Expression> to_evaluate, unsigned int l
 	}
 	else if (to_evaluate->get_expression_type() == LVALUE || to_evaluate->get_expression_type() == INDEXED) {
 		LValue* lvalue_exp = dynamic_cast<LValue*>(to_evaluate.get());
-		Symbol* to_check = this->symbol_table.lookup(lvalue_exp->getValue(), this->current_scope_name, this->current_scope);
+		std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(lvalue_exp->getValue(), this->current_scope_name, this->current_scope);
+		Symbol* to_check = dynamic_cast<Symbol*>(fetched.get());	// todo: check symbol_type? or is this unnecessary?
 
 		// only ints and floats can be signed
 		if (to_check->type == INT) {
@@ -308,11 +328,27 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 
 		if (to_fetch->get_expression_type() == LVALUE) {
 			LValue* variable_to_get = dynamic_cast<LValue*>(to_fetch.get());
-			variable_symbol = this->symbol_table.lookup(variable_to_get->getValue(), this->current_scope_name, this->current_scope);
+			std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(variable_to_get->getValue(), this->current_scope_name, this->current_scope);
+			
+			// ensure we got a variable symbol and not the symbol for a function definition, or something else
+			if (fetched->symbol_type == VARIABLE) {
+				variable_symbol = dynamic_cast<Symbol*>(fetched.get());
+			}
+			else {
+				throw CompilerException("Expected modifiable-lvalue", 0, line_number);
+			}
 		}
 		else {
 			Indexed* variable_to_get = dynamic_cast<Indexed*>(to_fetch.get());
-			variable_symbol = this->symbol_table.lookup(variable_to_get->getValue(), this->current_scope_name, this->current_scope);
+			std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(variable_to_get->getValue(), this->current_scope_name, this->current_scope);
+
+			// ensure we got a variable symbol and not the symbol for a function definition, or something else
+			if (fetched->symbol_type == VARIABLE) {
+				variable_symbol = dynamic_cast<Symbol*>(fetched.get());
+			}
+			else {
+				throw CompilerException("Expected modifiable-lvalue", 0, line_number);
+			}
 
 			// now, use fetch_value to get the index value in the A register
 			fetch_ss << this->fetch_value(variable_to_get->get_index_value(), line_number, max_offset).str();
@@ -539,7 +575,9 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 			// check to make sure the variable is in the symbol table
 			if (this->symbol_table.is_in_symbol_table(dereferenced_exp->get_ptr().getValue(), this->current_scope_name)) {
 				// if the variable is in the symbol table, only use recursion if the type is still a pointer
-				Symbol* referenced_var = this->symbol_table.lookup(dereferenced_exp->get_ptr().getValue(), this->current_scope_name, this->current_scope);
+				std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(dereferenced_exp->get_ptr().getValue(), this->current_scope_name, this->current_scope);
+				Symbol* referenced_var = dynamic_cast<Symbol*>(fetched.get());	// todo: validate symbol_type?
+
 				fetch_ss << "\t" << "loady #$00" << std::endl;
 				fetch_ss << "\t" << "loada (" << referenced_var->name << "), y" << std::endl;
 			}
@@ -552,7 +590,8 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		// dynamic cast to AddressOf and get the variable's symbol from the symbol table
 		AddressOf* address_of_exp = dynamic_cast<AddressOf*>(to_fetch.get());	// the AddressOf expression
 		LValue address_to_get = address_of_exp->get_target();	// the actual LValue of the address we want
-		Symbol* variable_symbol = this->symbol_table.lookup(address_to_get.getValue(), this->current_scope_name, this->current_scope);
+		std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(address_to_get.getValue(), this->current_scope_name, this->current_scope);
+		Symbol* variable_symbol = dynamic_cast<Symbol*>(fetched.get());
 
 		// get our qualities
 
@@ -578,6 +617,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 			quality_iter++;
 		}
 
+		// todo: remove these comments? or uncomment?
 		// make sure the variable was defined
 		//if (variable_symbol->defined) {
 			if (is_dynamic) {
@@ -624,7 +664,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		ValueReturningFunctionCall* val_ret = dynamic_cast<ValueReturningFunctionCall*>(to_fetch.get());
 
 		// now, search through the symbol table for the function so we can get its return type
-		Symbol* function_symbol = this->symbol_table.lookup(val_ret->get_name()->getValue());
+		FunctionSymbol* function_symbol = dynamic_cast<FunctionSymbol*>(this->symbol_table.lookup(val_ret->get_name()->getValue()).get());	// todo: use 'fetched' variable and validate it?
 
 		// increment the stack pointer to the stack frame
 		fetch_ss << this->move_sp_to_target_address(max_offset).str();

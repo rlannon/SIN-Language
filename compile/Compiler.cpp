@@ -92,8 +92,17 @@ void Compiler::include_file(Include include_statement)
 				include_compiler->produce_sina_file(filename_no_extension + ".sina");
 
 				// iterate through the symbols in that file and add them to our symbol table
-				for (std::vector<Symbol>::iterator it = include_compiler->symbol_table.symbols.begin(); it != include_compiler->symbol_table.symbols.end(); it++) {
-					this->symbol_table.insert(it->name, it->type, it->scope_name, it->scope_level, it->sub_type, it->qualities, it->defined, it->formal_parameters, include_statement.get_line_number());
+				for (std::vector<std::shared_ptr<Symbol>>::iterator it = include_compiler->symbol_table.symbols.begin(); it != include_compiler->symbol_table.symbols.end(); it++) {
+					// if the symbol we found is a variable, insert a variable
+					if (it->get()->symbol_type == VARIABLE) {
+						Symbol variable = *it->get();
+						this->symbol_table.insert(std::make_shared<Symbol>(variable), include_statement.get_line_number());
+					}
+					// otherwise, if it's a function, insert a symbol for a function definition
+					else if (it->get()->symbol_type == FUNCTION_DEFINITION) {
+						FunctionSymbol* function = dynamic_cast<FunctionSymbol*>(it->get());
+						this->symbol_table.insert(std::make_shared<FunctionSymbol>(*function), include_statement.get_line_number());
+					}
 				}
 
 				// now, open the compiled include file as an istream object
@@ -144,10 +153,18 @@ void Compiler::handle_declaration(Declaration declaration_statement)
 
 	// generate the symbol
 	Symbol to_add(declaration_statement.get_var_name(), declaration_statement.get_data_type(), "global", 0, declaration_statement.get_subtype(),
-		declaration_statement.get_qualities(), true, declaration_statement.get_formal_parameters(), declaration_statement.get_length());
+		declaration_statement.get_qualities(), true, declaration_statement.get_length());
 
-	// add the newly-created symbol to the table and return
-	this->symbol_table.insert(to_add, declaration_statement.get_line_number());
+	// if it's a function, we have to construct a FunctionSymbol from the Symbol; insert the proper symbol
+	if (declaration_statement.is_function()) {
+		FunctionSymbol function_definition(to_add, declaration_statement.get_formal_parameters());
+		this->symbol_table.insert(std::make_shared<FunctionSymbol>(function_definition), declaration_statement.get_line_number());
+	}
+	else {
+		this->symbol_table.insert(std::make_shared<Symbol>(to_add), declaration_statement.get_line_number());
+	}
+
+	// we are done; return
 	return;
 }
 
@@ -174,7 +191,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 
 	std::shared_ptr<Expression> initial_value = allocation_statement.get_initial_value();
 	Symbol to_allocate(allocation_statement.get_var_name(), allocation_statement.get_var_type(), current_scope_name, current_scope,
-		allocation_statement.get_var_subtype(), allocation_statement.get_qualities(), allocation_statement.was_initialized(), {},
+		allocation_statement.get_var_subtype(), allocation_statement.get_qualities(), allocation_statement.was_initialized(),
 		allocation_statement.get_array_length());
 
 	// get our qualities
@@ -201,7 +218,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 
 	// if we have a const, we can use the "@db" directive
 	if (is_const) {
-		this->symbol_table.insert(to_allocate, allocation_statement.get_line_number());	// constants have no need for the stack; we can add the symbol right away
+		this->symbol_table.insert(std::make_shared<Symbol>(to_allocate), allocation_statement.get_line_number());	// constants have no need for the stack; we can add the symbol right away
 
 		// constants must initialized when they are allocated (i.e. they must use alloc-assign syntax)
 		if (to_allocate.defined) {
@@ -226,7 +243,15 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 				LValue* initializer_lvalue = dynamic_cast<LValue*>(initial_value.get());
 
 				// look through the symbol table to get the symbol
-				Symbol* initializer_symbol = this->symbol_table.lookup(initializer_lvalue->getValue(), this->current_scope_name, this->current_scope);	// this will throw an exception if the object isn't in the symbol table
+				std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(initializer_lvalue->getValue(), this->current_scope_name, this->current_scope);	// this will throw an exception if the object isn't in the symbol table
+				Symbol* initializer_symbol = nullptr;	// todo: eliminate the validation of 'fetched' ?
+				
+				if (fetched->symbol_type == VARIABLE) {
+					initializer_symbol = dynamic_cast<Symbol*>(fetched.get());
+				}
+				else {
+					throw CompilerException("Symbol found was not a variable symbol", 0, allocation_statement.get_line_number());
+				}
 
 				// verify the symbol is defined
 				if (initializer_symbol->defined) {
@@ -310,7 +335,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 
 	// handle all non-const global variables
 	else if (current_scope_name == "global" && current_scope == 0) {
-		this->symbol_table.insert(to_allocate, allocation_statement.get_line_number());	// global variables do not need the stack, so add to the symbol table right away
+		this->symbol_table.insert(std::make_shared<Symbol>(to_allocate), allocation_statement.get_line_number());	// global variables do not need the stack, so add to the symbol table right away
 
 		// we must specify how many bytes to reserve depending on the data type; structs and arrays will use different sizes, but all other data types will use one word
 		if (to_allocate.type == ARRAY) {
@@ -338,7 +363,8 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 					allocation_ss << this->string_assignment(&to_allocate, initial_value, allocation_statement.get_line_number(), *max_offset).str();
 
 					// We need to update the symbol's 'allocated' member
-					Symbol* allocated_symbol = this->symbol_table.lookup(to_allocate.name, to_allocate.scope_name, to_allocate.scope_level);
+					std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(to_allocate.name, to_allocate.scope_name, to_allocate.scope_level);
+					Symbol* allocated_symbol = dynamic_cast<Symbol*>(fetched.get());	// todo: validate the symbol_type?
 					allocated_symbol->allocated = to_allocate.allocated;
 				}
 			}
@@ -360,7 +386,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 			allocation_ss << this->move_sp_to_target_address(*max_offset).str();	// make sure the stack pointer is at the end of the stack frame before allocating a local variable (so we don't overwrite anything)
 			
 			to_allocate.stack_offset = this->stack_offset;	// the stack offset for the symbol will now be the current stack offset
-			this->symbol_table.insert(to_allocate, allocation_statement.get_line_number());	// now that the symbol's stack offset has been determined, we can add the symbol to the table
+			this->symbol_table.insert(std::make_shared<Symbol>(to_allocate), allocation_statement.get_line_number());	// now that the symbol's stack offset has been determined, we can add the symbol to the table
 
 			// If the variable is defined, we can push its initial value
 			if (to_allocate.defined) {
@@ -377,7 +403,8 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 						allocation_ss << this->string_assignment(&to_allocate, initial_value, allocation_statement.get_line_number(), *max_offset).str();
 
 						// update the symbol's 'allocated' member
-						Symbol* allocated_symbol = this->symbol_table.lookup(to_allocate.name, to_allocate.scope_name, to_allocate.scope_level);
+						std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(to_allocate.name, to_allocate.scope_name, to_allocate.scope_level);
+						Symbol* allocated_symbol = dynamic_cast<Symbol*>(fetched.get());	// todo: validate the symbol_type of fetched?
 						allocated_symbol->allocated = to_allocate.allocated;
 					}
 					// TODO: implement more dynamic memory types
@@ -507,10 +534,10 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t max_offset)
 		ite_ss << "\t" << "incsp" << std::endl;
 	}
 	// we now need to delete all variables that were local to this if/else block -- iterate through the symbol table, removing the symbols in this local scope
-	std::vector<Symbol>::iterator it = this->symbol_table.symbols.begin();
+	std::vector<std::shared_ptr<Symbol>>::iterator it = this->symbol_table.symbols.begin();
 	while (it != this->symbol_table.symbols.end()) {
 		// only delete variables that are in the scope with the same name AND of the same level
-		if ((it->scope_name == this->current_scope_name) && (it->scope_level == this->current_scope)) {
+		if ((it->get()->scope_name == this->current_scope_name) && (it->get()->scope_level == this->current_scope)) {
 			it = this->symbol_table.symbols.erase(it);	// delete the element at the iterator position, and continue without incrementing the iterator
 		}
 		else {
@@ -541,7 +568,7 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t max_offset)
 		it = this->symbol_table.symbols.begin();	// use the same iterator as before
 		while (it != this->symbol_table.symbols.end()) {
 			// only delete variables that are in the scope with the same name AND of the same level
-			if ((it->scope_name == this->current_scope_name) && (it->scope_level == this->current_scope)) {
+			if ((it->get()->scope_name == this->current_scope_name) && (it->get()->scope_level == this->current_scope)) {
 				it = this->symbol_table.symbols.erase(it);	// delete the element at the iterator position, and continue without incrementing the iterator
 			}
 			else {
@@ -627,10 +654,10 @@ std::stringstream Compiler::while_loop(WhileLoop while_statement, size_t max_off
 	while_ss << this->move_sp_to_target_address(max_offset).str();
 
 	// we now need to delete all variables that were local to this if/else block -- iterate through the symbol table, removing the symbols in this local scope
-	std::vector<Symbol>::iterator it = this->symbol_table.symbols.begin();
+	std::vector<std::shared_ptr<Symbol>>::iterator it = this->symbol_table.symbols.begin();
 	while (it != this->symbol_table.symbols.end()) {
 		// only delete variables that are in the current subscope
-		if ((it->scope_name == this->current_scope_name) && (it->scope_level == this->current_scope)) {
+		if ((it->get()->scope_name == this->current_scope_name) && (it->get()->scope_level == this->current_scope)) {
 			it = this->symbol_table.symbols.erase(it);	// delete the element at the iterator position, and continue without incrementing the iterator
 		}
 		else {
@@ -711,7 +738,9 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 			FreeMemory* free_statement = dynamic_cast<FreeMemory*>(current_statement);
 
 			// look for a symbol in the table with the same name as is indicated by the free statement
-			Symbol* to_free = this->symbol_table.lookup(free_statement->get_freed_memory().getValue(), this->current_scope_name, this->current_scope);
+			std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(free_statement->get_freed_memory().getValue(), this->current_scope_name,
+				this->current_scope);
+			Symbol* to_free = dynamic_cast<Symbol*>(fetched.get());	// todo: validate symbol_type of 'fetched' ?
 
 			bool is_const = false;
 			bool is_dynamic = false;
