@@ -51,6 +51,7 @@ enum SymbolType {
 };
 
 
+const size_t num_qualities = 5;	// we can have five symbol qualities, enumerated in 'enum SymbolQuality'
 enum SymbolQuality {
 	// So that the symbol's quality does not need to be stored as a string
 	NO_QUALITY,

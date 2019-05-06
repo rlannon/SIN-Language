@@ -57,8 +57,12 @@ class Parser
 	std::string get_closing_grouping_symbol(std::string beginning_symbol);
 	bool is_opening_grouping_symbol(std::string to_test);
 
+	// get the appropriate SymbolQuality member from the lexeme containing it
+	static SymbolQuality get_quality(lexeme quality_token);
+
 	// we have to fetch a type (and its qualities) more than once; use a tuple for this
 	TypeData get_type();
+	std::vector<SymbolQuality> get_postfix_qualities();		// symbol qualities can be placed after an allocation using the & operator
 
 	// Parsing statements -- each statement type will use its own function to return a statement of that type
 	std::shared_ptr<Statement> parse_statement(bool is_function_parameter = false);		// entry function to parse a statement

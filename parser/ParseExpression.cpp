@@ -265,6 +265,20 @@ std::shared_ptr<Expression> Parser::maybe_binary(std::shared_ptr<Expression> lef
 	}
 	// Otherwise, if we have an op_char or the 'and' or 'or' keyword
 	else if (next.type == "op_char" || next.value == "and" || next.value == "or") {
+		// if the operator is '&', it could be used for bitwise-and OR for postfixed symbol qualities; if the token following is a keyword, it cannot be bitwise-and
+		if (next.value == "&") {
+			this->next();	// advance the iterator so we can see what comes after the ampersand
+			lexeme operand = this->peek();
+			
+			// if the operand is a keyword, the & must not be intended to be the bitwise-and operator
+			if (operand.type == "kwd") {
+				this->back();	// move the iterator back
+				return left;	// return our left argument
+			}
+			else {
+				this->back();	// move the iterator back where it was
+			}
+		}
 
 		// get the next op_char's data
 		int his_prec = get_precedence(next.value, next.line_number);

@@ -281,6 +281,17 @@ std::shared_ptr<Statement> Parser::parse_declaration(lexeme current_lex, bool is
 						this->current_token().line_number);
 				}
 			}
+
+			// check to see if we have postfixed symbol qualities using the & operator
+			if (this->peek().value == "&") {
+				// append the posftixed qualities to symbol_type_data.qualities
+				this->next();
+				std::vector<SymbolQuality> postfixed_qualities = this->get_postfix_qualities();
+
+				// todo: ensure there are no duplicates and no collisions in symbol qualities
+
+				symbol_type_data.qualities.insert(symbol_type_data.qualities.end(), postfixed_qualities.begin(), postfixed_qualities.end());
+			}
 			
 			// finally, we must have a semicolon, a comma, or a closing paren
 			if (this->peek().value == ";" || this->peek().value == "," || this->peek().value == ")") {
@@ -410,7 +421,18 @@ std::shared_ptr<Statement> Parser::parse_allocation(lexeme current_lex)
 				initial_value = this->parse_expression();
 			}
 
-			// if it's a semicolon, comma, or closing paren, then we can return it; otherwise, we must
+			// check to see if we have any postfixed qualities
+			if (this->peek().value == "&") {
+				// append the posftixed qualities to symbol_type_data.qualities
+				this->next();
+				std::vector<SymbolQuality> postfixed_qualities = this->get_postfix_qualities();
+				
+				// todo: ensure there are no duplicates and no collisions in symbol qualities
+
+				symbol_type_data.qualities.insert(symbol_type_data.qualities.end(), postfixed_qualities.begin(), postfixed_qualities.end());
+			}
+
+			// if it's a semicolon, comma, or closing paren, craft the statement and return
 			if (this->peek().value == ";" || this->peek().value == "," || this->peek().value == ")") {
 				// craft the statement
 				stmt = std::make_shared<Allocation>(symbol_type_data.data_type, new_var_name, symbol_type_data.subtype, initialized, initial_value,

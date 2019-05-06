@@ -5,6 +5,18 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+5/5 commit to Compiler
+
+- Added support for postfixed symbol qualities, using the following syntax:
+	alloc/decl <type> <name> &<quality>
+	alloc/decl <type> <name>: <expression> &<quality>
+- Continuing process of breaking the Parser implementation into multiple files
+- Added a function to the Parser to get the appropriate SymbolQuality given a lexeme
+- Added a function to the Parser to generate a vector<SymbolQuality> when the qualities given are postfixed
+- A bug was discovered in const data members (particularly strings) due to the generated assembly. An assembler overhaul is long due and this issue will be revised (at least partially) in the process.
+	
+--------------------------------------------------------------------------------------------
+
 5/4 commit to Compiler
 
 - Modified 'Symbol':

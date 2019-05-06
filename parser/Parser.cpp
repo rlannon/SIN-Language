@@ -317,6 +317,50 @@ TypeData Parser::get_type()
 	return symbol_type_data;
 }
 
+std::vector<SymbolQuality> Parser::get_postfix_qualities()
+{
+	/*
+	
+	Symbol qualities can be given after an allocation -- as such, the following statements are valid:
+		alloc const unsigned int x: 10;
+		alloc int x: 10 &const unsigned;
+
+	This function begins on the first token of the postfix quality -- that is to say, "current_token" should be the ampersand.
+
+	*/
+	
+	std::vector<SymbolQuality> qualities = {};	// create our qualities vector, initialize to an empty vector
+
+	// a keyword should follow the '&'
+	if (this->peek().type == "kwd") {
+		// continue parsing our SymbolQualities until we hit a semicolon, at which point we will trigger the 'done' flag
+		bool done = false;
+		while (this->peek().type == "kwd" && !done) {
+			lexeme quality_token = this->next();	// get the token for the quality
+			SymbolQuality quality = this->get_quality(quality_token);	// use our 'get_quality' function to get the SymbolQuality based on the token
+
+			// if the quality is NO_QUALITY, there was an error; don't add it to the vector
+			if (quality != NO_QUALITY) {
+				qualities.push_back(quality);
+			}
+
+			// the quality must be followed by either another quality or a semicolon
+			if (this->peek().value == ";") {
+				done = true;
+			}
+			// there's an error if the next token is not a keyword and also not a semicolon
+			else if (this->peek().type != "kwd") {
+				throw ParserException("Expected ';' or symbol qualifier in expression", 0, this->peek().line_number);
+			}
+		}
+	}
+	else {
+		throw ParserException("Expected symbol quality following '&'", 0, this->current_token().line_number);
+	}
+
+	return qualities;
+}
+
 
 /*
 
