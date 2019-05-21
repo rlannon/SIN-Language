@@ -24,7 +24,7 @@ const std::vector<std::string> Lexer::keywords{ "alloc", "and", "array", "asm", 
 const std::string Lexer::punc_exp = "[\\.',:;\\[\\]\\{\\}\\(\\)]";	// expression for punctuation
 const std::string Lexer::op_exp = "[\\+\\-\\*/%=\\&\\|\\^<>\\$\\?!@#]";	// expression for operations
 const std::string Lexer::id_exp = "[_0-9a-zA-Z]";	// expression for interior id letters
-const std::string Lexer::bool_exp = "[(True)|(False)]";
+const std::string Lexer::bool_exp = "[(true)|(false)]";
 
 
 // Our stream access and test functions
@@ -173,7 +173,7 @@ bool Lexer::is_op_char(char ch) {
 }
 
 bool Lexer::is_boolean(std::string candidate) {
-	if (candidate == "true" || candidate == "True" || candidate == "False" || candidate == "false") {
+	if (candidate == "true" || candidate == "false") {
 		return true;
 	}
 	else {

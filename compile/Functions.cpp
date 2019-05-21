@@ -85,12 +85,8 @@ std::stringstream Compiler::define(Definition definition_statement) {
 				else if (arg_alloc->get_var_type() == STRUCT) {
 					// TODO: implement structs
 				}
-				else if (arg_alloc->get_var_type() == STRING) {
-					// One word for length, one for address
-					this->stack_offset += 2;
-				}
 				else {
-					// all other types are one word
+					// all other types (not arrays or structs) are one word
 					this->stack_offset += 1;
 				}
 			}
@@ -213,11 +209,13 @@ std::stringstream Compiler::call(Call call_statement, size_t max_offset) {
 					call_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;
 					call_ss << this->move_sp_to_target_address(max_offset).str();
 					call_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;
-					// strings push length (A), then address (B)
+					
+					// we need to push the address of the string only
+					// todo: optimization so we don't need to go through this hassle, and fetch the address alone?
+					call_ss << "\t" << "tba" << "\n\t" << "deca" << "\n\t" << "deca" << std::endl;
 					call_ss << "\t" << "pha" << std::endl;
-					call_ss << "\t" << "phb" << std::endl;
-					this->stack_offset += 2;
-					max_offset += 2;
+					this->stack_offset += 1;
+					max_offset += 1;
 				}
 				else if (formal_type == ARRAY) {
 					// todo: implement arrays in function calls (as arguments)
@@ -283,11 +281,13 @@ std::stringstream Compiler::call(Call call_statement, size_t max_offset) {
 							call_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;
 							call_ss << this->move_sp_to_target_address(max_offset).str();
 							call_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;
-							// strings push length (A), then address (B)
+							
+							// we just need to push the address of the whole string
+							// todo: better string fetching to allow for getting the address only?
+							call_ss << "\t" << "tba" << "\n\t" << "deca\n\tdeca" << std::endl;
 							call_ss << "\t" << "pha" << std::endl;
-							call_ss << "\t" << "phb" << std::endl;
-							this->stack_offset += 2;
-							max_offset += 2;
+							this->stack_offset += 1;
+							max_offset += 1;
 						}
 						else if (var_type == ARRAY) {
 							// todo: implement arrays as function parameters

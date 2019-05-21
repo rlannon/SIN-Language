@@ -45,7 +45,7 @@ class Compiler
 
 	SymbolTable symbol_table;	// create an object for our symbol table
 
-	size_t stack_offset;
+	size_t stack_offset;	// track the offset from the stack frame's base address; this allows us to store local variables in the stack
 
 	size_t current_scope;	// tells us what scope level we are currently in
 	std::string current_scope_name;
@@ -60,7 +60,7 @@ class Compiler
 	Type get_expression_data_type(std::shared_ptr<Expression> to_evaluate, bool get_subtype = false);
 	bool is_signed(std::shared_ptr<Expression> to_evaluate, unsigned int line_number = 0);	// we may need to determine whether an expression is signed or not
 
-	// Evaluate trees
+	// Evaluate trees -- generate the assembly to represent that evaluation
 	std::stringstream evaluate_binary_tree(Binary bin_exp, unsigned int line_number, size_t max_offset = 0, Type left_type = NONE);
 	std::stringstream evaluate_unary_tree(Unary unary_exp, unsigned int line_number, size_t max_offset = 0);
 

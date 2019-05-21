@@ -344,10 +344,10 @@ std::stringstream Compiler::evaluate_unary_tree(Unary unary_exp, unsigned int li
 
 		// act according to its data type
 		if (unary_operand->get_type() == BOOL) {
-			if (unary_operand->get_value() == "True") {
+			if (unary_operand->get_value() == "true") {
 				unary_ss << "\tloada #$01" << std::endl;
 			}
-			else if (unary_operand->get_value() == "False") {
+			else if (unary_operand->get_value() == "false") {
 				unary_ss << "\tloada #$00" << std::endl;
 			}
 			else {

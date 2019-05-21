@@ -23,22 +23,9 @@ This class will take a SIN Assembly file (.sina or .sinasm) and output a .sinc f
 
 The point of the class is to create a file that the SINVM can use; the SIN Compiler will create the SINVM Assembly file, which will go through the SIN Assembler to create a SIN Bytecode / Compiled SIN file (.sinc) which can be used by the SINVM.
 
-This file also includes all the opcodes and their mnemonics; this is so we can refer to the opcode by its mnemonic in the code for readability
-
-
-Quick guide to the assembly (see Doc/sinasm for more information):
-	
-	All instructions follow one of the following formats:
-		MNEMONIC,
-		MNEMONIC VALUE,		(VALUE can be prefixed to indicate format and addressing mode)
-		.LABELNAME:,
-		MACRO = VALUE
-	
-	When decoded, the instructions will take up at least 2 bytes -- one for the instruction opcode, one for the addressing mode, and optional bytes for data. The _WORDSIZE variable will determine how many bytes are allocated for values, and defaults to 16 bits if it is not specified. _WORDSIZE can be 16, 32, or 64 bits.
-
-	For the available addressing modes, see "AddressingModeConstants.h"
-
 */
+
+// todo: overhaul assembler; rewrite to use a scanning method similar to how the parser for the SIN language works
 
 // to test whether instructions are of particular "classes"
 const bool is_standalone(int opcode);	// tells us whether an opcode needs a value to follow

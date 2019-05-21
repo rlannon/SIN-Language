@@ -5,6 +5,20 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+5/21 commit to Compiler
+
+- Assembler now puts the length of const strings before the string data
+- Modified how string constants and const strings are fetched in Compiler::fetch_value(...) to reflect the new structure of how constants are allocated in program memory with @db directive
+- Modified how const variables are initialized in the global scope; they may not be initialized with pointers and the values that are used to initialize constants must be able to be determined at compile time
+	- Note local variables currently are only allowed to be initialized with constants
+- Modified how strings are pushed to functions so that they only take up one word -- rather than pushing the length and address, it only pushes the address
+- Modified the 'builtins' library so this new string parameter handling is supported
+- Changed boolean constants from 'True' and 'False' to 'true' and 'false' (from Python style to C style)
+- Moved some functions into a 'CompilerUtilites.cpp' file for organization purposes
+- Modified 'builtins-sinasm16.sina' to use a constant address for the input length -- this allows us to return the address of _INPUT_LEN as the string start
+
+--------------------------------------------------------------------------------------------
+
 5/5 commit to Compiler
 
 - Added support for postfixed symbol qualities, using the following syntax:

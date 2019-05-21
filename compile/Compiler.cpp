@@ -216,8 +216,10 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 		quality_iter++;
 	}
 
-	// if we have a const, we can use the "@db" directive
-	if (is_const) {
+	// if we have a global const, we can use the "@db" directive
+	if (is_const && current_scope == 0) {
+		// todo: validate the initial value of a constant will be known at compile time 
+
 		this->symbol_table.insert(std::make_shared<Symbol>(to_allocate), allocation_statement.get_line_number());	// constants have no need for the stack; we can add the symbol right away
 
 		// constants must initialized when they are allocated (i.e. they must use alloc-assign syntax)
@@ -232,7 +234,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 					std::string const_value = const_literal->get_value();
 
 					// use "@db"
-					allocation_ss << "@db " << to_allocate.name << " (" << const_value << ")" << std::endl;
+					allocation_ss << "@db " << to_allocate.name << " (" << const_value << ")" << std::endl;	// todo: update constant definition syntax
 				}
 				else {
 					throw CompilerException("Types do not match", 0, allocation_statement.get_line_number());
@@ -253,53 +255,66 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 					throw CompilerException("Symbol found was not a variable symbol", 0, allocation_statement.get_line_number());
 				}
 
-				// verify the symbol is defined
-				if (initializer_symbol->defined) {
-					// verify the types match -- we don't need to worry about subtypes just yet
-					if (initializer_symbol->type == to_allocate.type) {
-						// define the constant using a dummy value
-						allocation_ss << "@db " << to_allocate.name << " (0)" << std::endl;
-
-						// different data types must be treated differently
-						if (to_allocate.type == STRING) {
-							/*
-							
-							To allocate a string constant, we must fetch the value and then utilize memcpy to copy the data from our old location to the new one.
-
-							Usage for memcpy is as follows:
-								- Push source
-								- Push destination
-								- Push number of bytes to copy
-
-							After fetch_value is called, A will contain the number of _bytes_, B will contain the address of the string
-
-							*/
-
-							allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), *max_offset).str();
-							allocation_ss << this->move_sp_to_target_address(*max_offset, true).str();	// increment the stack pointer to our stack frame, but preserve our register values
-
-							// push our parameters and invoke our memcpy subroutine
-							allocation_ss << "\t" << "phb" << "\n\t" << "loadb #" << to_allocate.name << "\n\t" << "phb" << "\n\t" << "pha" << std::endl;
-							allocation_ss << "\t" << "jsr __builtins_memcpy" << std::endl;
-						}
-						// todo: add initializer-lists for arrays
-						else {
-							// now, use fetch_value to get the value of our lvalue and store the value in A at the constant we have defined
-							allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), *max_offset).str();
-							allocation_ss << "storea " << to_allocate.name << std::endl;
-						}
+				// todo: consider whether run-time constants should be allowed
+				// verify the lvalue we are initializing this const-qualified variable with is also const-qualified
+				bool is_const = false;
+				std::vector<SymbolQuality>::iterator it = initializer_symbol->qualities.begin();
+				while (it != initializer_symbol->qualities.end()) {
+					if (*it == CONSTANT) {
+						is_const = true;
+						it = initializer_symbol->qualities.end();
+					}
+					else {
+						it++;
 					}
 				}
-				else {
-					throw CompilerException("'" + initializer_symbol->name + "' was referenced before assignment.", 0, allocation_statement.get_line_number());
+
+				if (is_const) {
+					// verify the symbol is defined
+					if (initializer_symbol->defined) {
+						// verify the types match -- we don't need to worry about subtypes just yet
+						if (initializer_symbol->type == to_allocate.type) {
+							// define the constant using a dummy value
+							allocation_ss << "@db " << to_allocate.name << " (0)" << std::endl;
+
+							// different data types must be treated differently
+							if (to_allocate.type == STRING) {
+								/*
+
+								To allocate a string constant, we must fetch the value and then utilize memcpy to copy the data from our old location to the new one.
+
+								Usage for memcpy is as follows:
+									- Push source
+									- Push destination
+									- Push number of bytes to copy
+
+								After fetch_value is called, A will contain the number of _bytes_, B will contain the address of the string
+
+								*/
+
+								allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), *max_offset).str();
+								allocation_ss << this->move_sp_to_target_address(*max_offset, true).str();	// increment the stack pointer to our stack frame, but preserve our register values
+
+								// push our parameters and invoke our memcpy subroutine
+								allocation_ss << "\t" << "phb" << "\n\t" << "loadb #" << to_allocate.name << "\n\t" << "phb" << "\n\t" << "pha" << std::endl;
+								allocation_ss << "\t" << "jsr __builtins_memcpy" << std::endl;
+							}
+							// todo: add initializer-lists for arrays
+							else {
+								// now, use fetch_value to get the value of our lvalue and store the value in A at the constant we have defined
+								allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), *max_offset).str();
+								allocation_ss << "storea " << to_allocate.name << std::endl;
+							}
+						}
+					}
+					else {
+						throw CompilerException("'" + initializer_symbol->name + "' was referenced before assignment.", 0, allocation_statement.get_line_number());
+					}
 				}
-			}
-			else if (initial_value->get_expression_type() == DEREFERENCED) {
-				Dereferenced* initializer_deref = dynamic_cast<Dereferenced*>(initial_value.get());
-				// TODO: implement dereferenced constant initializer
-			}
-			else if (initial_value->get_expression_type() == ADDRESS_OF) {
-				// TODO: implement address_of constant initializer
+				// otherwise, if it's not also a constant,
+				else {
+					throw CompilerException("Initializing const-qualified variables with non-const-qualified variables is illegal", 0, allocation_statement.get_line_number());
+				}
 			}
 			else if (initial_value->get_expression_type() == UNARY) {
 				Unary* initializer_unary = dynamic_cast<Unary*>(initial_value.get());
@@ -325,6 +340,14 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 				else {
 					throw CompilerException("Types do not match", 0, allocation_statement.get_line_number());
 				}
+			}
+			// it is illegal to initialize const-qualified variables with pointers
+			else if (initial_value->get_expression_type() == DEREFERENCED || initial_value->get_expression_type() == ADDRESS_OF)
+			{
+				throw CompilerException("It is illegal to initialize const-qualified variables with pointers or addresses; these values must be computed at compile time", 0, allocation_statement.get_line_number());
+			}
+			else {
+				throw CompilerException("It is illegal to initialize a const-qualified variable with an expression of this type", 0, allocation_statement.get_line_number());
 			}
 		}
 		else {
@@ -387,6 +410,18 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 			
 			to_allocate.stack_offset = this->stack_offset;	// the stack offset for the symbol will now be the current stack offset
 			this->symbol_table.insert(std::make_shared<Symbol>(to_allocate), allocation_statement.get_line_number());	// now that the symbol's stack offset has been determined, we can add the symbol to the table
+
+			// if we have a const local variable, we need to make sure it is defined
+			if (is_const && !to_allocate.defined) {
+				throw CompilerException("Const-qualified variables must be initialized in allocation", 0, allocation_statement.get_line_number());
+			}
+
+			// todo: consider whether runtime constants should be allowed
+			// the initializer must also be a literal -- it cannot change at runtime
+			else if (is_const && initial_value->get_expression_type() != LITERAL) {
+				// todo: write some function to ensure the variable's value can be determined at compile time
+				throw CompilerException("Const-qualified variables must be initialized with literal values", 0, allocation_statement.get_line_number());
+			}
 
 			// If the variable is defined, we can push its initial value
 			if (to_allocate.defined) {
@@ -479,8 +514,8 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t max_offset)
 
 		Literals are defined to be true/false in the following way:
 			Literal value:		Evaluates to:
-				True			True
-				False			False
+				true			True
+				false			False
 				0				False
 				1 +				True
 				-1 -			True
