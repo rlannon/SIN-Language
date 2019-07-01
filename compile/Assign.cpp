@@ -391,7 +391,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 						throw CompilerException("Other dynamic memory types not supported at this time");
 					}
 				}
-				// automatic memory is easier to handle than dynamic
+				// automatic and static memory are a little easier to handle than dynamic
 				else {
 					/*
 
@@ -401,6 +401,11 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 
 					*/
 
+					// todo: add a function for array assignment using lists, separate from this one to keep code clean
+					// todo: consider whether lists should be permissible _outside of_ initialization of an array
+					// todo: split the assignment function into multiple smaller functions, one to handle dynamic memory, one to handle static, and one to handle automatic?
+					
+					// if the scope level is 0, we have static memory
 					if (fetched->scope_level == 0) {
 						// global variables
 
@@ -438,13 +443,15 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 						}
 
 						// now, make the assignment
-						if (lvalue_exp_type != DEREFERENCED) {
-							assignment_ss << "\t" << "storea " << var_name << ", y" << std::endl;	// y will be zero if we have no index
-						}
-						else {
+						if (lvalue_exp_type == DEREFERENCED) {
 							assignment_ss << "\t" << "storea (" << var_name << ", y)" << std::endl;	// use indirect addressing for pointers
 						}
+						else {
+							assignment_ss << "\t" << "storea " << var_name << ", y" << std::endl;	// y will be zero if we have no index
+						}
 					}
+
+					// otherwise, if the scope level > 0, we have automatic memory
 					else {
 						// if we are assigning to an index, we must do that differently than if it's to a non-indexed variable
 						if (lvalue_exp_type == INDEXED) {

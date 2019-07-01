@@ -11,21 +11,10 @@ For a documentation of the language, see either the doc folder in this project o
 
 */
 
-// Pre-existing libraries
-// These are all included in other included headers, but leaving them here to show we will be using them
-//#include <iostream>
-//#include <fstream>
-//#include <string>
-//#include <vector>
-//#include <exception>
-//#include <algorithm>	// for std::find
+// All pre-existing headers used in this file are already included in other project files
 
-// Custom headers
-//#include "Lexer.h"
-//#include "Parser.h"		// Lexer.h and Parser.h are also included in Interpreter.h, but commenting here to denote they are being used
-#include "Interpreter.h"
+// Our headers
 #include "vm/SINVM.h"
-//#include "Assembler.h"	// included by SINVM.h, but included here as a comment to denote that those functions are being used in this file
 #include "compile/Compiler.h"
 #include "link/Linker.h"
 #include "util/SinObjectFile.h"
@@ -45,6 +34,7 @@ void help(std::string flag="") {
 
 
 // TODO: make the main function more modular
+// todo: redo command-line argument parsing
 int main (int argc, char* argv[]) {
 	// first, make a vector of strings to hold **argv 
 	std::vector<std::string> program_arguments;
@@ -231,39 +221,7 @@ int main (int argc, char* argv[]) {
 	try {
 		// interpret a .sin file
 		if (interpret) {
-			// validate the file type
-			if (file_extension == ".sin") {
-				// open the file and check to make sure it opened correctly
-				std::ifstream sin_file;
-				sin_file.open(filename, std::ios::in);
-
-				if (sin_file.is_open()) {
-					// if we are interpreting, we must lex and parse the file
-					Lexer lexer(sin_file);
-					Parser parser(lexer);
-					Interpreter* interpreter = new Interpreter();	// allocate on the heap because it's a big object
-
-					// run the AST produced by the parser
-					interpreter->interpretAST(parser.create_ast());
-
-					if (debug_values) {
-						std::cout << "Done. Press enter to exit..." << std::endl;
-						std::cin.get();
-					}
-
-					delete interpreter;	// free the memory we allocated for the interpreter object
-
-					sin_file.close();
-				}
-				else {
-					// if we couldn't open it, throw an error and quit
-					file_error(filename);
-					exit(1);
-				}
-			}
-			else {
-				throw std::runtime_error("**** Only .sin files may be interpreted.");
-			}
+			throw std::runtime_error("**** Interpreted-SIN is currently not supported.");
 		}
 		// compile a .sin file
 		if (compile) {

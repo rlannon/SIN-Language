@@ -364,12 +364,62 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 		if (to_allocate.type == ARRAY) {
 			// arrays may only contain the integral types; you can have an array of pointers to arrays or structs, but not of arrays or structs themselves (at this time)
 			if (to_allocate.sub_type == ARRAY || to_allocate.sub_type == STRUCT) {
-				throw CompilerException("Arrays with subtype 'array' or 'struct' are not supported", 0, allocation_statement.get_line_number());
+				throw CompilerException("Arrays may not contain other arrays or structs (only pointers to such members)", 0, allocation_statement.get_line_number());
 			}
 			else {
 				// reserve one word for each element
 				size_t num_bytes = to_allocate.array_length * WORD_W;	// number of bytes = number of elements * number of bytes per word
 				allocation_ss << "@rs " << std::dec << num_bytes << " " << to_allocate.name << std::endl;	// since we have been using std::hex, switch back to decimal mode here to be safe
+
+				// if we initialzed the array, make the initial assignments
+				if (allocation_statement.was_initialized()) {
+					std::shared_ptr<Expression> initial_exp = allocation_statement.get_initial_value();
+					
+					// we cannot have an initialization of only one element -- the type must be 'LIST'
+					if (initial_exp->get_expression_type() == LIST) {
+						// first, get the list expression that is the initializer
+						ListExpression* list_exp = dynamic_cast<ListExpression*>(initial_exp.get());
+						std::vector<std::shared_ptr<Expression>> initializer_list = list_exp->get_list();
+
+						// keep track of our index in the list by using the X register and the stack
+						// since we are in the global scope, no need to move the SP around
+						allocation_ss << "\t" << "loadx #$FFFE" << std::endl;
+
+						// for each element in the list, fetch it and assign it to the next position in the list
+						// todo: could refactor by creating a data array in memory containing the proper values and making the assignments by indexing into that array
+						std::vector<std::shared_ptr<Expression>>::iterator it = initializer_list.begin();
+						while (it != initializer_list.end()) {
+							/*
+
+							Start by incrementing the X register at the top of every loop; start at 0xFFFF so when we increment, it rolls over to 0
+							This prevents us from pushing to the stack an extra time and requiring a 'decsp' instruction
+							It's an optimization, albeit a tiny one
+
+							After doing that, push it to the stack, fetch the value, pull the index from the stack, and make the assignment
+
+							*/
+
+							allocation_ss << "\t" << "incx" << std::endl;
+							allocation_ss << "\t" << "incx" << std::endl;	// increment X twice to skip ahead one word
+							allocation_ss << "\t" << "txa" << "\n\t" << "pha" << std::endl;
+
+							// dereference 'it' as the shared_ptr to pass into fetch_value(...)
+							allocation_ss << this->fetch_value(*it, allocation_statement.get_line_number(), *max_offset).str() << std::endl;
+
+							// now, get the index value from the stack into X and make the assignment
+							allocation_ss << "\t" << "tab" << "\n\t" << "pla" << "\n\t" << "tax" << "\n\t" << "tba" << std::endl;
+							allocation_ss << "\t" << "storea " << to_allocate.name << ", x" << std::endl;
+
+							// increment the iterator
+							it++;
+						}
+					}
+					// if the initial value is not a LIST expression type, throw an error
+					else {
+						throw CompilerException("Expected initializer list for initialization of aggregate data type", 0,
+							allocation_statement.get_line_number());
+					}
+				}
 			}
 		}
 		else if (to_allocate.type == STRUCT) {
@@ -444,6 +494,50 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 					}
 					// TODO: implement more dynamic memory types
 				}
+				// array initializations must be handled slightly differently
+				else if (to_allocate.type == ARRAY) {
+					// arrays must be initialized with initializer-lists
+					if (allocation_statement.get_initial_value()->get_expression_type() == LIST) {
+						// todo: initialize local arrays with lists
+						ListExpression* list_exp = dynamic_cast<ListExpression*>(allocation_statement.get_initial_value().get());
+						std::vector<std::shared_ptr<Expression>> initializer_list = list_exp->get_list();
+
+						// first, we must move to the end of the stack frame so we can use the stack without overwriting our local variables
+						allocation_ss << this->move_sp_to_target_address(*max_offset).str();
+						to_allocate.stack_offset = *max_offset;
+
+						// next, we need to set up our loop
+						// todo: we could also create a list in memory and index the list to make the assignment here using a loop -- could be useful for lists of constants
+						for (std::vector<std::shared_ptr<Expression>>::iterator it = initializer_list.begin(); it != initializer_list.end(); it++) {
+							// next, fetch the value
+							allocation_ss << this->fetch_value(*it, allocation_statement.get_line_number(), *max_offset);
+
+							// next, move the SP back to the end -- but only if we aren't at the end already
+							if (this->stack_offset != *max_offset) {
+								// if the difference between the two values is greater than three, we need to preserve the A register
+								if (abs((int)this->stack_offset - (int)*max_offset) > 3) {
+									allocation_ss << "\t" << "tab" << std::endl;	// preserve in B, as it's untouched by our move function
+									allocation_ss << this->move_sp_to_target_address(*max_offset);
+									allocation_ss << "\t" << "tba" << std::endl;
+								}
+								// otherwise, no sense in making the transfer
+								else {
+									allocation_ss << this->move_sp_to_target_address(*max_offset);
+								}
+							}
+
+							// since the object is at the end, we don't actually have to move anywhere to push the value
+							allocation_ss << "\t" << "pha" << std::endl;
+							this->stack_offset += 1;
+							*max_offset += 1;
+						}
+					}
+					else {
+						throw CompilerException("Expected initializer list for initialization of aggregate type", 0,
+							allocation_statement.get_line_number());
+					}
+				}
+				// all other data types can simply fetch the value and push the A register
 				else {
 					// get the initial value
 					allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), *max_offset).str();
@@ -453,18 +547,16 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 					(*max_offset) += 1;
 				}
 			}
+			// if it is not defined, 
 			else {
 				// update the stack offset -- all types will increment the stack offset by one word; allocate space in the stack and increase our offset
 				if (to_allocate.type == ARRAY) {
-					allocation_ss << "\t" << "loada #$00" << std::endl;
-					allocation_ss << "\t" << "loadx #$" << std::hex << to_allocate.array_length << std::endl;
-					allocation_ss << ".__ALLOC_ARRAY_LOOP__BR_" << this->branch_number << "__:" << std::endl;
-					allocation_ss << "\t" << "pha" << std::endl;
-					allocation_ss << "\t" << "decx" << std::endl;
-					allocation_ss << "\t" << "cmpx #$00" << std::endl;
-					allocation_ss << "\t" << "brne .__ALLOC_ARRAY_LOOP__BR_" << this->branch_number << "__" << std::endl;
+					// load B with the length, transfer SP to A, subtract the length from the stack pointer, and move the stack pointer back
+					allocation_ss << "\t" << "loadb #$" << std::hex << to_allocate.array_length << std::endl;
+					allocation_ss << "\t" << "tspa" << std::endl;
+					allocation_ss << "\t" << "sec" << "\n\t" << "subca b" << std::endl;		// must always set carry before subtraction
+					allocation_ss << "\t" << "tasp" << std::endl;
 
-					this->branch_number += 1;
 					this->stack_offset += to_allocate.array_length;
 					(*max_offset) += to_allocate.array_length;
 				}
@@ -975,7 +1067,7 @@ Compiler::Compiler(std::istream& sin_file, uint8_t _wordsize, std::vector<std::s
 	this->strc_number = 0;
 	this->branch_number = 0;
 
-	this->AST_index = 0;	// we use "get_next_statement()" every time, which increments before returning; as such, start at -1 so we fetch the 0th item, not the 1st, when we first call the compilation function
+	this->AST_index = 0;
 	
 	symbol_table = SymbolTable();
 

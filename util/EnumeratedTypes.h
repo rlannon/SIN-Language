@@ -32,8 +32,9 @@ enum stmt_type {
 enum exp_type {
 	// So that we can list all of the various expression types in one place
 	EXPRESSION_GENERAL,
-	LITERAL,
-	LVALUE,
+	LITERAL,	// can be a literal int (e.g., 5), a literal float (e.g., 1.2), a literal string (e.g., "hello"), a literal bool (true/false) ...
+	LVALUE,		// any named data
+	LIST,	// initializer-lists, mostly; syntax is { ... , ... }
 	INDEXED,
 	ADDRESS_OF,
 	DEREFERENCED,

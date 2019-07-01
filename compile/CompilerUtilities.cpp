@@ -33,6 +33,7 @@ std::shared_ptr<Statement> Compiler::get_current_statement(StatementBlock AST)
 }
 
 
+// todo: add line_number as parameter because this function may throw an exception
 Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate, bool get_subtype)
 {
 	/*
@@ -130,6 +131,36 @@ Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate,
 		}
 
 		return func_symbol->type;
+	}
+	else if (to_evaluate->get_expression_type() == LIST) {
+		ListExpression* list_exp = dynamic_cast<ListExpression*>(to_evaluate.get());
+
+		std::vector<std::shared_ptr<Expression>> list_members = list_exp->get_list();
+
+		if (list_members.size() > 0) {
+			// get the type we expect for the list; the first member determines it
+			Type list_data_type = this->get_expression_data_type(list_members[0]);
+
+			// iterate through the list and check to see if the types are homogenous
+			size_t list_item = 1;
+			bool abort = false;
+			while (list_item < list_members.size() && !abort) {
+				Type current_item_type = this->get_expression_data_type(list_members[list_item]);
+				abort = current_item_type != list_data_type;
+				list_item++;
+			}
+
+			if (abort) {
+				throw CompilerException("Lists must be homogenous in SIN");
+			}
+			else {
+				return list_data_type;
+			}
+		}
+		else {
+			compiler_warning("Empty list found");
+			return VOID;	// an empty list has a type of VOID
+		}
 	}
 	else if (to_evaluate->get_expression_type() == SIZE_OF) {
 		return INT;	// sizeof(...) always returns an unsigned int

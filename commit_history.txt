@@ -5,9 +5,20 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+7/1 commit to Compiler
+
+- Added support for initializer lists for arrays
+- Removed "Interpreter" class, as it was very out-of-date and poorly-written
+- Added a routine in the Compiler::get_expression_data_type function to get the type of a List expression and validate that the list is homogeneous
+- sizeof expressions now use angle brackets instead of parens (e.g., 'sizeof<int>'); this is because sizeof should not be thought of as a function, but as a keyword, and angle brackets are therefore more appropriate.
+- Moved many function implementations for the Parser class from Parser.cpp to ParserUtil.cpp, as they are more appropriately placed there
+- Minor code and comment fixes
+
+--------------------------------------------------------------------------------------------
+
 5/21 commit to Compiler
 
-- Assembler now puts the length of const strings before the string data
+- Assembler now puts the length of const strings before the string data when the @db directive is used
 - Modified how string constants and const strings are fetched in Compiler::fetch_value(...) to reflect the new structure of how constants are allocated in program memory with @db directive
 - Modified how const variables are initialized in the global scope; they may not be initialized with pointers and the values that are used to initialize constants must be able to be determined at compile time
 	- Note local variables currently are only allowed to be initialized with constants

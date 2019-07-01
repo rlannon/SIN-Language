@@ -66,6 +66,17 @@ public:
 	LValue();
 };
 
+class ListExpression : public Expression
+{
+	std::vector<std::shared_ptr<Expression>> list_members;
+public:
+	std::vector<std::shared_ptr<Expression>> get_list();
+
+	ListExpression(std::vector<std::shared_ptr<Expression>> list_members);
+	ListExpression();
+	~ListExpression();
+};
+
 // Indexed expressions are a child of an LValue
 class Indexed : public LValue
 {

@@ -20,7 +20,8 @@ std::shared_ptr<Expression> Parser::parse_expression(size_t prec, std::string gr
 	// Create a pointer to our first value
 	std::shared_ptr<Expression> left;
 
-	// Check if our expression begins with parens; if so, only return what is inside them
+	// Check if our expression begins with a grouping symbol; if so, only return what is inside the symbols
+	// note that curly braces are NOT included here; they are parsed separately as they are not considered grouping symbols in the same way as parentheses and brackets are
 	if (is_opening_grouping_symbol(current_lex.value)) {
 		grouping_symbol = current_lex.value;
 		this->next();
@@ -48,11 +49,31 @@ std::shared_ptr<Expression> Parser::parse_expression(size_t prec, std::string gr
 			return this->maybe_binary(left, prec, grouping_symbol);
 		}
 	}
+	// list expressions (array literals) have to be handled slightly differently than other expressions
+	else if (current_lex.value == "{") {
+		this->next();
+		std::vector<std::shared_ptr<Expression>> list_members = {};
+
+		// as long as the next token is a comma, we have elements to parse
+		while (this->peek().value != "}" && this->peek().value != ";") {
+			list_members.push_back(this->parse_expression(prec, "{"));
+			this->next();	// skip the last character of the expression
+		}
+
+		// once we escape the loop, we must find a closing curly brace
+		if (this->peek().value == ";") {
+			left = std::make_shared<ListExpression>(list_members);
+		}
+		else {
+			throw ParserException("Invalid character in expression", 0, this->current_token().line_number);
+		}
+	}
+	// if expressions are separated by commas, continue parsing the next one
 	else if (current_lex.value == ",") {
 		this->next();
-		return this->parse_expression();
+		return this->parse_expression(prec, grouping_symbol, not_binary);
 	}
-	// if it is not an expression within parens
+	// if it is not an expression within a grouping symbol, it is parsed below
 	else if (is_literal(current_lex.type)) {
 		left = std::make_shared<Literal>(get_type_from_string(current_lex.type), current_lex.value);
 	}
@@ -69,9 +90,9 @@ std::shared_ptr<Expression> Parser::parse_expression(size_t prec, std::string gr
 	// if we have a keyword to begin an expression, parse it (could be a sizeof expression)
 	else if (current_lex.type == "kwd") {
 		if (current_lex.value == "sizeof") {
-			// expression must be enclosed in parens
-			if (this->peek().value == "(") {
-				grouping_symbol = "(";
+			// expression must be enclosed in angle brackets
+			if (this->peek().value == "<") {
+				grouping_symbol = "<";
 				this->next();
 				// valid words in sizeof are idents and types, so long as the type is not a struct or an array
 				if (this->peek().type == "ident" || (is_type(this->peek().value) && this->peek().value != "struct" && this->peek().value != "array")) {
@@ -82,7 +103,7 @@ std::shared_ptr<Expression> Parser::parse_expression(size_t prec, std::string gr
 						left = std::make_shared<SizeOf>(to_check.value);
 					}
 					else {
-						throw ParserException("Syntax error; expected ')'", 0, current_lex.line_number);
+						throw ParserException("Syntax error; expected '>'", 0, current_lex.line_number);
 					}
 				}
 				else {
@@ -90,7 +111,7 @@ std::shared_ptr<Expression> Parser::parse_expression(size_t prec, std::string gr
 				}
 			}
 			else {
-				throw ParserException("Syntax error; expected '('", 0, current_lex.line_number);
+				throw ParserException("Syntax error; expected '<'", 0, current_lex.line_number);
 			}
 		}
 		else {
@@ -289,13 +310,13 @@ std::shared_ptr<Expression> Parser::maybe_binary(std::shared_ptr<Expression> lef
 			this->next();	// go to the character after the op char
 
 			// Parse out the next expression
-			std::shared_ptr<Expression> right = this->maybe_binary(this->parse_expression(his_prec), his_prec);	// make sure his_prec gets passed into parse_expression so that it is actually passed into maybe_binary
+			std::shared_ptr<Expression> right = this->maybe_binary(this->parse_expression(his_prec, grouping_symbol), his_prec, grouping_symbol);	// make sure his_prec gets passed into parse_expression so that it is actually passed into maybe_binary
 
 			// Create the binary expression
 			std::shared_ptr<Binary> binary = std::make_shared<Binary>(left, right, translate_operator(next.value));	// "next" still contains the op_char; we haven't updated it yet
 
 			// call maybe_binary again at the old prec level in case this expression is followed by one of a higher precedence
-			return this->maybe_binary(binary, my_prec);
+			return this->maybe_binary(binary, my_prec, grouping_symbol);
 		}
 		else {
 			return left;
