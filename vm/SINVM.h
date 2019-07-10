@@ -4,7 +4,8 @@ SIN Toolchain
 SINVM.h
 Copyright 2019 Riley Lannon
 
-The virtual machine that will be responsible for interpreting SIN bytecode.
+The virtual machine that is responsible for executing SIN bytecode. While this VM is mostly self-sufficient, it is not completely made from the ground up.
+It still requires explicit host interaction through the SYSCALL instruction for standard and file I/O, and will use native code on the host machine to implement various libraries that require the OS API, in a similar manner as the JVM.
 
 */
 
@@ -24,8 +25,7 @@ The virtual machine that will be responsible for interpreting SIN bytecode.
 #include "../util/Exceptions.h"	// for VMException
 #include "StatusConstants.h"
 #include "ALU.h"
-
-// Note there is functionality from other headers that are not included here because they are included in headers we have already included in this file, and although we are using #pragma once, they don't need to be included again
+#include "../util/Signals.h"
 
 
 class SINVM
@@ -53,10 +53,12 @@ class SINVM
 
 	// create an array to hold our program memory
 	uint8_t memory[memory_size];
-	size_t program_start_address;
 
 	// create a list to hold our DynamicObjects
 	std::list<DynamicObject> dynamic_objects;
+
+	// send a processor signal
+	void send_signal(uint8_t sig);
 
 	// check whether a memory address is legal
 	static const bool address_is_valid(size_t address);

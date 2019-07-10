@@ -118,11 +118,12 @@ const uint8_t ANDA = 0x60;
 const uint8_t ORA = 0x61;
 const uint8_t XORA = 0x62;
 // 0x63 - 0x69 currently unused
-const uint8_t CMPA = 0x6A;
-const uint8_t CMPB = 0x6B;
-const uint8_t CMPX = 0x6C;
-const uint8_t CMPY = 0x6D;
-// 0x6E, 0x6F currently unused
+const uint8_t SUBCA = 0x6A;
+const uint8_t SUBCB = 0x6B;
+const uint8_t CMPA = 0x6C;
+const uint8_t CMPB = 0x6D;
+const uint8_t CMPX = 0x6E;
+const uint8_t CMPY = 0x6F;
 
 // todo: implement FPU 
 /*

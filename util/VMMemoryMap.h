@@ -55,6 +55,7 @@ const size_t _PRG_TOP = 0xEFFF;	// the limit for our program data
 const size_t _PRG_BOTTOM = 0x2600;	// our lowest possible memory address for the program
 
 // our processor signal vectors
+const size_t _SIG_VECTOR = 0xF000;
 const size_t _SINSIGFPE_VECTOR = 0xF000;
 const size_t _SINSIGSYS_VECTOR = 0xF002;
 const size_t _SINSIGILL_VECTOR = 0xF004;

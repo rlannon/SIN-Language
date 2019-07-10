@@ -11,6 +11,7 @@ Note the SYSCALL instruction is akin to an INT instruction in Unix; it is like a
 */
 
 #include "SINVM.h"
+#include "../util/SyscallConstants.h"
 
 void SINVM::execute_syscall() {
 	// get the addressing mode
@@ -22,9 +23,7 @@ void SINVM::execute_syscall() {
 	uint16_t syscall_number = this->get_data_of_wordsize();
 
 	// TODO: implement more syscalls and split them into their own functions
-
-	// If our syscall is for stdin or stdout
-	if (syscall_number == 0x13) {
+	if (syscall_number == STD_READ) {
 		// get user input
 		// first, the program will look in the B register for the address where it should put the data
 		unsigned int start_address = REG_B;
@@ -68,7 +67,7 @@ void SINVM::execute_syscall() {
 			this->REG_A = buffer_length;
 		}
 	}
-	else if (syscall_number == 0x14) {
+	else if (syscall_number == STD_OUT) {
 		// If we want to print something to the screen, we must specify the address where it starts
 		// It will print a number of bytes from memory as specified by REG_A, formatted as ASCII
 		// The system will use the ASCII value corresponding to the hex value stored in memory and print that
@@ -90,7 +89,7 @@ void SINVM::execute_syscall() {
 		// print the string
 		std::cout << output_string << std::endl;
 	}
-	else if (syscall_number == 0x15) {
+	else if (syscall_number == STD_OUT_HEX) {
 		// Read out the number of bytes stored in A, starting at the address stored in B, and print them (as raw hex values) to the standard output
 		int num_bytes = REG_A;	// number of bytes is in A
 		int start_address = REG_B;	// start address is in B
@@ -100,20 +99,20 @@ void SINVM::execute_syscall() {
 			std::cout << "$" << std::hex << (int)this->memory[start_address + i] << std::endl;
 		}
 	}
-	else if (syscall_number == 0x20) {
+	else if (syscall_number == MEMFREE) {
 		this->free_heap_memory();
 	}
-	else if (syscall_number == 0x21) {
+	else if (syscall_number == MEMALLOC) {
 		this->allocate_heap_memory();
 	}
-	else if (syscall_number == 0x22) {
+	else if (syscall_number == MEMREALLOC) {
 		this->reallocate_heap_memory();	// reallocates heap memory, returning NULL if the object isn't found
 	}
-	else if (syscall_number == 0x23) {
+	else if (syscall_number == MEMREALLOC_SAFE) {
 		this->reallocate_heap_memory(false);	// reallocates heap memory, creating a new object if one isn't found
 	}
-	// if it is not a valid syscall number, throw an error
+	// if it is not a valid syscall number, generate a SINSIGSYS signal
 	else {
-		throw VMException("Unknown syscall number; halting execution.", this->PC);
+		this->send_signal(SINSIGSYS);
 	}
 }
