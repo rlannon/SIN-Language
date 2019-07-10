@@ -54,8 +54,14 @@ const size_t _CALL_STACK_BOTTOM = 0x2400;
 const size_t _PRG_TOP = 0xEFFF;	// the limit for our program data
 const size_t _PRG_BOTTOM = 0x2600;	// our lowest possible memory address for the program
 
+// our processor signal vectors
+const size_t _SINSIGFPE_VECTOR = 0xF000;
+const size_t _SINSIGSYS_VECTOR = 0xF002;
+const size_t _SINSIGILL_VECTOR = 0xF004;
+const size_t _SINSIGSTKFLT_VECTOR = 0xF006;
+
 // program environment / command - line arguments
-const size_t _ARG = 0xF000;	// f000 - ffff available for command-line/environment arguments
+const size_t _ARG = 0xFA00;	// fA00 - ffff available for command-line/environment arguments
 
 // upper limit
 const size_t _MEMORY_MAX = 0xFFFF;
