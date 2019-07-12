@@ -25,9 +25,9 @@ namespace StatusConstants
 		V: Overflow
 			Set when there was an integer overflow, or when the sign of the result of an ADDCA or SUBCA instruction is incorrect
 		U: Undefined
-			Generated when the result of an operation is undefined
-		H: HALT Signal
-			The processor received a HALT signal and will stop execution
+			Set when the result of an operation is undefined
+		H: HALT
+			Set to stop execution
 		I: Interrupt Signal
 			When an interrupt is requested, this flag will be set
 		F: Floating-point

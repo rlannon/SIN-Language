@@ -125,22 +125,28 @@ const uint8_t CMPB = 0x6D;
 const uint8_t CMPX = 0x6E;
 const uint8_t CMPY = 0x6F;
 
-// todo: implement FPU 
 /*
 
-The FPU instructions are generally equivalent to their ALU counterparts with an F- prefix, though some differences exist.
-The instructions should be laid out as follows:
+Note the FPU instructions more or less mirror their ALU counterparts, and the two pages of FPU instructions mirror each other -- one for 16-bit, the other for 32-bit (single-precision / 32-bit are prefixed with an S)
 
-  - 0x78  - FINC (accepts A and B as operands, as no FINCA or FINCB instructions exist)
-  - 0x79  - FDEC (same as with FINCM)
-  - 0x7A  - FADDA
-  - 0x7B  - FADDB
-  - 0x7C  - FMULTA
-  - 0x7D  - FDIVA
-
-Note that there is only one floating point multiplication and one floating point division number; floating point numbers in SIN are always signed. As such, there is no need for unsigned counterparts to these instructions.
+Note also that FINC/FDEC/SFINC/SFDEC, if implemented, will allow A and B addressing modes, as there is no FINCA or other similar instruction
 
 */
+// Half-precision FPU instructions
+//const uint8_t FINC = 0x78;
+//const uint8_t FDEC = 0x79;
+const uint8_t FADDA = 0x7A;
+const uint8_t FSUBA = 0x7B;
+const uint8_t FMULTA = 0x7C;	// since floating point numbers in SIN are always signed, there is no need for a multua/divua instruction
+const uint8_t FDIVA = 0x7D;
+
+// Single-precision FPU instructions
+//const uint8_t SFINC = 0x88;
+//const uint8_t SFDEC = 0x89;
+const uint8_t SFADDA = 0x8A;
+const uint8_t SFSUBA = 0x8B;
+const uint8_t SFMULTA = 0x8C;
+const uint8_t SFDIVA = 0x8D;
 
 // Stack instructions
 const uint8_t PHA = 0x90;
@@ -200,5 +206,5 @@ const uint8_t opcodes[num_instructions] = { NOOP, LOADA, STOREA, TAB, TAX, TAY, 
 
 
 // Some opcodes stand by themselves; keep an array of them so that we can easily check
-const size_t num_standalone_opcodes = 48;
-const uint8_t standalone_opcodes[num_standalone_opcodes] = { NOOP, TAB, TAY, TAX, TASP, TASTATUS, INCA, DECA, TBA, TBX, TBY, TBSP, TBSTATUS, INCB, DECB, TXA, TXB, TXY, TXSP, INCX, DECX, TYA, TYB, TYX, TYSP, INCY, DECY, ROL, PHA, PLA, PHB, PLB, TSPA, TSPB, TSPX, TSPY, INCSP, DECSP, CLC, SEC, CLN, SEN, CLF, SEF, TSTATUSA, TSTATUSB, RESET, HALT };
+const size_t num_standalone_opcodes = 49;
+const uint8_t standalone_opcodes[num_standalone_opcodes] = { NOOP, TAB, TAY, TAX, TASP, TASTATUS, INCA, DECA, TBA, TBX, TBY, TBSP, TBSTATUS, INCB, DECB, TXA, TXB, TXY, TXSP, INCX, DECX, TYA, TYB, TYX, TYSP, INCY, DECY, ROL, PHA, PLA, PHB, PLB, TSPA, TSPB, TSPX, TSPY, INCSP, DECSP, CLC, SEC, CLN, SEN, CLF, SEF, TSTATUSA, TSTATUSB, RTS, RESET, HALT };

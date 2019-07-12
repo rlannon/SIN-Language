@@ -25,6 +25,7 @@ It still requires explicit host interaction through the SYSCALL instruction for 
 #include "../util/Exceptions.h"	// for VMException
 #include "StatusConstants.h"
 #include "ALU.h"
+#include "FPU.h"
 #include "../util/Signals.h"
 
 
@@ -35,8 +36,8 @@ class SINVM
 	const uint8_t _WORDSIZE = 16;
 
 	// the VM will contain an ALU instance
-	ALU alu;	// todo: allocate this on heap?
-	// todo: add FPU
+	ALU alu;	// todo: allocate alu and fpu on heap?
+	FPU fpu;
 
 	// create objects for our program counter and stack pointer
 	uint16_t PC;	// points to the memory address in the VM containing the next byte we want
@@ -61,7 +62,7 @@ class SINVM
 	void send_signal(uint8_t sig);
 
 	// check whether a memory address is legal
-	static const bool address_is_valid(size_t address);
+	static const bool address_is_valid(size_t address, bool privileged = false);
 
 	// read a value in memory
 	uint16_t get_data_of_wordsize();

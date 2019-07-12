@@ -14,12 +14,15 @@ void SINVM::send_signal(uint8_t sig) {
 	/*
 
 	Accepts a processor signal and performs the appropriate actions for it. Whenever a signal is generated, the following routine happens:
-		1) If the signal is SINSIGSEGV or SINSIGKILL, the processor cannot recover; it prints the appropriate message and aborts
-		2) Otherwise, the processor will push the PC to the call stack such that the next instruction to be executed is the instruction that generated the signal
-		3) The VM looks to its signal vector at 0xF000 and sees if there is a routine to handle the generated signal
-		4) The VM will execute that function if possible, or abort if there is none
+		1) The interrupt flag is set
+		2) If the signal is SINSIGSEGV or SINSIGKILL, the processor cannot recover; it prints the appropriate message and aborts
+		3) Otherwise, the processor will push the PC to the call stack such that the next instruction to be executed is the instruction that generated the signal
+		4) The VM looks to its signal vector at 0xF000 and sees if there is a routine to handle the generated signal
+		5) The VM will execute that function if possible, or abort if there is none
 
 	*/
+
+	this->set_status_flag('I');
 
 	// two signals may not be trapped
 	if (sig == SINSIGKILL) {

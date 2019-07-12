@@ -12,10 +12,31 @@ Contains the implementation of various functions related to the VM.
 #include "SINVM.h"
 
 
-const bool SINVM::address_is_valid(size_t address) {
-	// checks to see if the address we want to use is within 2 (cannot access the word at 0x00) and memory_size
+const bool SINVM::address_is_valid(size_t address, bool privileged) {
+	/*
+	
+	Checks to see whether the address may be accessed by the program.
+	If we set the privileged flag, we may write to any area of memory except the word at 0x0000
+	Otherwise, we may not write to:
+		- the call stack
+		- program memory
+	Generally, we will not be checking for valid addresses with the privileged flag set, but there are instances where we may want to
 
-	return ((address >= 2) && (address < memory_size));
+	*/
+
+	bool valid = (address >= 0x0002) && (address < _MEMORY_MAX);
+	
+	if (privileged) {
+		return valid;
+	}
+	else {
+		return (
+			valid &&
+			(address < _CALL_STACK_BOTTOM) &&	// make sure the address isn't within the call stack
+			(address > _CALL_STACK) &&
+			(address < _PRG_BOTTOM)		// make sure the address isn't within program memory
+			);
+	}
 }
 
 std::vector<uint8_t> SINVM::get_properly_ordered_bytes(uint16_t value) {
@@ -462,8 +483,9 @@ SINVM::SINVM(std::istream& file)
 {
 	// TODO: redo the SINVM constructor...
 
-	// initialize our ALU
+	// initialize our ALU and FPU
 	this->alu = ALU(&this->REG_A, &this->REG_B, &this->STATUS);
+	this->fpu = FPU(&this->REG_A, &this->REG_B, &this->STATUS);
 
 	// initialize some memory addresses
 	for (size_t i = 0; i < 8; i++) {
