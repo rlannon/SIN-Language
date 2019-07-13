@@ -20,7 +20,8 @@ const size_t BOOL_W = 2;	// a boolean is one word, though it _can_ be stored in 
 const size_t INT_W = 2;
 const size_t HALF_W = 2;	// half-precision floating point numbers are 16 bits wide
 const size_t SINGLE_W = 4;	// single-precision are 32 bits
+const size_t DOUBLE_W = 8;  // double-precision are 64 bits
 
-const size_t PTR_W = 2;	// pointers are always one word, the width of the address bus
+const size_t PTR_W = 2;	// pointers are always one word (the width of the address bus)
 
 const size_t STRING_W = 4;	// strings are two words wide--one for the string length, one for its address

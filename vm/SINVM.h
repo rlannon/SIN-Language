@@ -1,3 +1,14 @@
+/*
+
+SIN Toolchain
+SINVM.h
+Copyright 2019 Riley Lannon
+
+The virtual machine that is responsible for executing SIN bytecode. While this VM is mostly self-sufficient, it is not completely made from the ground up.
+It still requires explicit host interaction through the SYSCALL instruction for standard and file I/O, and will use native code on the host machine to implement various libraries that require the OS API, in a similar manner as the JVM.
+
+*/
+
 #pragma once
 
 #include <vector>
@@ -9,23 +20,24 @@
 
 #include "../assemble/Assembler.h"
 #include "../util/SinObjectFile.h"	// to load a .SINC file
-// #include "../util/BinaryIO/BinaryIO.h"	// included in Assembler.h, but commenting here to denote that functions from it are being used in this class
-// #include "../util/OpcodeConstants.h"	// included in Assembler.h, but commenting here to serve as a reminder that the constants are used in this class so we don't need to use the hex values whenever referencing an instruction
 #include "../util/VMMemoryMap.h"	// contains the constants that define where various blocks of memory begin and end in the VM
-//#include "../util/AddressingModeConstants.h"	// included in Assembler.h
 #include "DynamicObject.h"	// for use in allocating objects on the heap
 #include "../util/Exceptions.h"	// for VMException
+#include "StatusConstants.h"
+#include "ALU.h"
+#include "FPU.h"
+#include "../util/Signals.h"
 
-/*
-	The virtual machine that will be responsible for interpreting SIN bytecode
-*/
 
 class SINVM
 {
 
 	// the VM's word size
-	// TODO: use initializer list so that this can be a const member?
-	uint8_t _WORDSIZE;
+	const uint8_t _WORDSIZE = 16;
+
+	// the VM will contain an ALU instance
+	ALU alu;	// todo: allocate alu and fpu on heap?
+	FPU fpu;
 
 	// create objects for our program counter and stack pointer
 	uint16_t PC;	// points to the memory address in the VM containing the next byte we want
@@ -38,37 +50,23 @@ class SINVM
 	uint16_t REG_X;
 	uint16_t REG_Y;
 
-	/*
-	The status register has the following layout:
-		7	6	5	4	3	2	1	0
-		N	V	0	H	D	F	Z	C
-	Flag meanings:
-		N: Negative
-		V: Overflow
-		H: HALT instruction executed
-		D: Dynamic memory failbit
-		F: Floating-point
-		Z: Zero
-		C: Carry
-	Notes:
-		- The Z flag is also used for equality; compare instructions will set the zero flag if the operands are equal
-	*/
-
 	uint8_t STATUS;	// our byte to hold our status information
 
 	// create an array to hold our program memory
 	uint8_t memory[memory_size];
-	size_t program_start_address;
 
 	// create a list to hold our DynamicObjects
 	std::list<DynamicObject> dynamic_objects;
 
+	// send a processor signal
+	void send_signal(uint8_t sig);
+
 	// check whether a memory address is legal
-	static const bool address_is_valid(size_t address);
+	static const bool address_is_valid(size_t address, bool privileged = false);
 
 	// read a value in memory
 	uint16_t get_data_of_wordsize();
-	std::vector<uint8_t> get_properly_ordered_bytes(int value);
+	std::vector<uint8_t> get_properly_ordered_bytes(uint16_t value);
 
 	// execute a single instruction
 	void execute_instruction(uint16_t opcode);
@@ -78,13 +76,15 @@ class SINVM
 	void execute_store(uint16_t reg_to_store);
 
 	// generic load/store functions
-	int get_data_from_memory(uint16_t address, bool is_short = false);
+	uint16_t get_data_from_memory(uint16_t address, bool is_short = false);
 	void store_in_memory(uint16_t address, uint16_t new_value, bool is_short = false);
 
-	void execute_bitshift(int opcode);
+	void execute_bitshift(uint16_t opcode);
 
-	void execute_comparison(int reg_to_compare);
+	void execute_comparison(uint16_t reg_to_compare);
 	void execute_jmp();
+
+	void execute_syscall();
 
 	// stack functions
 	void push_stack(uint16_t reg_to_push);

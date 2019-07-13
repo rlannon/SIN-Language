@@ -1,142 +1,210 @@
+/*
+
+SIN Toolchain
+OpcodeConstants.h
+Copyright 2019 Riley Lannon
+
+This file is simply used to contain all of the constants for our opcodes. It is much easier to house them here, in their own header file, rather than in Assembler.h, where they used to live.
+This file also contains lists of the opcodes so that the opcode can be easily retrieved from the mnemonic, and vice versa.
+
+Opcodes are organized as follows:
+  - 0x00 to 0x0F  - General asm instructions
+  - 0x10 to 0x4F  - Register instructions:
+    - 0x1x  - A Register,
+    - 0x2x  - B Register,
+    - 0x3x  - X Register,
+    - 0x4x  - Y Register; all opcodes correspond
+  - 0x50 to 0x6F  - ALU instructions
+  - 0x70 to 0x8F  - FPU instructions (mirrors ALU instructions)
+  - 0x90 to 0x9F  - Stack instructions
+  - 0xA0 to 0xAF  - STATUS instructions
+  - 0xB0 to 0xBF  - Control Flow instructions
+  - 0xC0 to 0xCF  - Reserved for extra ALU instructions
+  - 0xD0 to 0xDF  - Reserved for extra FPU instructions
+  - 0xE0 to 0xEF  - Reserved for extra miscellaneous instructions
+  - 0xF0 to 0xFF  - Machine instructions
+
+For register instructions, the scheme for opcode order is as follows:
+  - x0 - load
+  - x1 - store
+  - x2 - transfer to A (avail B, X, Y)
+  - x3 - transfer to B (avail A, X, Y)
+  - x4 - transfer to X (avail A, B, Y)
+  - x5 - transfer to Y (avail A, B, X)
+  - x6 - transfer to SP (avail A, B, X, Y)
+  - x7 - transfer to STATUS (avail A, B)
+  - x8 - increment
+  - x9 - decrement
+Note that not all instructions are available on all registers; the places where those unavailable instructions shall remain blank until that space is needed for an instruction. Operands in places 0, 1, 8, and 9 are available on all registers, but 2-7 vary.
+
+Instructions may be added as needed into the available pages
+
+*/
+
 #pragma once
 
 #include <string>	// we have string constants
 #include <cinttypes>	// we need uint8_t
 
+// the number of instructions in our machine language
+const size_t num_instructions = 87;
+
+// General instructions
+const uint8_t NOOP = 0x00;
+
+// Register A
+const uint8_t LOADA = 0x10;
+const uint8_t STOREA = 0x11;
+// 0x12 unused
+const uint8_t TAB = 0x13;
+const uint8_t TAX = 0x14;
+const uint8_t TAY = 0x15;
+const uint8_t TASP = 0x16;
+const uint8_t TASTATUS = 0x17;
+const uint8_t INCA = 0x18;
+const uint8_t DECA = 0x19;
+
+// Register B
+const uint8_t LOADB = 0x20;
+const uint8_t STOREB = 0x21;
+const uint8_t TBA = 0x22;
+// 0x23 unused
+const uint8_t TBX = 0x24;
+const uint8_t TBY = 0x25;
+const uint8_t TBSP = 0x26;
+const uint8_t TBSTATUS = 0x27;
+const uint8_t INCB = 0x28;
+const uint8_t DECB = 0x29;
+
+// Register X
+const uint8_t LOADX = 0x30;
+const uint8_t STOREX = 0x31;
+const uint8_t TXA = 0x32;
+const uint8_t TXB = 0x33;
+// 0x34 unused
+const uint8_t TXY = 0x35;
+const uint8_t TXSP = 0x36;
+// 0x37 unused
+const uint8_t INCX = 0x38;
+const uint8_t DECX = 0x39;
+
+// Register Y
+const uint8_t LOADY = 0x40;
+const uint8_t STOREY = 0x41;
+const uint8_t TYA = 0x42;
+const uint8_t TYB = 0x43;
+const uint8_t TYX = 0x44;
+// 0x45 unused
+const uint8_t TYSP = 0x46;
+// 0x47 unused
+const uint8_t INCY = 0x48;
+const uint8_t DECY = 0x49;
+
+// ALU instructions
+const uint8_t ROL = 0x50;
+const uint8_t ROR = 0x51;
+const uint8_t LSL = 0x52;
+const uint8_t LSR = 0x53;
+// 0x54 to 0x57 unused
+const uint8_t INCM = 0x58;
+const uint8_t DECM = 0x59;
+const uint8_t ADDCA = 0x5A;
+const uint8_t ADDCB = 0x5B;
+const uint8_t MULTA = 0x5C;
+const uint8_t MULTUA = 0x5D;
+const uint8_t DIVA = 0x5E;
+const uint8_t DIVUA = 0x5F;
+const uint8_t ANDA = 0x60;
+const uint8_t ORA = 0x61;
+const uint8_t XORA = 0x62;
+// 0x63 - 0x69 currently unused
+const uint8_t SUBCA = 0x6A;
+const uint8_t SUBCB = 0x6B;
+const uint8_t CMPA = 0x6C;
+const uint8_t CMPB = 0x6D;
+const uint8_t CMPX = 0x6E;
+const uint8_t CMPY = 0x6F;
+
 /*
 
-OPCODECONSTANTS.H
+Note the FPU instructions more or less mirror their ALU counterparts, and the two pages of FPU instructions mirror each other -- one for 16-bit, the other for 32-bit (single-precision / 32-bit are prefixed with an S)
 
-This file is simply used to contain all of the constants for our opcodes. It is much easier to house them here, in their own header file, rather than in Assembler.h, where they used to live.
-
-This file also contains lists of the opcodes so that the opcode can be easily retrieved from the mnemonic, and vice versa.
-
-TODO: remap opcodes
+Note also that FINC/FDEC/SFINC/SFDEC, if implemented, will allow A and B addressing modes, as there is no FINCA or other similar instruction
 
 */
+// Half-precision FPU instructions
+//const uint8_t FINC = 0x78;
+//const uint8_t FDEC = 0x79;
+const uint8_t FADDA = 0x7A;
+const uint8_t FSUBA = 0x7B;
+const uint8_t FMULTA = 0x7C;	// since floating point numbers in SIN are always signed, there is no need for a multua/divua instruction
+const uint8_t FDIVA = 0x7D;
+
+// Single-precision FPU instructions
+//const uint8_t SFINC = 0x88;
+//const uint8_t SFDEC = 0x89;
+const uint8_t SFADDA = 0x8A;
+const uint8_t SFSUBA = 0x8B;
+const uint8_t SFMULTA = 0x8C;
+const uint8_t SFDIVA = 0x8D;
+
+// Stack instructions
+const uint8_t PHA = 0x90;
+const uint8_t PHB = 0x91;
+const uint8_t PLA = 0x92;
+const uint8_t PLB = 0x93;
+// 0x94 - 0x99 currently unused
+const uint8_t TSPA = 0x9A;
+const uint8_t TSPB = 0x9B;
+const uint8_t TSPX = 0x9C;
+const uint8_t TSPY = 0x9D;
+const uint8_t INCSP = 0x9E;
+const uint8_t DECSP = 0x9F;
+
+// STATUS instructions
+const uint8_t CLC = 0xA0;	// clear carry bit
+const uint8_t SEC = 0xA1;	// set carry bit
+const uint8_t CLN = 0xA2;	// clear the negative bit
+const uint8_t SEN = 0xA3;	// set the negative bit
+const uint8_t CLF = 0xA4;	// clear the float bit
+const uint8_t SEF = 0xA5;	// set the float bit
+// 0xA6 to 0xA9 currently unused
+const uint8_t TSTATUSA = 0xAA;
+const uint8_t TSTATUSB = 0xAB;
+
+// Control flow instructions
+const uint8_t JMP = 0xB0;
+const uint8_t BRNE = 0xB1;
+const uint8_t BREQ = 0xB2;
+const uint8_t BRGT = 0xB3;
+const uint8_t BRLT = 0xB4;
+const uint8_t BRZ = 0xB5;
+const uint8_t BRN = 0xB6;
+const uint8_t BRPL = 0xB7;
+// 0xB8 to 0xBB unused
+const uint8_t IRQ = 0xBC;
+const uint8_t RTI = 0xBD;
+const uint8_t JSR = 0xBE;
+const uint8_t RTS = 0xBF;
+
+// Machine instructions
+const uint8_t SYSCALL = 0xFA;
+const uint8_t RESET = 0xFE;
+const uint8_t HALT = 0xFF;
 
 
-// the number of instructions in our machine language
-const size_t num_instructions = 63;
+/*
+
+Create an array of strings for the mnemonics as well as an array of their corresponding opcodes
+This allows us to find the appropriate opcode for a given mnemonic easily simply by:
+  1) searching through the list of strings, and
+  2) indexing to the same place in the second array
+
+*/
+const std::string instructions_list[num_instructions] = { "NOOP", "LOADA", "STOREA", "TAB", "TAX", "TAY", "TASP", "TASTATUS", "INCA", "DECA", "LOADB", "STOREB", "TBA", "TBX", "TBY", "TBSP", "TBSTATUS", "INCB", "DECB", "LOADX", "STOREX", "TXA", "TXB", "TXY", "TXSP", "INCX", "DECX", "LOADY", "STOREY", "TYA", "TYB", "TYX", "TYSP", "INCY", "DECY", "ROL", "ROR", "LSL", "LSR", "INCM", "DECM", "ADDCA", "ADDCB", "MULTA", "MULTUA", "DIVA", "DIVUA", "ANDA", "ORA", "XORA", "CMPA", "CMPB", "CMPX", "CMPY", "PHA", "PHB", "PLA", "PLB", "TSPA", "TSPB", "TSPX", "TSPY", "INCSP", "DECSP", "CLC", "SEC", "CLN", "SEN", "CLF", "SEF", "TSTATUSA", "TSTATUSB", "JMP", "BRNE", "BREQ", "BRGT", "BRLT", "BRZ", "BRN", "BRPL", "IRQ", "RTI", "JSR", "RTS", "SYSCALL", "RESET", "HALT"};
+const uint8_t opcodes[num_instructions] = { NOOP, LOADA, STOREA, TAB, TAX, TAY, TASP, TASTATUS, INCA, DECA, LOADB, STOREB, TBA, TBX, TBY, TBSP, TBSTATUS, INCB, DECB, LOADX, STOREX, TXA, TXB, TXY, TXSP, INCX, DECX, LOADY, STOREY, TYA, TYB, TYX, TYSP, INCY, DECY, ROL, ROR, LSL, LSR, INCM, DECM, ADDCA, ADDCB, MULTA, MULTUA, DIVA, DIVUA, ANDA, ORA, XORA, CMPA, CMPB, CMPX, CMPY, PHA, PHB, PLA, PLB, TSPA, TSPB, TSPX, TSPY, INCSP, DECSP, CLC, SEC, CLN, SEN, CLF, SEF, TSTATUSA, TSTATUSB, JMP, BRNE, BREQ, BRGT, BRLT, BRZ, BRN, BRPL, IRQ, RTI, JSR, RTS, SYSCALL, RESET, HALT };
 
 
-// general instructions
-const uint8_t HALT = 0xFF;	// halt
-const uint8_t NOOP = 0x00;	// no operation
-
-
-// register A
-const uint8_t LOADA = 0x01;	// load a with value
-const uint8_t STOREA = 0x02;	// store a at address
-
-
-// register B
-const uint8_t LOADB = 0x03;
-const uint8_t STOREB = 0x04;
-
-
-// register X
-const uint8_t LOADX = 0x05;	// load x with value
-const uint8_t STOREX = 0x06;	// store x at address
-
-
-// register Y
-const uint8_t LOADY = 0x07;	// load y with value
-const uint8_t STOREY = 0x08;	// store y at address
-
-
-// STATUS register
-const uint8_t CLC = 0x09;	// clear carry bit
-const uint8_t SEC = 0x0A;	// set carry bit
-const uint8_t CLN = 0x4A;	// clear the negative bit
-const uint8_t SEN = 0x4B;	// set the negative bit
-//const uint8_t CLF = 0x4C;	// clear the float bit
-//const uint8_t SEF = 0x4D;	// set the float bit
-
-
-// ALU-related instructions
-// mathematical operations
-const uint8_t ADDCA = 0x10;	// add register A (with carry) to some value, storing the result in A
-const uint8_t SUBCA = 0x11;	// subtract some value (with carry) from register A ...
-const uint8_t MULTA = 0x60;	// signed multiplication on register A with some value
-const uint8_t DIVA = 0x61;	// signed divisionregister A by some value
-const uint8_t MULTUA = 0x62;	// unsigned multiplication on register A with some value
-const uint8_t DIVUA = 0x63;	// unsigned division on register A by some value
-
-// logical operations
-const uint8_t ANDA = 0x12;	// logical AND some value with A ...
-const uint8_t ORA = 0x13;	// logical OR some value with A ...
-const uint8_t XORA = 0x14;	// logical XOR with A ...
-
-// bitshift operations
-const uint8_t LSR = 0x15;	// logical shift right on some memory (or A)
-const uint8_t LSL = 0x16;	// logical shift left on some memory (or A)
-const uint8_t ROR = 0x17;	// rotate right on some memory (or A)
-const uint8_t ROL = 0x18;	// rotate left on some memory (or A)
-
-
-// increment/decrement registers
-const uint8_t INCA = 0x19;	// increment A
-const uint8_t DECA = 0x1A;	// decrement A
-const uint8_t INCX = 0x1B;	// can only do this to A, X, Y (not B)
-const uint8_t DECX = 0x1C;
-const uint8_t INCY = 0x1D;
-const uint8_t DECY = 0x1E;
-
-const uint8_t INCB = 0x1F;	// we can increment B, but not decrement it
-
-const uint8_t INCSP = 0x40;	// increment / decrement the stack pointer
-const uint8_t DECSP = 0x41;
-
-
-// Comparatives
-const uint8_t CMPA = 0x20;	// compare registers by value
-const uint8_t CMPB = 0x21;
-const uint8_t CMPX = 0x22;
-const uint8_t CMPY = 0x23;
-
-
-// branch / control flow logic
-const uint8_t JMP = 0x24;	// unconditional jump to supplied address
-const uint8_t BRNE = 0x25;	// branch on not equal
-const uint8_t BREQ = 0x26;	// branch on equal
-const uint8_t BRGT = 0x27;	// branch on greater
-const uint8_t BRLT = 0x28;	// branch on less
-const uint8_t BRZ = 0x29;	// branch on zero
-const uint8_t JSR = 0x3A;	// jump to subroutine
-const uint8_t RTS = 0x3B;	// return from subroutine
-
-
-// register transfers
-// we can transfer register values to A and the value in A to any register, but not other combinations
-const uint8_t TBA = 0x2A;	// transfer B to A
-const uint8_t TXA = 0x2B;
-const uint8_t TYA = 0x2C;
-const uint8_t TSPA = 0x2D;	// transfer stack pointer to A
-const uint8_t TSTATUSA = 0x51;	// transfer STATUS to A
-
-const uint8_t TAB = 0x2E;	// transfer A to B
-const uint8_t TAX = 0x2F;
-const uint8_t TAY = 0x30;
-const uint8_t TASP = 0x31;	// transfer A to stack pointer
-const uint8_t TASTATUS = 0x50;	// transfer A to STATUS register
-
-
-// the stack
-const uint8_t PHA = 0x32;	// push A onto the stack
-const uint8_t PLA = 0x33;	// pop a value off the stack and store in A
-const uint8_t PHB = 0x34;	// push B onto the stack
-const uint8_t PLB = 0x35;	// pop a value off the stack and store in B
-
-
-// SYSCALL -- handles all interaction with the host machine
-const uint8_t SYSCALL = 0x36;
-
-
-// some constants for opcode comparisons (used for maintainability)
-const std::string instructions_list[num_instructions] = { "HALT", "NOOP", "LOADA", "STOREA", "LOADB", "STOREB", "LOADX", "STOREX", "LOADY", "STOREY", "CLC", "SEC", "CLN", "SEN", "ADDCA", "SUBCA", "MULTA", "MULTUA", "DIVA", "DIVUA", "ANDA", "ORA", "XORA", "LSR", "LSL", "ROR", "ROL", "INCA", "DECA", "INCX", "DECX", "INCY", "DECY", "INCB", "INCSP", "DECSP", "CMPA", "CMPB", "CMPX", "CMPY", "JMP", "BRNE", "BREQ", "BRGT", "BRLT", "BRZ", "JSR", "RTS", "TBA", "TXA", "TYA", "TSPA", "TSTATUSA", "TAB", "TAX", "TAY", "TASP", "TASTATUS", "PHA", "PLA", "PHB", "PLB", "SYSCALL" };
-const uint8_t opcodes[num_instructions] = { HALT, NOOP, LOADA, STOREA, LOADB, STOREB, LOADX, STOREX, LOADY, STOREY, CLC, SEC, CLN, SEN, ADDCA, SUBCA, MULTA, MULTUA, DIVA, DIVUA, ANDA, ORA, XORA, LSR, LSL, ROR, ROL, INCA, DECA, INCX, DECX, INCY, DECY, INCB, INCSP, DECSP, CMPA, CMPB, CMPX, CMPY, JMP, BRNE, BREQ, BRGT, BRLT, BRZ, JSR, RTS, TBA, TXA, TYA, TSPA, TSTATUSA, TAB, TAX, TAY, TASP, TASTATUS, PHA, PLA, PHB, PLB, SYSCALL };
-
-// opcodes which do not need values to follow them (and, actually, for which proceeding values are forbidden)
-const size_t num_standalone_opcodes = 30;
-const uint8_t standalone_opcodes[num_standalone_opcodes] = { HALT, NOOP, CLC, SEC, CLN, SEN, INCA, DECA, INCX, DECX, INCY, DECY, INCB, INCSP, DECSP, RTS, TBA, TXA, TYA, TSPA, TSTATUSA, TAB, TAX, TAY, TASP, TASTATUS, PHA, PLA, PHB, PLB };
+// Some opcodes stand by themselves; keep an array of them so that we can easily check
+const size_t num_standalone_opcodes = 49;
+const uint8_t standalone_opcodes[num_standalone_opcodes] = { NOOP, TAB, TAY, TAX, TASP, TASTATUS, INCA, DECA, TBA, TBX, TBY, TBSP, TBSTATUS, INCB, DECB, TXA, TXB, TXY, TXSP, INCX, DECX, TYA, TYB, TYX, TYSP, INCY, DECY, ROL, PHA, PLA, PHB, PLB, TSPA, TSPB, TSPX, TSPY, INCSP, DECSP, CLC, SEC, CLN, SEN, CLF, SEF, TSTATUSA, TSTATUSB, RTS, RESET, HALT };

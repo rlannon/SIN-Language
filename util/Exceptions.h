@@ -15,6 +15,7 @@ A class to contain all of our custom exceptions.
 #include <string>
 #include <sstream>
 #include <iostream>
+#include <bitset>
 
 /*
 

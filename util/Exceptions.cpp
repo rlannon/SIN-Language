@@ -64,11 +64,8 @@ const char* VMException::what() const noexcept {
 VMException::VMException(const std::string& message, const uint16_t& address, const uint16_t& status) : message(message), address(address), status(status) {
 	// we must construct the message here, in the constructor
 	std::stringstream err_ss;
-	std::stringstream bin_representation;
-	for (size_t i = 7; i >= 0; i--) {
-		bin_representation << ((this->status << i) & i);
-	}
-	err_ss << "**** SINVM Error: " << this->message << std::endl << "Error was encountered at memory location 0x" << std::hex << this->address << std::endl << "STATUS register was " << bin_representation.str() << std::dec << std::endl;
+	std::bitset<8> bin_representation(status);
+	err_ss << "**** SINVM Error: " << this->message << std::endl << "Error was encountered at memory location 0x" << std::hex << this->address << std::endl << "STATUS register was " << bin_representation << std::dec << std::endl;
 	this->message = err_ss.str();
 }
 

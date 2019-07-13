@@ -54,8 +54,12 @@ const size_t _CALL_STACK_BOTTOM = 0x2400;
 const size_t _PRG_TOP = 0xEFFF;	// the limit for our program data
 const size_t _PRG_BOTTOM = 0x2600;	// our lowest possible memory address for the program
 
-// interrupt tables; used for exception handling
-const size_t _INT_TABLE = 0xF000;
+// our processor signal vectors
+const size_t _SIG_VECTOR = 0xF000;
+const size_t _SINSIGFPE_VECTOR = 0xF000;
+const size_t _SINSIGSYS_VECTOR = 0xF002;
+const size_t _SINSIGILL_VECTOR = 0xF004;
+const size_t _SINSIGSTKFLT_VECTOR = 0xF006;
 
 // program environment / command - line arguments
 const size_t _ARG = 0xFA00;	// fA00 - ffff available for command-line/environment arguments
