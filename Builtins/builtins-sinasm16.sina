@@ -16,8 +16,8 @@
 
 ;;;;;;;;;;      Some Definitions    ;;;;;;;;;;
 
-@db __INPUT_BUFFER_START_ADDR ($1400)   ; defines where our input buffer should start
-@rs 2 __INPUT_LEN     ; a global variable holding the length of the last input
+@db __INPUT_BUFFER_START_ADDR ($1402)   ; defines where our input buffer should start
+@db __INPUT_LEN ($1400)    ; contains the length of the string in the buffer
 @rs 2 __MEMCPY_SRC    ; the source location for memcpy 
 @rs 2 __MEMCPY_DEST   ; the destination for memcpy
 @rs 2 __BUFFER_PTR    ; a pointer variable for handling buffer memory 
@@ -174,14 +174,18 @@ __builtins_lt_equal:
 ;;        2) otherwise, prints an error and quits
 
 __builtins_print:
-    ;; arguments are the string length, the string address, and the format; length is always pushed first
+    ;; arguments are the string pointer and the format; string address is always pushed first
     ;; the stack pointer should point to the next word after our format -- we pull in reverse order
-    
+
     pla
     tax     ; store the format number in x
-    
-    plb     ; pull the address of the string literal
-    pla     ; pull the length
+
+    pla     ; pull the address of the string
+    tab
+    tay
+    loada $00, y    ; get the value at the address $00 + y -- the length of the string
+    incb
+    incb    ; increment B by two so the address points to the first character    
     
     cmpx #$14
     breq .ascii
@@ -218,11 +222,11 @@ __builtins_print:
 ;;  c) uses a syscall instruction to get data from the standard input, storing it at the address in B onward
 ;;  d) stores the length of what was read (in bytes) in the A register
 
-input:
-    ;; arguments are the string length, the string address, and the format
+__builtins_input:
+    ;; arguments are the string pointer and the format
     
     ;; since we are just doing a print before our input, we can call the print function here
-    jsr print
+    ; jsr print
     
     ;; now, our message has printed, we can read the data
     

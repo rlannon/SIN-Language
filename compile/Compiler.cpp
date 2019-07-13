@@ -92,8 +92,17 @@ void Compiler::include_file(Include include_statement)
 				include_compiler->produce_sina_file(filename_no_extension + ".sina");
 
 				// iterate through the symbols in that file and add them to our symbol table
-				for (std::vector<Symbol>::iterator it = include_compiler->symbol_table.symbols.begin(); it != include_compiler->symbol_table.symbols.end(); it++) {
-					this->symbol_table.insert(it->name, it->type, it->scope_name, it->scope_level, it->sub_type, it->qualities, it->defined, it->formal_parameters, include_statement.get_line_number());
+				for (std::vector<std::shared_ptr<Symbol>>::iterator it = include_compiler->symbol_table.symbols.begin(); it != include_compiler->symbol_table.symbols.end(); it++) {
+					// if the symbol we found is a variable, insert a variable
+					if (it->get()->symbol_type == VARIABLE) {
+						Symbol variable = *it->get();
+						this->symbol_table.insert(std::make_shared<Symbol>(variable), include_statement.get_line_number());
+					}
+					// otherwise, if it's a function, insert a symbol for a function definition
+					else if (it->get()->symbol_type == FUNCTION_DEFINITION) {
+						FunctionSymbol* function = dynamic_cast<FunctionSymbol*>(it->get());
+						this->symbol_table.insert(std::make_shared<FunctionSymbol>(*function), include_statement.get_line_number());
+					}
 				}
 
 				// now, open the compiled include file as an istream object
@@ -129,148 +138,61 @@ void Compiler::include_file(Include include_statement)
 }
 
 
-std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared_ptr<Expression> rvalue, unsigned int line_number, size_t max_offset)
+void Compiler::handle_declaration(Declaration declaration_statement)
 {
-	std::stringstream string_assign_ss;
-
-	// fetch the rvalue -- A will contain the length, B will contain the address
-	string_assign_ss << this->fetch_value(rvalue, line_number, max_offset).str();
-
-	// move the stack pointer to the end of the stack frame
-	if (this->stack_offset != max_offset) {
-		// transfer A and B to X and Y before incrementing the stack pointer
-		string_assign_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;
-
-		// increment the stack pointer to the end of the stack frame so we can use the stack
-		string_assign_ss << this->move_sp_to_target_address(max_offset).str();
-
-		// move X and Y back into A and B
-		string_assign_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;
-	}
-
-	string_assign_ss << "\t" << "phb" << std::endl;	// push the address of the string pointer
-
-	// add some padding to the string length
-	string_assign_ss << "\t" << "pha" << std::endl;
-	string_assign_ss << "\t" << "addca #$10" << std::endl;
-
 	/*
 	
-	Next, we need to allocate memory for the object. If the string has already been allocated, reallocate it; if not, then allocate it for the first time.
-	If we need to reallocate:
-		Since A contains the length already, so we just need the address. Do _not_ use "fetch_value" outright, because that function dereferences the pointer. As such, we must fetch it manually
+	Handles a declaration statement. Generates the symbol from 'declaration_statement' and adds it to the symbol table.
+	This function generates no assembly, so this symbol will be added when it is linked with the implementation file. If there is no implementation file, the linker will generate errors because symbols will be referenced but undefined.
 	
+	Symbols generated with the 'decl' keyword are:
+		- assumed to be in the global scope at level 0, as the 'decl' keyword cannot generate symbols that will exist on the stack;
+		- assumed to be defined, but in a separate place
+
 	*/
-	if (!target_symbol->allocated) {
-		string_assign_ss << "\t" << "syscall #$21" << std::endl;
-		target_symbol->allocated = true;
+
+	// generate the symbol
+	Symbol to_add(declaration_statement.get_var_name(), declaration_statement.get_data_type(), "global", 0, declaration_statement.get_subtype(),
+		declaration_statement.get_qualities(), true, declaration_statement.get_length());
+
+	// if it's a function, we have to construct a FunctionSymbol from the Symbol; insert the proper symbol
+	if (declaration_statement.is_function()) {
+		FunctionSymbol function_definition(to_add, declaration_statement.get_formal_parameters());
+		this->symbol_table.insert(std::make_shared<FunctionSymbol>(function_definition), declaration_statement.get_line_number());
 	}
 	else {
-		// preserve A by transfering to X
-		string_assign_ss << "\t" << "tax" << std::endl;
-		
-		// if we have a static variable
-		if (target_symbol->scope_name == "global" && target_symbol->scope_level == 0) {
-			string_assign_ss << "\t" << "loadb " << target_symbol->name << std::endl;
-		}
-		// otherwise, it's on the stack
-		else {
-			// fetch the variable into B
-			size_t former_offset = this->stack_offset;
-			string_assign_ss << this->move_sp_to_target_address(target_symbol->stack_offset + 1);
-			string_assign_ss << "\t" << "plb" << std::endl;
-			string_assign_ss << this->move_sp_to_target_address(former_offset);	// move the stack offset back
-		}
-
-		// move the length back into register A and make the syscall
-		string_assign_ss << "\t" << "txa" << std::endl;
-		string_assign_ss << "\t" << "syscall #$22" << std::endl;
+		this->symbol_table.insert(std::make_shared<Symbol>(to_add), declaration_statement.get_line_number());
 	}
 
-	// TODO: we need to ensure that we don't allocate new memory every time we have a string assignment, but rather only reallocate memory for the object when it is necessary
-
-	// Global and local variables must be handled differently
-	if (target_symbol->scope_level == 0) {
-		string_assign_ss << "\t" << "storeb " << target_symbol->name << std::endl;	// store the address in our pointer variable
-
-		// get the original value of A -- the actual string length -- back
-		string_assign_ss << "\t" << "pla" << std::endl;
-
-		// next, store the length in the heap
-		string_assign_ss << "\t" << "loady #$00" << std::endl;
-		string_assign_ss << "\t" << "storea (" << target_symbol->name << "), y" << std::endl;
-
-		// next, get the value of our pointer and increment by 2 for memcpy
-		string_assign_ss << "\t" << "loada " << target_symbol->name << std::endl;
-		string_assign_ss << "\t" << "addca #$02" << std::endl;
-
-		// the address of the string variable has already been pushed, so the next thing to push is the address of our destination
-		string_assign_ss << "\t" << "pha" << std::endl;
-
-		// next, we need to push the length of the string, which we will get from our pointer variable
-		string_assign_ss << "\t" << "loada (" << target_symbol->name << "), y" << std::endl;
-		string_assign_ss << "\t" << "pha" << std::endl;
-	}
-	else {
-		this->stack_offset += 2;	// increment our stack offset so we can decrement correctly
-		size_t previous_offset = this->stack_offset;	// we want to ensure that we know exactly where to return back to
-
-		// now, we must move the stack pointer to the pointer variable; we don't need to set the retain registers flag because the addca method does not touch the B register and we have nothing valuable in A
-		string_assign_ss << this->move_sp_to_target_address(target_symbol->stack_offset).str();
-
-		// store the address of the dynamic memory in _LOCAL_DYNAMIC_POINTER in addition to putting it on the stack
-		string_assign_ss << "\t" << "phb" << std::endl;
-		this->stack_offset += 1;	// increase the stack offset so the compiler navigates the stack properly
-
-		string_assign_ss << "\t" << "storeb $" << std::hex << _LOCAL_DYNAMIC_POINTER << std::endl;
-
-		// move the stack pointer back to where it was
-		string_assign_ss << this->move_sp_to_target_address(previous_offset).str();
-
-		// pull the length back into A and store it
-		string_assign_ss << "\t" << "pla" << std::endl;
-
-		string_assign_ss << "\t" << "loady #$00" << std::endl;
-		string_assign_ss << "\t" << "storea ($" << std::hex << _LOCAL_DYNAMIC_POINTER << "), y" << std::endl;
-
-		// get the address of the dynamic memory and increment it by 2, for memcpy
-		string_assign_ss << "\t" << "loada $" << _LOCAL_DYNAMIC_POINTER << std::endl;
-		string_assign_ss << "\t" << "addca #$02" << std::endl;
-
-		// push the arguments to the stack
-		string_assign_ss << "\t" << "pha" << std::endl;
-		string_assign_ss << "\t" << "loada ($" << std::hex << _LOCAL_DYNAMIC_POINTER << "), y" << std::endl;
-		string_assign_ss << "\t" << "pha" << std::endl;
-
-		this->stack_offset -= 2;
-	}
-
-	// finally, invoke the subroutine
-	string_assign_ss << "\t" << "jsr __builtins_memcpy" << std::endl;
-
-	// reset the pointers we used for string assignment
-	string_assign_ss << "\t" << "loada #$00" << std::endl;
-	string_assign_ss << "\t" << "storea __TEMP_A" << std::endl;
-	string_assign_ss << "\t" << "storea __TEMP_B" << std::endl;
-	string_assign_ss << "\t" << "storea __INPUT_LEN" << std::endl;
-
-	// the memory has been successfully copied over; our assignment is done, so we can return the assembly we generated
-	return string_assign_ss;
+	// we are done; return
+	return;
 }
 
 
-// allocate a variable
 std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* max_offset) {
-	// first, add the variable to the symbol table
-	// next, create a macro for it and assign it to the next available address in the scope; local variables will use pages incrementally
-	// next, every time a variable is referenced, make sure it is in the symbol table and within the appropriate scope
-	// after that, simply use that variable's name as a macro in the code
-	// the macro will reference its address and hold the proper value
+	/*
+	
+	Allocates a variable, adding it to the symbol table.
+	
+	It operates as follows:
+		- First, get the qualities of the variable; if it is a constant, it _must_ be defined in the allocation
+		- Determine whether the variable should be allocated in the local or global scope.
+		- If global:
+			- Use a macro to reference the variable in the ASM
+		- It local:
+			- Move the stack pointer to the appropriate position -- the next available -- in the stack frame
+			- Take note of the offset from the stack frame base
+			- Create the symbol for the variable, using the current stack offset and current scope for the appropriate Symbol members
+			- If there is an initial value, make the assignment as is appropriate
+	
+	*/
 
 	std::stringstream allocation_ss;
 
 	std::shared_ptr<Expression> initial_value = allocation_statement.get_initial_value();
-	Symbol to_allocate(allocation_statement.get_var_name(), allocation_statement.get_var_type(), current_scope_name, current_scope, allocation_statement.get_var_subtype(), allocation_statement.get_qualities(), allocation_statement.was_initialized(), {}, allocation_statement.get_array_length());
+	Symbol to_allocate(allocation_statement.get_var_name(), allocation_statement.get_var_type(), current_scope_name, current_scope,
+		allocation_statement.get_var_subtype(), allocation_statement.get_qualities(), allocation_statement.was_initialized(),
+		allocation_statement.get_array_length());
 
 	// get our qualities
 	bool is_const = false;
@@ -294,9 +216,11 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 		quality_iter++;
 	}
 
-	// if we have a const, we can use the "@db" directive
-	if (is_const) {
-		this->symbol_table.insert(to_allocate, allocation_statement.get_line_number());	// constants have no need for the stack; we can add the symbol right away
+	// if we have a global const, we can use the "@db" directive
+	if (is_const && current_scope == 0) {
+		// todo: validate the initial value of a constant will be known at compile time 
+
+		this->symbol_table.insert(std::make_shared<Symbol>(to_allocate), allocation_statement.get_line_number());	// constants have no need for the stack; we can add the symbol right away
 
 		// constants must initialized when they are allocated (i.e. they must use alloc-assign syntax)
 		if (to_allocate.defined) {
@@ -310,7 +234,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 					std::string const_value = const_literal->get_value();
 
 					// use "@db"
-					allocation_ss << "@db " << to_allocate.name << " (" << const_value << ")" << std::endl;
+					allocation_ss << "@db " << to_allocate.name << " (" << const_value << ")" << std::endl;	// todo: update constant definition syntax
 				}
 				else {
 					throw CompilerException("Types do not match", 0, allocation_statement.get_line_number());
@@ -321,55 +245,76 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 				LValue* initializer_lvalue = dynamic_cast<LValue*>(initial_value.get());
 
 				// look through the symbol table to get the symbol
-				Symbol* initializer_symbol = this->symbol_table.lookup(initializer_lvalue->getValue(), this->current_scope_name, this->current_scope);	// this will throw an exception if the object isn't in the symbol table
-
-				// verify the symbol is defined
-				if (initializer_symbol->defined) {
-					// verify the types match -- we don't need to worry about subtypes just yet
-					if (initializer_symbol->type == to_allocate.type) {
-						// define the constant using a dummy value
-						allocation_ss << "@db " << to_allocate.name << " (0)" << std::endl;
-
-						// different data types must be treated differently
-						if (to_allocate.type == STRING) {
-							/*
-							
-							To allocate a string constant, we must fetch the value and then utilize memcpy to copy the data from our old location to the new one.
-
-							Usage for memcpy is as follows:
-								- Push source
-								- Push destination
-								- Push number of bytes to copy
-
-							After fetch_value is called, A will contain the number of _bytes_, B will contain the address of the string
-
-							*/
-
-							allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), *max_offset).str();
-							allocation_ss << this->move_sp_to_target_address(*max_offset, true).str();	// increment the stack pointer to our stack frame, but preserve our register values
-
-							// push our parameters and invoke our memcpy subroutine
-							allocation_ss << "\t" << "phb" << "\n\t" << "loadb #" << to_allocate.name << "\n\t" << "phb" << "\n\t" << "pha" << std::endl;
-							allocation_ss << "\t" << "jsr __builtins_memcpy" << std::endl;
-						}
-						// TODO: add the array type here as well, once that is implemented in SIN
-						else {
-							// now, use fetch_value to get the value of our lvalue and store the value in A at the constant we have defined
-							allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), *max_offset).str();
-							allocation_ss << "storea " << to_allocate.name << std::endl;
-						}
-					}
+				std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(initializer_lvalue->getValue(), this->current_scope_name, this->current_scope);	// this will throw an exception if the object isn't in the symbol table
+				Symbol* initializer_symbol = nullptr;	// todo: eliminate the validation of 'fetched' ?
+				
+				if (fetched->symbol_type == VARIABLE) {
+					initializer_symbol = dynamic_cast<Symbol*>(fetched.get());
 				}
 				else {
-					throw CompilerException("'" + initializer_symbol->name + "' was referenced before assignment.", 0, allocation_statement.get_line_number());
+					throw CompilerException("Symbol found was not a variable symbol", 0, allocation_statement.get_line_number());
 				}
-			}
-			else if (initial_value->get_expression_type() == DEREFERENCED) {
-				Dereferenced* initializer_deref = dynamic_cast<Dereferenced*>(initial_value.get());
-				// TODO: implement dereferenced constant initializer
-			}
-			else if (initial_value->get_expression_type() == ADDRESS_OF) {
-				// TODO: implement address_of constant initializer
+
+				// todo: consider whether run-time constants should be allowed
+				// verify the lvalue we are initializing this const-qualified variable with is also const-qualified
+				bool is_const = false;
+				std::vector<SymbolQuality>::iterator it = initializer_symbol->qualities.begin();
+				while (it != initializer_symbol->qualities.end()) {
+					if (*it == CONSTANT) {
+						is_const = true;
+						it = initializer_symbol->qualities.end();
+					}
+					else {
+						it++;
+					}
+				}
+
+				if (is_const) {
+					// verify the symbol is defined
+					if (initializer_symbol->defined) {
+						// verify the types match -- we don't need to worry about subtypes just yet
+						if (initializer_symbol->type == to_allocate.type) {
+							// define the constant using a dummy value
+							allocation_ss << "@db " << to_allocate.name << " (0)" << std::endl;
+
+							// different data types must be treated differently
+							if (to_allocate.type == STRING) {
+								/*
+
+								To allocate a string constant, we must fetch the value and then utilize memcpy to copy the data from our old location to the new one.
+
+								Usage for memcpy is as follows:
+									- Push source
+									- Push destination
+									- Push number of bytes to copy
+
+								After fetch_value is called, A will contain the number of _bytes_, B will contain the address of the string
+
+								*/
+
+								allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), *max_offset).str();
+								allocation_ss << this->move_sp_to_target_address(*max_offset, true).str();	// increment the stack pointer to our stack frame, but preserve our register values
+
+								// push our parameters and invoke our memcpy subroutine
+								allocation_ss << "\t" << "phb" << "\n\t" << "loadb #" << to_allocate.name << "\n\t" << "phb" << "\n\t" << "pha" << std::endl;
+								allocation_ss << "\t" << "jsr __builtins_memcpy" << std::endl;
+							}
+							// todo: add initializer-lists for arrays
+							else {
+								// now, use fetch_value to get the value of our lvalue and store the value in A at the constant we have defined
+								allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), *max_offset).str();
+								allocation_ss << "storea " << to_allocate.name << std::endl;
+							}
+						}
+					}
+					else {
+						throw CompilerException("'" + initializer_symbol->name + "' was referenced before assignment.", 0, allocation_statement.get_line_number());
+					}
+				}
+				// otherwise, if it's not also a constant,
+				else {
+					throw CompilerException("Initializing const-qualified variables with non-const-qualified variables is illegal", 0, allocation_statement.get_line_number());
+				}
 			}
 			else if (initial_value->get_expression_type() == UNARY) {
 				Unary* initializer_unary = dynamic_cast<Unary*>(initial_value.get());
@@ -377,7 +322,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 				if (this->get_expression_data_type(initial_value) == to_allocate.type) {
 					allocation_ss << "@db " << to_allocate.name << " (0)" << std::endl;
 					// get the evaluated unary
-					this->evaluate_unary_tree(*initializer_unary, allocation_statement.get_line_number(), *max_offset);	// evaluate the unary expression
+					this->evaluate_unary_tree(*initializer_unary, allocation_statement.get_line_number(), *max_offset).str();	// evaluate the unary expression
 					allocation_ss << "storea " << to_allocate.name << std::endl;
 				}
 				else {
@@ -389,14 +334,21 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 				// if the types match
 				if (this->get_expression_data_type(initial_value) == to_allocate.type) {
 					allocation_ss << "@db " << to_allocate.name << " (0)";
-					this->evaluate_binary_tree(*initializer_binary, allocation_statement.get_line_number(), *max_offset);
+					this->evaluate_binary_tree(*initializer_binary, allocation_statement.get_line_number(), *max_offset).str();
 					allocation_ss << "storea " << to_allocate.name << std::endl;
 				}
 				else {
 					throw CompilerException("Types do not match", 0, allocation_statement.get_line_number());
 				}
 			}
-			// TODO: add other const initializer expressions
+			// it is illegal to initialize const-qualified variables with pointers
+			else if (initial_value->get_expression_type() == DEREFERENCED || initial_value->get_expression_type() == ADDRESS_OF)
+			{
+				throw CompilerException("It is illegal to initialize const-qualified variables with pointers or addresses; these values must be computed at compile time", 0, allocation_statement.get_line_number());
+			}
+			else {
+				throw CompilerException("It is illegal to initialize a const-qualified variable with an expression of this type", 0, allocation_statement.get_line_number());
+			}
 		}
 		else {
 			// this error should have been caught by the parser, but just to be safe...
@@ -406,18 +358,68 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 
 	// handle all non-const global variables
 	else if (current_scope_name == "global" && current_scope == 0) {
-		this->symbol_table.insert(to_allocate, allocation_statement.get_line_number());	// global variables do not need the stack, so add to the symbol table right away
+		this->symbol_table.insert(std::make_shared<Symbol>(to_allocate), allocation_statement.get_line_number());	// global variables do not need the stack, so add to the symbol table right away
 
 		// we must specify how many bytes to reserve depending on the data type; structs and arrays will use different sizes, but all other data types will use one word
 		if (to_allocate.type == ARRAY) {
 			// arrays may only contain the integral types; you can have an array of pointers to arrays or structs, but not of arrays or structs themselves (at this time)
 			if (to_allocate.sub_type == ARRAY || to_allocate.sub_type == STRUCT) {
-				throw CompilerException("Arrays with subtype 'array' or 'struct' are not supported in SIN at this time", 0, allocation_statement.get_line_number());
+				throw CompilerException("Arrays may not contain other arrays or structs (only pointers to such members)", 0, allocation_statement.get_line_number());
 			}
 			else {
 				// reserve one word for each element
-				size_t num_bytes = to_allocate.array_length * 2;
+				size_t num_bytes = to_allocate.array_length * WORD_W;	// number of bytes = number of elements * number of bytes per word
 				allocation_ss << "@rs " << std::dec << num_bytes << " " << to_allocate.name << std::endl;	// since we have been using std::hex, switch back to decimal mode here to be safe
+
+				// if we initialzed the array, make the initial assignments
+				if (allocation_statement.was_initialized()) {
+					std::shared_ptr<Expression> initial_exp = allocation_statement.get_initial_value();
+					
+					// we cannot have an initialization of only one element -- the type must be 'LIST'
+					if (initial_exp->get_expression_type() == LIST) {
+						// first, get the list expression that is the initializer
+						ListExpression* list_exp = dynamic_cast<ListExpression*>(initial_exp.get());
+						std::vector<std::shared_ptr<Expression>> initializer_list = list_exp->get_list();
+
+						// keep track of our index in the list by using the X register and the stack
+						// since we are in the global scope, no need to move the SP around
+						allocation_ss << "\t" << "loadx #$FFFE" << std::endl;
+
+						// for each element in the list, fetch it and assign it to the next position in the list
+						// todo: could refactor by creating a data array in memory containing the proper values and making the assignments by indexing into that array
+						std::vector<std::shared_ptr<Expression>>::iterator it = initializer_list.begin();
+						while (it != initializer_list.end()) {
+							/*
+
+							Start by incrementing the X register at the top of every loop; start at 0xFFFF so when we increment, it rolls over to 0
+							This prevents us from pushing to the stack an extra time and requiring a 'decsp' instruction
+							It's an optimization, albeit a tiny one
+
+							After doing that, push it to the stack, fetch the value, pull the index from the stack, and make the assignment
+
+							*/
+
+							allocation_ss << "\t" << "incx" << std::endl;
+							allocation_ss << "\t" << "incx" << std::endl;	// increment X twice to skip ahead one word
+							allocation_ss << "\t" << "txa" << "\n\t" << "pha" << std::endl;
+
+							// dereference 'it' as the shared_ptr to pass into fetch_value(...)
+							allocation_ss << this->fetch_value(*it, allocation_statement.get_line_number(), *max_offset).str() << std::endl;
+
+							// now, get the index value from the stack into X and make the assignment
+							allocation_ss << "\t" << "tab" << "\n\t" << "pla" << "\n\t" << "tax" << "\n\t" << "tba" << std::endl;
+							allocation_ss << "\t" << "storea " << to_allocate.name << ", x" << std::endl;
+
+							// increment the iterator
+							it++;
+						}
+					}
+					// if the initial value is not a LIST expression type, throw an error
+					else {
+						throw CompilerException("Expected initializer list for initialization of aggregate data type", 0,
+							allocation_statement.get_line_number());
+					}
+				}
 			}
 		}
 		else if (to_allocate.type == STRUCT) {
@@ -425,7 +427,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 		}
 		else {
 			// reserve the variable itself first -- it may be a pointer to the variable if we need to dynamically allocate it
-			allocation_ss << "@rs 2 " << to_allocate.name << std::endl;	// syntax is "@rs macro_name"
+			allocation_ss << "@rs " << WORD_W  << " " << to_allocate.name << std::endl;
 
 			// if the variable type is anything with a variable length, we need a different mechanism for handling them
 			if (to_allocate.type == STRING) {
@@ -434,7 +436,8 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 					allocation_ss << this->string_assignment(&to_allocate, initial_value, allocation_statement.get_line_number(), *max_offset).str();
 
 					// We need to update the symbol's 'allocated' member
-					Symbol* allocated_symbol = this->symbol_table.lookup(to_allocate.name, to_allocate.scope_name, to_allocate.scope_level);
+					std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(to_allocate.name, to_allocate.scope_name, to_allocate.scope_level);
+					Symbol* allocated_symbol = dynamic_cast<Symbol*>(fetched.get());	// todo: validate the symbol_type?
 					allocated_symbol->allocated = to_allocate.allocated;
 				}
 			}
@@ -450,13 +453,25 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 
 	// handle all non-const local variables
 	else {
-		// make sure we have valid pointers
-		if (max_offset != nullptr) {
+		// make sure we have a valid max_offset pointer
+		if (max_offset) {
 			// our local variables will use the stack; they will directly modify the list of variable names and the stack offset
 			allocation_ss << this->move_sp_to_target_address(*max_offset).str();	// make sure the stack pointer is at the end of the stack frame before allocating a local variable (so we don't overwrite anything)
 			
 			to_allocate.stack_offset = this->stack_offset;	// the stack offset for the symbol will now be the current stack offset
-			this->symbol_table.insert(to_allocate, allocation_statement.get_line_number());	// now that the symbol's stack offset has been determined, we can add the symbol to the table
+			this->symbol_table.insert(std::make_shared<Symbol>(to_allocate), allocation_statement.get_line_number());	// now that the symbol's stack offset has been determined, we can add the symbol to the table
+
+			// if we have a const local variable, we need to make sure it is defined
+			if (is_const && !to_allocate.defined) {
+				throw CompilerException("Const-qualified variables must be initialized in allocation", 0, allocation_statement.get_line_number());
+			}
+
+			// todo: consider whether runtime constants should be allowed
+			// the initializer must also be a literal -- it cannot change at runtime
+			else if (is_const && initial_value->get_expression_type() != LITERAL) {
+				// todo: write some function to ensure the variable's value can be determined at compile time
+				throw CompilerException("Const-qualified variables must be initialized with literal values", 0, allocation_statement.get_line_number());
+			}
 
 			// If the variable is defined, we can push its initial value
 			if (to_allocate.defined) {
@@ -464,7 +479,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 				if (is_dynamic) {
 					// we don't need to check if the variable has been freed when we are allocating it
 					if (to_allocate.type == STRING) {
-						// allocate a word on the stack for the pointer
+						// allocate a word on the stack for the pointer to the string
 						this->stack_offset += 1;
 						*max_offset += 1;
 						allocation_ss << "\t" << "decsp" << std::endl;
@@ -473,11 +488,56 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 						allocation_ss << this->string_assignment(&to_allocate, initial_value, allocation_statement.get_line_number(), *max_offset).str();
 
 						// update the symbol's 'allocated' member
-						Symbol* allocated_symbol = this->symbol_table.lookup(to_allocate.name, to_allocate.scope_name, to_allocate.scope_level);
+						std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(to_allocate.name, to_allocate.scope_name, to_allocate.scope_level);
+						Symbol* allocated_symbol = dynamic_cast<Symbol*>(fetched.get());	// todo: validate the symbol_type of fetched?
 						allocated_symbol->allocated = to_allocate.allocated;
 					}
 					// TODO: implement more dynamic memory types
 				}
+				// array initializations must be handled slightly differently
+				else if (to_allocate.type == ARRAY) {
+					// arrays must be initialized with initializer-lists
+					if (allocation_statement.get_initial_value()->get_expression_type() == LIST) {
+						// todo: initialize local arrays with lists
+						ListExpression* list_exp = dynamic_cast<ListExpression*>(allocation_statement.get_initial_value().get());
+						std::vector<std::shared_ptr<Expression>> initializer_list = list_exp->get_list();
+
+						// first, we must move to the end of the stack frame so we can use the stack without overwriting our local variables
+						allocation_ss << this->move_sp_to_target_address(*max_offset).str();
+						to_allocate.stack_offset = *max_offset;
+
+						// next, we need to set up our loop
+						// todo: we could also create a list in memory and index the list to make the assignment here using a loop -- could be useful for lists of constants
+						for (std::vector<std::shared_ptr<Expression>>::iterator it = initializer_list.begin(); it != initializer_list.end(); it++) {
+							// next, fetch the value
+							allocation_ss << this->fetch_value(*it, allocation_statement.get_line_number(), *max_offset);
+
+							// next, move the SP back to the end -- but only if we aren't at the end already
+							if (this->stack_offset != *max_offset) {
+								// if the difference between the two values is greater than three, we need to preserve the A register
+								if (abs((int)this->stack_offset - (int)*max_offset) > 3) {
+									allocation_ss << "\t" << "tab" << std::endl;	// preserve in B, as it's untouched by our move function
+									allocation_ss << this->move_sp_to_target_address(*max_offset);
+									allocation_ss << "\t" << "tba" << std::endl;
+								}
+								// otherwise, no sense in making the transfer
+								else {
+									allocation_ss << this->move_sp_to_target_address(*max_offset);
+								}
+							}
+
+							// since the object is at the end, we don't actually have to move anywhere to push the value
+							allocation_ss << "\t" << "pha" << std::endl;
+							this->stack_offset += 1;
+							*max_offset += 1;
+						}
+					}
+					else {
+						throw CompilerException("Expected initializer list for initialization of aggregate type", 0,
+							allocation_statement.get_line_number());
+					}
+				}
+				// all other data types can simply fetch the value and push the A register
 				else {
 					// get the initial value
 					allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), *max_offset).str();
@@ -487,25 +547,21 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 					(*max_offset) += 1;
 				}
 			}
+			// if it is not defined, 
 			else {
 				// update the stack offset -- all types will increment the stack offset by one word; allocate space in the stack and increase our offset
-				// Note that we push 0x00 onto the stack -- this is so that if we try to dereference the pointer there, it's truly a null pointer (the memory is not guaranteed to be initialized to 0x00 except at location 0x00)
 				if (to_allocate.type == ARRAY) {
-					allocation_ss << "\t" << "loada #$00" << std::endl;
-					allocation_ss << "\t" << "loadx #$" << std::hex << to_allocate.array_length << std::endl;
-					allocation_ss << ".__ALLOC_ARRAY_LOOP__BR_" << this->branch_number << "__:" << std::endl;
-					allocation_ss << "\t" << "pha" << std::endl;
-					allocation_ss << "\t" << "decx" << std::endl;
-					allocation_ss << "\t" << "cmpx #$00" << std::endl;
-					allocation_ss << "\t" << "brne .__ALLOC_ARRAY_LOOP__BR_" << this->branch_number << "__" << std::endl;
+					// load B with the length, transfer SP to A, subtract the length from the stack pointer, and move the stack pointer back
+					allocation_ss << "\t" << "loadb #$" << std::hex << to_allocate.array_length << std::endl;
+					allocation_ss << "\t" << "tspa" << std::endl;
+					allocation_ss << "\t" << "sec" << "\n\t" << "subca b" << std::endl;		// must always set carry before subtraction
+					allocation_ss << "\t" << "tasp" << std::endl;
 
-					this->branch_number += 1;
 					this->stack_offset += to_allocate.array_length;
 					(*max_offset) += to_allocate.array_length;
 				}
 				else {
-					allocation_ss << "\t" << "loada #$00" << std::endl;
-					allocation_ss << "\t" << "pha" << std::endl;
+					allocation_ss << "\t" << "decsp" << std::endl;
 					this->stack_offset += 1;
 					(*max_offset) += 1;
 				}
@@ -522,273 +578,21 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 }
 
 
-std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_offset) {
-
-	exp_type lvalue_exp_type = assignment_statement.get_lvalue()->get_expression_type();
-
-	// TODO: add support for double/triple/quadruple/etc. ref pointers
-
-	// create a stringstream to which we will write write our generated code
-	std::stringstream assignment_ss;
-	LValue* assignment_lvalue;
-	std::shared_ptr<Expression> assignment_index;	// if we have an index in our assignment
-	std::string var_name = "";
-
-	if (lvalue_exp_type == LVALUE) {
-		assignment_lvalue = dynamic_cast<LValue*>(assignment_statement.get_lvalue().get());
-		var_name = assignment_lvalue->getValue();
-	}
-	else if (lvalue_exp_type == INDEXED) {
-		Indexed* indexed_lvalue = dynamic_cast<Indexed*>(assignment_statement.get_lvalue().get());
-		var_name = indexed_lvalue->getValue();
-		assignment_index = indexed_lvalue->get_index_value();
-	}
-	else if (lvalue_exp_type == DEREFERENCED) {
-		std::shared_ptr<Expression> assign_lvalue = assignment_statement.get_lvalue();
-		while (assign_lvalue->get_expression_type() == DEREFERENCED) {
-			Dereferenced* deref = dynamic_cast<Dereferenced*>(assign_lvalue.get());
-			assign_lvalue = deref->get_ptr_shared();
-		}
-		if (assign_lvalue->get_expression_type() == LVALUE) {
-			assignment_lvalue = dynamic_cast<LValue*>(assign_lvalue.get());
-			var_name = assignment_lvalue->getValue();
-		}
-		else {
-			throw CompilerException("Error in parsing deref tree!", 0, assignment_statement.get_line_number());
-		}
-	}
-	else {
-		throw CompilerException("Cannot use expression of this type in lvalue!", 0, assignment_statement.get_line_number());
-	}
-
-	if (this->symbol_table.is_in_symbol_table(var_name, this->current_scope_name)) {
-		// get the symbol information
-		Symbol* fetched = this->symbol_table.lookup(var_name, this->current_scope_name, this->current_scope);
-
-		bool is_const = false;
-		bool is_dynamic = false;
-		bool is_signed;
-
-		std::vector<SymbolQuality>::iterator quality_iter = fetched->qualities.begin();
-		while (quality_iter != fetched->qualities.end()) {
-			if (*quality_iter == CONSTANT) {
-				is_const = true;
-			}
-			else if (*quality_iter == DYNAMIC) {
-				is_dynamic = true;
-			}
-			else if (*quality_iter == SIGNED) {
-				is_signed = true;
-			}
-			else if (*quality_iter == UNSIGNED) {
-				is_signed = false;
-			}
-
-			quality_iter++;
-		}
-		
-		// if the lvalue_exp_type is 'indexed', make sure 'fetched->type' is either a string or an array -- those are the only data types we can index
-		if (lvalue_exp_type == INDEXED && ((fetched->type != STRING) && (fetched->type != ARRAY))) {
-			throw CompilerException("Cannot index variables of this type", 0, assignment_statement.get_line_number());
-		}
-
-		// if the quality is "const" throw an error; we cannot make assignments to const-qualified variables
-		if (is_const) {
-			throw CompilerException("Cannot make an assignment to a const-qualified variable!", 0, assignment_statement.get_line_number());
-		}
-		// otherwise, make the assignment
-		else {
-			// get the anticipated type of the rvalue
-			Type rvalue_data_type = this->get_expression_data_type(assignment_statement.get_rvalue());
-
-			// if the types match, continue with the assignment
-			if ((fetched->type == rvalue_data_type) || (fetched->sub_type == rvalue_data_type)) {
-
-				// dynamic memory must be handled a little differently than automatic memory because under the hood, it is implemented through pointers
-				if (is_dynamic) {
-					// we don't need to check if the memory has been freed here -- we do that in string assignment
-					if (fetched->type == STRING) {
-						// check to make sure the type isn't indexed; if it is, throw an exception -- string index assignment is disallowed
-						if (lvalue_exp_type == INDEXED) {
-							throw CompilerException("Index assignment on strings is forbidden", 0, assignment_statement.get_line_number());
-						}
-						else {
-							// set the symbol to "defined" and call our string_assignment function
-							fetched->defined = true;
-							fetched->freed = false;
-							assignment_ss << this->string_assignment(fetched, assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str();
-						}
-					}
-					// TODO: add support for other dynamic types
-				}
-				// automatic memory is easier to handle than dynamic
-				else {
-					/*
-					
-					first, evaluate the right-hand statement
-						(fetch_value will write assembly such the value currently in A (the value we fetched) is the evaluated rvalue)
-					next, check to see whether the variable is /local/ or /global/; local variables will not use symbol names, but globals will
-
-					*/
-
-					if (fetched->scope_level == 0) {
-						// global variables
-						
-						// get the rvalue
-						if (lvalue_exp_type == INDEXED) {
-							// get the value of the index and push it onto the stack
-							assignment_ss << this->fetch_value(assignment_index, assignment_statement.get_line_number(), max_offset).str();
-							assignment_ss << "\t" << "pha" << std::endl;
-							
-							// get the rvalue
-							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str() << std::endl;
-							assignment_ss << "\t" << "tax" << std::endl;
-							assignment_ss << "\t" << "pla" << std::endl;
-
-							// we have to use an LSL because we need to multiply by 2 (the size of a word), but we want to shift in 0
-							assignment_ss << "\t" << "lsl a" << std::endl;
-							
-							// finish getting the index
-							assignment_ss << "\t" << "tay" << std::endl;
-							assignment_ss << "\t" << "txa" << std::endl;
-						}
-						else {
-							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str() << std::endl;	// TODO: add max_offset in the fetch in assignment?
-							assignment_ss << "\t" << "loady #$00" << std::endl;
-						}
-
-						// now, make the assignment
-						if (lvalue_exp_type != DEREFERENCED) {
-							assignment_ss << "\t" << "storea " << var_name << ", y" << std::endl;	// y will be zero if we have no index
-						}
-						else {
-							// y register will be zero if lvalue_exp_type is 'DEREFERENCED'
-							Dereferenced* dereferenced_value = dynamic_cast<Dereferenced*>(assignment_statement.get_lvalue().get());
-							assignment_ss << this->fetch_value(dereferenced_value->get_ptr_shared(), assignment_statement.get_line_number()).str();
-							assignment_ss << "\t" << "storea (" << var_name << ", y)" << std::endl;
-						}
-					}
-					else {
-						// get the value
-						if (lvalue_exp_type == INDEXED) {
-							// first, fetch the index value and push it to the stack
-							assignment_ss << this->fetch_value(assignment_index, assignment_statement.get_line_number(), max_offset).str();
-							assignment_ss << "\t" << "tay" << std::endl;	// transfer A to Y so we don't have to set the preserve_registers flag
-							assignment_ss << this->move_sp_to_target_address(max_offset).str();	// move the stack pointer to the stack frame
-							assignment_ss << "\t" << "tya" << "\n\t" << "pha" << std::endl;	// push the index
-							this->stack_offset += 1;
-
-							// now, get the value we want
-							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number()).str() << std::endl;
-
-							// move the stack pointer back to where it was, but preserve our registers
-							assignment_ss << "\t" << "tax" << std::endl;
-							assignment_ss << this->move_sp_to_target_address(max_offset + 1).str();
-
-							/*
-
-							At this point, we have to add the appropriate index value to the stack pointer, and subtract it again once we make the assignment so the compiler's tracker doesn't get messed up. The algorithm is as follows:
-
-							1) Multiply the index value by 2, as there are 2 bytes in a word
-							2) Subtract the value of the index to the stack pointer (use SUBCA because the stack grows _downwards_)
-							3) Make the push
-							4) Increment the stack pointer back to where it was before we pushed the value
-							5) Add the value of the index from the stack pointer (use ADDCA because the stack grows _downwards_)
-
-							The stack pointer will then be where it was before the indexed value was assigned
-
-							*/
-
-							// update the index
-							// since we moved A to X before the move, the value to assign is still safe in register X, and A is free to use
-							assignment_ss << "\t" << "pla" << std::endl;
-							this->stack_offset -= 1;
-							assignment_ss << "\t" << "lsl a" << std::endl;	// multiply the index by 2 with lsl
-							assignment_ss << "\t" << "tay" << std::endl;	// move the index into Y so it's safe to move the SP
-
-							assignment_ss << this->move_sp_to_target_address(fetched->stack_offset).str();
-
-							// move the index back into the B register
-							assignment_ss << "\t" << "tya" << std::endl;
-							assignment_ss << "\t" << "tab" << std::endl;
-
-							// update the stack pointer value
-							assignment_ss << "\t" << "tspa" << std::endl;
-							assignment_ss << "\t" << "subca b" << std::endl;	// the B register holds the index
-							assignment_ss << "\t" << "tasp" << std::endl;
-
-							// push the value
-							assignment_ss << "\t" << "txa" << std::endl;	// the value to assign was in X
-							assignment_ss << "\t" << "pha" << std::endl;
-
-							// move the stack pointer back to where it was (for the compiler's sake)
-							assignment_ss << "\t" << "incsp" << std::endl;	// move it back to where it was before the push
-							assignment_ss << "\t" << "tspa" << std::endl;
-							assignment_ss << "\t" << "addca b" << std::endl;	// subtract the index from it
-							assignment_ss << "\t" << "tasp" << std::endl;	// move the pointer value back
-						}
-						else {
-							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number()).str() << std::endl;
-
-							// move the SP to the target address, but store A and B in X and Y, respectively, before we move it
-							assignment_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;
-							assignment_ss << this->move_sp_to_target_address(fetched->stack_offset).str();
-							assignment_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;	// move the register values back
-
-
-							// make the assignment
-							if (lvalue_exp_type != DEREFERENCED) {
-								assignment_ss << "\t" << "pha" << std::endl;
-								this->stack_offset += 1;	// when we push a variable, we need to update our stack offset
-							}
-							else {
-								// we can use indexed indirect addressing with the x register to determine where the data should be stored
-								assignment_ss << "\t" << "decsp" << std::endl;
-								assignment_ss << "\t" << "tab" << std::endl;
-								assignment_ss << "\t" << "pla" << std::endl;
-								assignment_ss << "\t" << "tax" << std::endl;
-								assignment_ss << "\t" << "tba" << std::endl;
-								assignment_ss << "\t" << "storea ($00, X)" << std::endl;
-							}
-						}
-					}
-
-					// update the symbol's "defined" status
-					fetched->defined = true;
-				}
-			}
-			// if the types do not match, we must throw an exception
-			else {
-				throw CompilerException("Cannot match '" + get_string_from_type(fetched->type) + "' and '" + get_string_from_type(rvalue_data_type) + "'", 0, assignment_statement.get_line_number());
-			}
-		}
-	}
-	else {
-		throw CompilerException("Could not find '" + var_name + "' in symbol table", 0, assignment_statement.get_line_number());
-	}
-
-	// return the assignment statement
-	return assignment_ss;
-}
-
-
 std::stringstream Compiler::ite(IfThenElse ite_statement, size_t max_offset)
 {
 	/*
 	
-	Produce SINASM code for an If/Then/Else branch.
+	Produce SINASM16 code for an If/Then/Else branch.
+
+	First, make sure everything in our branch is under a label so we can use relative labels -- it looks like:
+		__<scope name>_<scope level>__ITE_<branch number>__:
+
+	See the compiler conventions document for more information on naming schemes.
 
 	*/
 
 	// a stringstream for our generated asm
 	std::stringstream ite_ss;
-
-	//std::string parent_scope_name = this->current_scope_name;	// the parent scope name must be restored once we exit the scope
-
-	/*
-	First, make sure everything in our branch is under a label so we can use relative labels -- it looks like:
-		__<scope name>_<scope level>__ITE_<branch number>__:
-	*/
 
 	std::string ite_label_name = "__" + this->current_scope_name + "_" + std::to_string(this->current_scope) + "__ITE_" + std::to_string(this->branch_number) + "__";
 	ite_ss << ite_label_name << ":" << std::endl;
@@ -802,8 +606,8 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t max_offset)
 
 		Literals are defined to be true/false in the following way:
 			Literal value:		Evaluates to:
-				True			True
-				False			False
+				true			True
+				false			False
 				0				False
 				1 +				True
 				-1 -			True
@@ -828,7 +632,8 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t max_offset)
 		ite_ss << this->evaluate_unary_tree(*unary_condition, ite_statement.get_line_number()).str();	// put the evaluated unary expression in A
 	}
 	else if (ite_statement.get_condition()->get_expression_type() == BINARY) {
-		// TODO: evaluate binary conditions
+		Binary* binary_condition = dynamic_cast<Binary*>(ite_statement.get_condition().get());	// cast to Binary statement
+		ite_ss << this->evaluate_binary_tree(*binary_condition, ite_statement.get_line_number(), max_offset).str();
 	}
 	else {
 		throw CompilerException("Invalid expression type in conditional statement!", 0, ite_statement.get_line_number());
@@ -856,10 +661,10 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t max_offset)
 		ite_ss << "\t" << "incsp" << std::endl;
 	}
 	// we now need to delete all variables that were local to this if/else block -- iterate through the symbol table, removing the symbols in this local scope
-	std::vector<Symbol>::iterator it = this->symbol_table.symbols.begin();
+	std::vector<std::shared_ptr<Symbol>>::iterator it = this->symbol_table.symbols.begin();
 	while (it != this->symbol_table.symbols.end()) {
 		// only delete variables that are in the scope with the same name AND of the same level
-		if ((it->scope_name == this->current_scope_name) && (it->scope_level == this->current_scope)) {
+		if ((it->get()->scope_name == this->current_scope_name) && (it->get()->scope_level == this->current_scope)) {
 			it = this->symbol_table.symbols.erase(it);	// delete the element at the iterator position, and continue without incrementing the iterator
 		}
 		else {
@@ -890,7 +695,7 @@ std::stringstream Compiler::ite(IfThenElse ite_statement, size_t max_offset)
 		it = this->symbol_table.symbols.begin();	// use the same iterator as before
 		while (it != this->symbol_table.symbols.end()) {
 			// only delete variables that are in the scope with the same name AND of the same level
-			if ((it->scope_name == this->current_scope_name) && (it->scope_level == this->current_scope)) {
+			if ((it->get()->scope_name == this->current_scope_name) && (it->get()->scope_level == this->current_scope)) {
 				it = this->symbol_table.symbols.erase(it);	// delete the element at the iterator position, and continue without incrementing the iterator
 			}
 			else {
@@ -962,7 +767,7 @@ std::stringstream Compiler::while_loop(WhileLoop while_statement, size_t max_off
 	while_ss << "\t" << "breq " << while_label_name << ".done" << std::endl;
 
 	// increment our stack pointer to the end of the current stack frame
-	while_ss << this->move_sp_to_target_address( max_offset).str();
+	while_ss << this->move_sp_to_target_address(max_offset).str();
 	// increment the branch and scope numbers and update the scope name
 	this->current_scope += 1;
 
@@ -970,18 +775,16 @@ std::stringstream Compiler::while_loop(WhileLoop while_statement, size_t max_off
 	while_ss << while_label_name << ".loop:" << std::endl;
 
 	// compile the branch code
-	while_ss << this->compile_to_sinasm(*while_statement.get_branch().get(), this->current_scope, this->current_scope_name, max_offset).str();
+	while_ss << this->compile_to_sinasm(*while_statement.get_branch().get(), this->current_scope, this->current_scope_name, max_offset, max_offset).str();
 
 	// unwind the stack and delete local variables
-	for (size_t i = this->stack_offset; i > max_offset; i--) {
-		this->stack_offset -= 1;
-		while_ss << "\t" << "incsp" << std::endl;
-	}
+	while_ss << this->move_sp_to_target_address(max_offset).str();
+
 	// we now need to delete all variables that were local to this if/else block -- iterate through the symbol table, removing the symbols in this local scope
-	std::vector<Symbol>::iterator it = this->symbol_table.symbols.begin();
+	std::vector<std::shared_ptr<Symbol>>::iterator it = this->symbol_table.symbols.begin();
 	while (it != this->symbol_table.symbols.end()) {
 		// only delete variables that are in the current subscope
-		if ((it->scope_name == this->current_scope_name) && (it->scope_level == this->current_scope)) {
+		if ((it->get()->scope_name == this->current_scope_name) && (it->get()->scope_level == this->current_scope)) {
 			it = this->symbol_table.symbols.erase(it);	// delete the element at the iterator position, and continue without incrementing the iterator
 		}
 		else {
@@ -1002,18 +805,17 @@ std::stringstream Compiler::while_loop(WhileLoop while_statement, size_t max_off
 }
 
 
-// the actual compilation routine -- it is separate from our entry functions so that we can call it recursively (it is called by our entry functions)
 std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int local_scope_level, std::string local_scope_name, size_t max_offset, size_t stack_frame_base) {
 	/*
 	
-	This function takes an AST and produces SINASM that will execute it, stored in a stringstream object.
+	This function takes an AST and produces SINASM that will execute it, stored in a stringstream object. This can be converted into a .sina file, or passed directly to an assembler object.
 
 	Parameters:
 		AST - the abstract syntax tree we want to compile into assembly
 		local_scope_level - the level of scope we are in
 		local_scope_name - default to "global", only necessary if we are working with a function
-		size_t* stack_offset - the current stack offset (for local variables to a function)
-		size_t* max_offset - the maximum offset for local function variables (increments by one per local function variable)
+		max_offset - the maximum offset for local function variables (increments by one per local function variable)
+		stack_frame_base - the base offset for our current stack frame
 	
 	*/
 	
@@ -1037,6 +839,11 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 
 			// TODO: import symbol tables from included files
 		}
+		else if (statement_type == DECLARATION) {
+			// cast to Declaration type and handle it
+			Declaration* decl_statement = dynamic_cast<Declaration*>(current_statement);
+			this->handle_declaration(*decl_statement);
+		}
 		else if (statement_type == INLINE_ASM) {
 			// dynamic cast to an InlineAssembly type
 			InlineAssembly* asm_statement = dynamic_cast<InlineAssembly*>(current_statement);
@@ -1058,7 +865,9 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 			FreeMemory* free_statement = dynamic_cast<FreeMemory*>(current_statement);
 
 			// look for a symbol in the table with the same name as is indicated by the free statement
-			Symbol* to_free = this->symbol_table.lookup(free_statement->get_freed_memory().getValue(), this->current_scope_name, this->current_scope);
+			std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(free_statement->get_freed_memory().getValue(), this->current_scope_name,
+				this->current_scope);
+			Symbol* to_free = dynamic_cast<Symbol*>(fetched.get());	// todo: validate symbol_type of 'fetched' ?
 
 			bool is_const = false;
 			bool is_dynamic = false;
@@ -1119,15 +928,9 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 			sinasm_ss << this->allocate(*alloc_statement, &max_offset).str();
 		}
 		else if (statement_type == ASSIGNMENT) {
-			// dynamic cast to an Assignment type
+			// dynamic cast to an Assignment type and compile an assignment
 			Assignment* assign_statement = dynamic_cast<Assignment*>(current_statement);
-
-			if (max_offset) {
-				sinasm_ss << this->assign(*assign_statement, max_offset).str();
-			}
-			else {
-				sinasm_ss << this->assign(*assign_statement).str();
-			}
+			sinasm_ss << this->assign(*assign_statement, max_offset).str();
 		}
 		else if (statement_type == RETURN_STATEMENT) {
 			// if the current scope name is "global", throw an error
@@ -1148,23 +951,11 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 		}
 		else if (statement_type == IF_THEN_ELSE) {
 			IfThenElse ite_statement = *dynamic_cast<IfThenElse*>(current_statement);
-
-			if (max_offset) {
-				sinasm_ss << this->ite(ite_statement, max_offset).str();
-			}
-			else {
-				sinasm_ss << this->ite(ite_statement).str();
-			}
+			sinasm_ss << this->ite(ite_statement, max_offset).str();
 		}
 		else if (statement_type == WHILE_LOOP) {
 			WhileLoop* while_statement = dynamic_cast<WhileLoop*>(current_statement);
-
-			if (max_offset) {
-				sinasm_ss << this->while_loop(*while_statement, max_offset).str();
-			}
-			else {
-				sinasm_ss << this->while_loop(*while_statement).str();
-			}
+			sinasm_ss << this->while_loop(*while_statement, max_offset).str();
 		}
 		else if (statement_type == DEFINITION) {
 			Definition* def_statement = dynamic_cast<Definition*>(current_statement);
@@ -1175,13 +966,13 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 		else if (statement_type == CALL) {
 			Call* call_statement = dynamic_cast<Call*>(current_statement);
 
-			// write the call to the function into the file
-			if (max_offset) {
-				sinasm_ss << this->call(*call_statement, max_offset).str();
-			}
-			else {
-				sinasm_ss << this->call(*call_statement).str();
-			}
+			// compile a call to a function
+			sinasm_ss << this->call(*call_statement, max_offset).str();
+		}
+		// if we have a STATEMENT_GENERAL, we had an explicit pass or some sort of parser error
+		else if (statement_type == STATEMENT_GENERAL) {
+			// generate a compiler warning stating we found an empty statement
+			compiler_warning("Empty statement found; could be the result of a parser error or a 'pass' statement", current_statement->get_line_number());
 		}
 	}
 
@@ -1276,7 +1067,7 @@ Compiler::Compiler(std::istream& sin_file, uint8_t _wordsize, std::vector<std::s
 	this->strc_number = 0;
 	this->branch_number = 0;
 
-	this->AST_index = 0;	// we use "get_next_statement()" every time, which increments before returning; as such, start at -1 so we fetch the 0th item, not the 1st, when we first call the compilation function
+	this->AST_index = 0;
 	
 	symbol_table = SymbolTable();
 

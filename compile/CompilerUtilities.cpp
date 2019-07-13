@@ -1,7 +1,7 @@
 /*
 
 SIN Toolchain
-Utilities.cpp
+CompilerUtilities.cpp
 Copyright 2019 Riley Lannon
 
 Contains the implementation of various compiler utility functions, including:
@@ -33,6 +33,7 @@ std::shared_ptr<Statement> Compiler::get_current_statement(StatementBlock AST)
 }
 
 
+// todo: add line_number as parameter because this function may throw an exception
 Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate, bool get_subtype)
 {
 	/*
@@ -130,6 +131,36 @@ Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate,
 		}
 
 		return func_symbol->type;
+	}
+	else if (to_evaluate->get_expression_type() == LIST) {
+		ListExpression* list_exp = dynamic_cast<ListExpression*>(to_evaluate.get());
+
+		std::vector<std::shared_ptr<Expression>> list_members = list_exp->get_list();
+
+		if (list_members.size() > 0) {
+			// get the type we expect for the list; the first member determines it
+			Type list_data_type = this->get_expression_data_type(list_members[0]);
+
+			// iterate through the list and check to see if the types are homogenous
+			size_t list_item = 1;
+			bool abort = false;
+			while (list_item < list_members.size() && !abort) {
+				Type current_item_type = this->get_expression_data_type(list_members[list_item]);
+				abort = current_item_type != list_data_type;
+				list_item++;
+			}
+
+			if (abort) {
+				throw CompilerException("Lists must be homogenous in SIN");
+			}
+			else {
+				return list_data_type;
+			}
+		}
+		else {
+			compiler_warning("Empty list found");
+			return VOID;	// an empty list has a type of VOID
+		}
 	}
 	else if (to_evaluate->get_expression_type() == SIZE_OF) {
 		return INT;	// sizeof(...) always returns an unsigned int
@@ -258,7 +289,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 
 	Given an expression, this function will produce ASM that, when run, will get the desired value in the A register. For example, if we have the statement
 		let myVar = anotherVar;
-	we can use this function to fetch the contents of 'anotherVar', producing assembly that will load its value in the A register; we can then finish compiling the statement, in our respective function. This method simply allows us to hide away the details of how this is done, as well as removing code from functions and making the compiler more maintainable.
+	we can use this function to fetch the contents of 'anotherVar', producing assembly that will load its value in the A register; we can then finish compiling the statement that uses the fetched value.
 
 	*/
 
@@ -279,15 +310,15 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		else if (literal_expression->get_type() == BOOL) {
 			// bool types are also easy to write; any nonzero integer is true
 			int bool_expression_as_int;
-			if (literal_expression->get_value() == "True") {
+			if (literal_expression->get_value() == "true") {
 				bool_expression_as_int = 1;
 			}
-			else if (literal_expression->get_value() == "False") {
+			else if (literal_expression->get_value() == "false") {
 				bool_expression_as_int = 0;
 			}
 			else {
-				// if it isn't "True" or "False", throw an error
-				throw CompilerException("Expected 'True' or 'False' as boolean literal value (case matters!)", 0, line_number);
+				// if it isn't "true" or "false", throw an error
+				throw CompilerException("Expected 'true' or 'false' as boolean literal value (case matters!)", 0, line_number);
 			}
 
 			fetch_ss << "\t" << "loada #$" << std::hex << bool_expression_as_int << std::endl;
@@ -318,8 +349,9 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 			fetch_ss << "@db " << string_constant_name << " (" << literal_expression->get_value() << ")" << std::endl;
 
 			// load the A and B registers appropriately
+			fetch_ss << "\t" << "loada " << string_constant_name << std::endl;
 			fetch_ss << "\t" << "loadb #" << string_constant_name << std::endl;
-			fetch_ss << "\t" << "loada #$" << std::hex << literal_expression->get_value().length() << std::endl;
+			fetch_ss << "\t" << "incb" << "\n\t" << "incb" << std::endl;
 		}
 	}
 	else if (to_fetch->get_expression_type() == LVALUE || to_fetch->get_expression_type() == INDEXED) {
@@ -385,9 +417,25 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 
 			// check the scope; we need to do different things for global and local scopes
 			if ((variable_symbol->scope_name == "global") && (variable_symbol->scope_level == 0)) {
+				// const strings operate a little differently than regular strings; they do not use indirect addressing
+				if (is_const && variable_symbol->type == STRING) {
+					/*
+					
+					Const strings can use direct addressing -- 
+						- load the value at the address of the symbol into A
+						- load the address of the symbol into B
+						- increment B by two, to skip the address of the length
+					
+					*/
 
+					fetch_ss << "\t" << "loada " << variable_symbol->name << std::endl;
+					fetch_ss << "\t" << "loadb #" << variable_symbol->name << std::endl;
+					fetch_ss << "\t" << "incb" << "\n\t" << "incb" << std::endl;
+
+					// now we are done; A and B contain the proper information
+				}
 				// all we need to do is use the variable name for globals; however, we need to know the type
-				if (is_dynamic) {
+				else if (is_dynamic) {
 
 					// ensure that the dynamic memory has not been freed
 					if (variable_symbol->freed) {

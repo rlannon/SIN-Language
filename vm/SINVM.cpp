@@ -569,7 +569,10 @@ void SINVM::execute_instruction(uint16_t opcode) {
 				this->allocate_heap_memory();
 			}
 			else if (syscall_number == 0x22) {
-				this->reallocate_heap_memory();
+				this->reallocate_heap_memory();	// reallocates heap memory, returning NULL if the object isn't found
+			}
+			else if (syscall_number == 0x23) {
+				this->reallocate_heap_memory(false);	// reallocates heap memory, creating a new object if one isn't found
 			}
 			// if it is not a valid syscall number, throw an error
 			else {
@@ -1139,23 +1142,24 @@ void SINVM::execute_jmp() {
 
 
 // Stack functions -- these always use register A, so no point in having parameters
-void SINVM::push_stack(int reg_to_push) {
-	// push the current value in "reg_to_pus" (A or B) onto the stack, decrementing the SP (because the stack grows downwards)
+void SINVM::push_stack(uint16_t reg_to_push) {
+	// push the current value in "reg_to_push" (A or B) onto the stack, decrementing the SP (because the stack grows downwards)
 
 	// first, make sure the stack hasn't hit its bottom
 	if (this->SP < _STACK_BOTTOM) {
 		throw VMException("Stack overflow.", this->PC);
 	}
 
-	for (int i = (this->_WORDSIZE / 8); i > 0; i--) {
-		this->memory[SP] = reg_to_push >> ((i - 1) * 8);
+	for (size_t i = (this->_WORDSIZE / 8); i > 0; i--) {
+		uint8_t val = (reg_to_push >> ((i - 1) * 8)) & 0xFF;
+		this->memory[SP] = val;
 		this->SP--;
 	}
 
 	return;
 }
 
-int SINVM::pop_stack() {
+uint16_t SINVM::pop_stack() {
 	// pop the most recently pushed value off the stack; this means we must increment the SP (as the current value pointed to by SP is the one to which we will write next; also, the stack grows downwards so we want to increase the address if we pop something off), and then dereference; this means this area of memory is the next to be written to if we push something onto the stack
 
 	// first, make sure we aren't going beyond the bounds of the stack
@@ -1164,14 +1168,11 @@ int SINVM::pop_stack() {
 	}
 
 	// for each byte in a word, we must increment the stack pointer by one byte (increments BEFORE reading, as the SP points to the next AVAILABLE byte), get the data, shifted over according to what byte number we are on--remember we are reading the data back in little-endian byte order, not big, so we shift BEFORE we add
-	int stack_data = 0;
-	for (int i = 0; i < (this->_WORDSIZE / 8); i++) {
+	uint16_t stack_data = 0;
+	for (size_t i = 0; i < (this->_WORDSIZE / 8); i++) {
 		this->SP++;
 		stack_data += (this->memory[SP] << (i * 8));
 	}
-	// because we have added 1 too few bytes, we must add the dereferenced pointer to stack_data and increment the stack pointer again
-	/*stack_data += this->memory[SP];
-	this->SP++;*/
 
 	// finally, return the stack data
 	return stack_data;
@@ -1258,12 +1259,15 @@ void SINVM::allocate_heap_memory()
 	}
 }
 
-void SINVM::reallocate_heap_memory()
+void SINVM::reallocate_heap_memory(bool error_if_not_found)
 {
 	/*
 	
 	Attempts to reallocate the dynamic object at the location specified by REG_B with the number of bytes in REG_A.
 	If there is room for the new size where the object is currently allocated, then it will leave it where it is and simply change the size in the VM. If not, it will try to find a new place. If it can't reallocate the memory, it will load REG_A and REG_B with 0x00.
+	If the VM cannot find an object at the location specified, it will:
+		- Load the registers with 0x00 and set the D flag if 'error_if_not_found' is true
+		- Allocate a new heap object if 'error_if_not_found' is false
 
 	*/
 	
@@ -1326,9 +1330,15 @@ void SINVM::reallocate_heap_memory()
 		}
 	}
 	else {
-		this->REG_A = 0x00;	// we can't find the object, so set the registers to 0x00
-		this->REG_B = 0x00;
-		this->set_status_flag('D');
+		// depending on our parameter, the SINVM will behave differently -- load registers with NULL vs allocating a new object
+		if (error_if_not_found) {
+			this->REG_A = 0x00;	// we can't find the object, so set the registers to 0x00
+			this->REG_B = 0x00;
+			this->set_status_flag('D');
+		}
+		else {
+			this->allocate_heap_memory();	// allocate heap memory for the object if we can't find it
+		}
 	}
 }
 

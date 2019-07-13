@@ -11,9 +11,7 @@ This class defines the SIN Compiler; given an AST produced by the Parser, will p
 #pragma once
 
 #include <vector>
-#include <list>
 #include <string>
-#include <tuple>
 #include <sstream>
 
 #include "../util/VMMemoryMap.h"	// define where the blocks of memory begin and end in our target VM
@@ -21,6 +19,7 @@ This class defines the SIN Compiler; given an AST produced by the Parser, will p
 #include "SymbolTable.h"	// for our symbol table object
 #include "../assemble/Assembler.h"	// so we can assemble our compiled files into .sinc files
 #include "../util/Exceptions.h"	// so that we can use our custom exceptions
+#include "../util/DataWidths.h"	// for maintainability and avoiding obfuscation, avoid hard coding data widths where possible
 
 
 class Compiler
@@ -46,14 +45,13 @@ class Compiler
 
 	SymbolTable symbol_table;	// create an object for our symbol table
 
-	size_t stack_offset;
+	size_t stack_offset;	// track the offset from the stack frame's base address; this allows us to store local variables in the stack
 
 	size_t current_scope;	// tells us what scope level we are currently in
 	std::string current_scope_name;
 
 	size_t strc_number;	// the next available number for a string constant
 	size_t branch_number;	// the next available number for a branch ID
-
 
 	/* 
 	The following functions returns the type of the expression passed into it once fully evaluated
@@ -62,15 +60,16 @@ class Compiler
 	Type get_expression_data_type(std::shared_ptr<Expression> to_evaluate, bool get_subtype = false);
 	bool is_signed(std::shared_ptr<Expression> to_evaluate, unsigned int line_number = 0);	// we may need to determine whether an expression is signed or not
 
-
-	// Evaluate trees
+	// Evaluate trees -- generate the assembly to represent that evaluation
 	std::stringstream evaluate_binary_tree(Binary bin_exp, unsigned int line_number, size_t max_offset = 0, Type left_type = NONE);
 	std::stringstream evaluate_unary_tree(Unary unary_exp, unsigned int line_number, size_t max_offset = 0);
 
 	std::vector<std::string>* object_file_names;
 	void include_file(Include include_statement);	// add a file to the solution
 
-	std::stringstream fetch_value(std::shared_ptr<Expression> to_fetch, unsigned int line_number = 0, size_t max_offset = 0);	// produces asm code to put the result of the specified expression in A
+	void handle_declaration(Declaration declaration_statement);		// adds the symbol from the Declaration to the symbol table
+
+	std::stringstream fetch_value(std::shared_ptr<Expression> to_fetch, unsigned int line_number, size_t max_offset);	// produces asm code to put the result of the specified expression in A
 
 	std::stringstream move_sp_to_target_address(size_t target_offset, bool preserve_registers = false);
 
@@ -88,8 +87,6 @@ class Compiler
 public:
 	void produce_sina_file(std::string sina_filename, bool include_builtins = true);	// opens a file and calls the actual compilation routine; in a separate function so that we can use recursion
 	std::stringstream compile_to_stringstream(bool include_builtins = true);
-
-	// TODO: add a compiler error class so we can automatically print out error messages with codes and line numbers
 
 	Compiler(std::istream& sin_file, uint8_t _wordsize, std::vector<std::string>* object_file_names, std::vector<std::string>* included_libraries, bool include_builtins = true);	// the compiler is initialized using a file, and it will lex and parse it; the parameter 'include_builtins' will default to 'true', but we will be able to supress it
 	Compiler();

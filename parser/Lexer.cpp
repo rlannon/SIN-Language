@@ -18,13 +18,13 @@ lexeme::lexeme(std::string type, std::string value, int line_number) : type(type
 
 // keywords is an alphabetized list of the keywords in SIN
 // it must be alphabetized in order to use the 'find' algorithm from the standard library
-const std::vector<std::string> Lexer::keywords{ "alloc", "and", "array", "asm", "bool", "catch", "const", "def", "dynamic", "else", "float", "free", "if", "include", "int", "let", "long", "or", "ptr", "raw", "realloc", "return", "short", "sizeof", "static", "string", "struct", "try", "unsigned", "void", "while", "xor"};
+const std::vector<std::string> Lexer::keywords{ "alloc", "and", "array", "asm", "bool", "catch", "const", "decl", "def", "dynamic", "else", "float", "free", "if", "include", "int", "let", "long", "or", "pass", "ptr", "raw", "realloc", "return", "short", "sizeof", "static", "string", "struct", "try", "unsigned", "void", "while", "xor"};
 
 // Our regular expressions
 const std::string Lexer::punc_exp = "[\\.',:;\\[\\]\\{\\}\\(\\)]";	// expression for punctuation
 const std::string Lexer::op_exp = "[\\+\\-\\*/%=\\&\\|\\^<>\\$\\?!@#]";	// expression for operations
 const std::string Lexer::id_exp = "[_0-9a-zA-Z]";	// expression for interior id letters
-const std::string Lexer::bool_exp = "[(True)|(False)]";
+const std::string Lexer::bool_exp = "[(true)|(false)]";
 
 
 // Our stream access and test functions
@@ -173,7 +173,7 @@ bool Lexer::is_op_char(char ch) {
 }
 
 bool Lexer::is_boolean(std::string candidate) {
-	if (candidate == "true" || candidate == "True" || candidate == "False" || candidate == "false") {
+	if (candidate == "true" || candidate == "false") {
 		return true;
 	}
 	else {

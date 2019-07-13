@@ -70,54 +70,60 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 			max_offset += 1;
 		}
 	}
+	else {
+		// By this point, 'left' is not a binary expression; evaluate the left hand side of the tree
+		if (left_exp->get_expression_type() == LVALUE || left_exp->get_expression_type() == INDEXED || left_exp->get_expression_type() == LITERAL || left_exp->get_expression_type() == DEREFERENCED || left_exp->get_expression_type() == VALUE_RETURNING_CALL) {
+			/*
 
-	// By this point, 'left' is not a binary expression; evaluate the left hand side of the tree
-	if (left_exp->get_expression_type() == LVALUE || left_exp->get_expression_type() == INDEXED || left_exp->get_expression_type() == LITERAL || left_exp->get_expression_type() == DEREFERENCED) {
-		bool get_sub = (left_exp->get_expression_type() == INDEXED);
-		left_type = this->get_expression_data_type(bin_exp.get_left(), get_sub);
+			Variables, indexed values, literals, dereferenced values, and value returning functions call be handled with fetch_value
 
-		binary_ss << this->fetch_value(bin_exp.get_left(), line_number, max_offset).str();
+			*/
 
-		if (left_type == STRING) {
-			binary_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;
-			binary_ss << this->move_sp_to_target_address(max_offset).str();
-			binary_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;
-			binary_ss << "\t" << "pha" << "\n\t" << "phb" << std::endl;
-			this->stack_offset += 2;
-			max_offset += 2;
+			left_type = this->get_expression_data_type(bin_exp.get_left(), (left_exp->get_expression_type() == INDEXED));	// get the subtype if the expression is an indexed expression
+
+			binary_ss << this->fetch_value(bin_exp.get_left(), line_number, max_offset).str();	// get the left operand
+
+			if (left_type == STRING) {
+				binary_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;
+				binary_ss << this->move_sp_to_target_address(max_offset).str();
+				binary_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;
+				binary_ss << "\t" << "pha" << "\n\t" << "phb" << std::endl;
+				this->stack_offset += 2;
+				max_offset += 2;
+			}
+			else {
+				binary_ss << "\t" << "tax" << std::endl;
+				binary_ss << this->move_sp_to_target_address(max_offset).str();
+				binary_ss << "\t" << "txa" << std::endl;
+				binary_ss << "\t" << "pha" << std::endl;
+				this->stack_offset += 1;
+				max_offset += 1;
+			}
 		}
-		else {
+		else if (left_exp->get_expression_type() == UNARY) {
+			Unary* unary_operand = dynamic_cast<Unary*>(left_exp);
+
+			left_type = get_expression_data_type(unary_operand->get_operand());
+
+			// signed arithmetic will depend on the evaluation of a unary expression; if there are no unaries, there is no sign
+			// if the quality is "minus", set the "N" flag
+			if (unary_operand->get_operator() == MINUS) {
+				binary_ss << "\t" << "tay" << std::endl;
+				binary_ss << "\t" << "tstatusa" << std::endl;
+				binary_ss << "\t" << "ora #%10000000" << std::endl;
+				binary_ss << "\t" << "tastatus" << std::endl;
+				binary_ss << "\t" << "tya" << std::endl;
+			}
+
+			binary_ss << this->evaluate_unary_tree(*unary_operand, line_number, max_offset).str();
 			binary_ss << "\t" << "tax" << std::endl;
 			binary_ss << this->move_sp_to_target_address(max_offset).str();
 			binary_ss << "\t" << "txa" << std::endl;
 			binary_ss << "\t" << "pha" << std::endl;
+
 			this->stack_offset += 1;
 			max_offset += 1;
 		}
-	}
-	else if (left_exp->get_expression_type() == UNARY) {
-		Unary* unary_operand = dynamic_cast<Unary*>(left_exp);
-
-		left_type = get_expression_data_type(unary_operand->get_operand());
-
-		// signed arithmetic will depend on the evaluation of a unary expression; if there are no unaries, there is no sign
-		// if the quality is "minus", set the "N" flag
-		if (unary_operand->get_operator() == MINUS) {
-			binary_ss << "\t" << "tay" << std::endl;
-			binary_ss << "\t" << "tstatusa" << std::endl;
-			binary_ss << "\t" << "ora #%10000000" << std::endl;
-			binary_ss << "\t" << "tastatus" << std::endl;
-			binary_ss << "\t" << "tya" << std::endl;
-		}
-
-		binary_ss << this->evaluate_unary_tree(*unary_operand, line_number, max_offset).str();
-		binary_ss << "\t" << "tax" << std::endl;
-		binary_ss << this->move_sp_to_target_address(max_offset).str();
-		binary_ss << "\t" << "txa" << std::endl;
-		binary_ss << "\t" << "pha" << std::endl;
-
-		this->stack_offset += 1;
-		max_offset += 1;
 	}
 
 	// Now that we have evaluated the left side, check to see if 'right' is a binary tree; if so, we will do the same thing we did for left
@@ -148,7 +154,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 		Type right_type = this->get_expression_data_type(current_tree.get_right());
 
 		if (right_type == left_type) {
-			if (right_exp->get_expression_type() == LVALUE || right_exp->get_expression_type() == LITERAL || right_exp->get_expression_type() == DEREFERENCED) {
+			if (right_exp->get_expression_type() == LVALUE || right_exp->get_expression_type() == INDEXED ||  right_exp->get_expression_type() == LITERAL || right_exp->get_expression_type() == DEREFERENCED || right_exp->get_expression_type() == VALUE_RETURNING_CALL) {
 				binary_ss << this->fetch_value(bin_exp.get_right(), line_number, max_offset).str();
 			}
 			else if (right_exp->get_expression_type() == UNARY) {
@@ -210,7 +216,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 			// store the length of the string in __INPUT_LEN so we can index the buffer's start address
 			binary_ss << "\t" << "storea __INPUT_LEN" << std::endl;
 
-			// if our left expression is binary, we don't need to do this -- the string data is already in the buffer
+			// if our left expression is binary, we don't need to do this -- the string data is already in the buffer from the evaluation of that tree
 			if (bin_exp.get_left()->get_expression_type() != BINARY) {
 				// copy the left argument into the string buffer
 				binary_ss << "\t" << "phb" << std::endl;	// push the source
@@ -224,6 +230,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 
 			// load A with the length of the last string written and add the address of _STRING_BUFFER_START; this is our destination
 			binary_ss << "\t" << "loada __INPUT_LEN" << std::endl;
+			binary_ss << "\t" << "clc" << std::endl;
 			binary_ss << "\t" << "addca __INPUT_BUFFER_START_ADDR" << std::endl;
 
 			// load B with the source address
@@ -237,6 +244,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 			binary_ss << "\t" << "pha" << std::endl;
 
 			// add that length to the length of the other string, which is in __INPUT_LEN
+			binary_ss << "\t" << "clc" << std::endl;
 			binary_ss << "\t" << "addca __INPUT_LEN" << std::endl;
 			binary_ss << "\t" << "storea __INPUT_LEN" << std::endl;
 
@@ -249,10 +257,14 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 			binary_ss << "\t" << "loada __INPUT_LEN" << std::endl;
 		}
 		else {
+			// todo: update the addition routine to support 32-bit addition as well
+			binary_ss << "\t" << "clc" << std::endl;	// we must clear the carry bit before addition
 			binary_ss << "\t" << "addca b" << std::endl;
 		}
 	}
 	else if (bin_exp.get_operator() == MINUS) {
+		// todo: update the subtraction compilation routine to support 32-bit subtraction
+		binary_ss << "\t" << "sec" << std::endl;	// we must set the carry bit before subtraction or we will get an off-by-one error
 		binary_ss << "\t" << "subca b" << std::endl;
 	}
 	else if (bin_exp.get_operator() == MULT) {
@@ -274,13 +286,20 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 		}
 	}
 	else if (bin_exp.get_operator() == MODULO) {
-		// to get the modulo, simply use a mult instruction and transfer B (the remainder) into A
-		binary_ss << "\t" << "diva b" << std::endl;
+		// to get the modulo, simply use a div instruction and transfer B (the remainder) into A -- use diva/divua depending on whether the operands are signed or not
+		if (this->is_signed(std::make_shared<Binary>(bin_exp), line_number)) {
+			binary_ss << "\t" << "diva b" << std::endl;
+		}
+		else {
+			binary_ss << "\t" << "divua b" << std::endl;
+		}
+
 		binary_ss << "\t" << "tba" << std::endl;
 	}
 	else if (bin_exp.get_operator() == EQUAL) {
 		binary_ss << "\t" << "jsr __builtins_equal" << std::endl;
 	}
+	// todo: modify these in/equality expressions to account for whether the operands are signed or not
 	else if (bin_exp.get_operator() == GREATER) {
 		binary_ss << "\t" << "jsr __builtins_greater" << std::endl;
 	}
@@ -325,10 +344,10 @@ std::stringstream Compiler::evaluate_unary_tree(Unary unary_exp, unsigned int li
 
 		// act according to its data type
 		if (unary_operand->get_type() == BOOL) {
-			if (unary_operand->get_value() == "True") {
+			if (unary_operand->get_value() == "true") {
 				unary_ss << "\tloada #$01" << std::endl;
 			}
-			else if (unary_operand->get_value() == "False") {
+			else if (unary_operand->get_value() == "false") {
 				unary_ss << "\tloada #$00" << std::endl;
 			}
 			else {
@@ -376,6 +395,7 @@ std::stringstream Compiler::evaluate_unary_tree(Unary unary_exp, unsigned int li
 		// the N and Z flags will automatically be set or cleared by the ADDCA instruction
 
 		unary_ss << "\t" << "xora #$FFFF" << std::endl;	// using XOR on A with the value 0xFFFF will flip all bits (0110 XOR 1111 => 1001)
+		unary_ss << "\t" << "clc" << std::endl;
 		unary_ss << "\t" << "addca #$01" << std::endl;	// adding 1 finishes two's complement
 	}
 	else if (unary_exp.get_operator() == NOT) {

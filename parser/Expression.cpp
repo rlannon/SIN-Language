@@ -154,6 +154,29 @@ LValue::LValue() {
 }
 
 
+// Lists
+
+std::vector<std::shared_ptr<Expression>> ListExpression::get_list()
+{
+	return this->list_members;
+}
+
+ListExpression::ListExpression(std::vector<std::shared_ptr<Expression>> list_members) : list_members(list_members)
+{
+	this->expression_type = LIST;
+}
+
+ListExpression::ListExpression() {
+	this->expression_type = LIST;
+	this->list_members = {};
+}
+
+ListExpression::~ListExpression() {
+
+}
+
+
+// Pointers
 
 LValue AddressOf::get_target() {
 	return this->target;

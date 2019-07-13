@@ -28,4 +28,6 @@ A list of all the syscall numbers, which will be updated as the language grows a
 
 	$2x	-	Memory Allocation
 		$20	-	Free memory at location indicated by register B. The VM tracks how many bytes have been reserved starting at various locations
-		$21 -	Allocate A bytes of memory; the B register is loaded with the start address
+		$21 -	Allocate A bytes of memory; the B register is loaded with the start address. If allocation fails, B and A are loaded with 0x00.
+		$22 -	Reallocate the memory at the location indicated by B to use A bytes instead of its old value; the B register is loaded with the new start address. Note that if it is possible to keep the memory at the same location, but increase/decrease the size, the VM will keep the pointer at its current address. If the specified reallocation is not possible, it will load A and B with 0x00.
+		$23	-	Safely re/allocate heap memory; if there is not an object at the specified address, it attempts to create one there. If there is an object there, it attempts to reallocate it.

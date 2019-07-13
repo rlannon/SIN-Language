@@ -14,19 +14,20 @@ The implementation of the SymbolTable class.
 
 // Our SymbolTable object
 
-void SymbolTable::insert(std::string name, Type type, std::string scope_name, size_t scope_level, Type sub_type, std::vector<SymbolQuality> qualities, bool initialized, std::vector<std::shared_ptr<Statement>> formal_parameters, unsigned int line_number)
+void SymbolTable::insert(std::string name, Type type, std::string scope_name, size_t scope_level, Type sub_type, std::vector<SymbolQuality> qualities,
+	bool initialized, std::vector<std::shared_ptr<Statement>> formal_parameters, unsigned int line_number)
 {	
 	if (this->exists_in_scope(name, scope_name, scope_level)) {
 		throw SymbolTableException("'" + name + "'already in symbol table.", line_number);
 	}
 	else {
-		this->symbols.push_back(Symbol(name, type, scope_name, scope_level, sub_type, qualities, initialized, formal_parameters));	// an allocation is NOT a definition
+		this->symbols.push_back(std::make_shared<Symbol>(name, type, scope_name, scope_level, sub_type, qualities, initialized));	// an allocation is NOT a definition
 	}
 }
 
-void SymbolTable::insert(Symbol to_add, unsigned int line_number) {
-	if (this->exists_in_scope(to_add.name, to_add.scope_name, to_add.scope_level)) {
-		throw SymbolTableException("'" + to_add.name + "'already in symbol table.", line_number);
+void SymbolTable::insert(std::shared_ptr<Symbol> to_add, unsigned int line_number) {
+	if (this->exists_in_scope(to_add->name, to_add->scope_name, to_add->scope_level)) {
+		throw SymbolTableException("'" + to_add->name + "'already in symbol table.", line_number);
 	}
 	else {
 		this->symbols.push_back(to_add);	// an allocation is NOT a definition
@@ -53,10 +54,10 @@ void SymbolTable::remove(std::string symbol_name, std::string scope_name, size_t
 
 	*/
 
-	std::vector<Symbol>::iterator symbol_iter = this->symbols.begin();
+	std::vector<std::shared_ptr<Symbol>>::iterator symbol_iter = this->symbols.begin();
 	
 	while (symbol_iter != this->symbols.end()) {
-		if ((symbol_iter->name == symbol_name) && (symbol_iter->scope_name == scope_name) && (symbol_iter->scope_level == scope_level)) {
+		if ((symbol_iter->get()->name == symbol_name) && (symbol_iter->get()->scope_name == scope_name) && (symbol_iter->get()->scope_level == scope_level)) {
 			// remove the symbol, but do not increment the symbol_iter; it now will point to the element after the one we just erased
 			this->symbols.erase(symbol_iter);
 		}
@@ -68,7 +69,7 @@ void SymbolTable::remove(std::string symbol_name, std::string scope_name, size_t
 
 
 
-Symbol* SymbolTable::lookup(std::string symbol_name, std::string scope_name, size_t scope_level)
+std::shared_ptr<Symbol> SymbolTable::lookup(std::string symbol_name, std::string scope_name, size_t scope_level)
 {
 	/*
 	
@@ -78,25 +79,26 @@ Symbol* SymbolTable::lookup(std::string symbol_name, std::string scope_name, siz
 	*/
 	
 	// iterate through our vector
-	std::vector<Symbol>::iterator symbols_iter = this->symbols.begin();
-	Symbol* to_return = nullptr;
+	std::vector<std::shared_ptr<Symbol>>::iterator symbols_iter = this->symbols.begin();
+	std::shared_ptr<Symbol> to_return = nullptr;
 	bool found = false;
 
 	while (symbols_iter != this->symbols.end()) {
+		std::shared_ptr<Symbol> current = *symbols_iter;
 
-		// if our name is in the symbol table
-		if (symbol_name == symbols_iter->name) {
-			// the first time we find a symbol, let to_return point to that element
+		// if our name is in the symbol table in the current scope _or_ in the global scope
+		if (symbol_name == current->name && (scope_name == current->scope_name || current->scope_name == "global")) {
+			// the first time we find a symbol, let to_return point to that element so that we don't dereference a nullptr
 			if (!found) {
 				found = true;
-				to_return = &*symbols_iter;
+				to_return = current;
 			}
 			else {
 				// only add matches where the scope name is the scope name supplied, or it is in the lowest global scope if we aren't looking in global
-				if ((symbols_iter->scope_name == scope_name) || (symbols_iter->scope_name == "global" && symbols_iter->scope_level == 0)) {
+				if ((current->scope_name == scope_name) || (current->scope_name == "global" && current->scope_level == 0)) {
 					// now, check to see if the current symbol is in a higher scope than to_return; we want the variable declared most recently
-					if (symbols_iter->scope_level > to_return->scope_level) {
-						to_return = &*symbols_iter;	// to_return should not point to that symbol
+					if (current->scope_level > to_return->scope_level) {
+						to_return = current;	// to_return should not point to that symbol
 					}
 				}
 			}
@@ -124,11 +126,12 @@ bool SymbolTable::is_in_symbol_table(std::string symbol_name, std::string scope_
 	
 	// iterate through our vector
 	bool found = false;
-	std::vector<Symbol>::iterator iter = this->symbols.begin();
+	std::vector<std::shared_ptr<Symbol>>::iterator iter = this->symbols.begin();
 
 	while ((iter != this->symbols.end()) && !found) {
 		// if we have an entry in the same scope of the same name, or if it is a static global symbol
-		if ((symbol_name == iter->name) && ((scope_name == iter->scope_name) || (iter->scope_name == "global" && iter->scope_level == 0))) {
+		if ((symbol_name == iter->get()->name) && ((scope_name == iter->get()->scope_name) || (iter->get()->scope_name == "global"
+				&& iter->get()->scope_level == 0))) {
 			found = true;	// set our 'found' flag to true
 		} else {
 			iter++;	// increment the iterator
@@ -148,11 +151,11 @@ bool SymbolTable::exists_in_scope(std::string symbol_name, std::string scope_nam
 	*/
 	
 	bool found = false;
-	std::vector<Symbol>::iterator iter = this->symbols.begin();
+	std::vector<std::shared_ptr<Symbol>>::iterator iter = this->symbols.begin();
 
 	while ((iter != this->symbols.end()) && !found) {
 		// check to see if the symbol names, scopes, and levels match
-		if (iter->name == symbol_name && iter->scope_name == scope_name && iter->scope_level == scope_level) {
+		if (iter->get()->name == symbol_name && iter->get()->scope_name == scope_name && iter->get()->scope_level == scope_level) {
 			found = true;
 		}
 		else {

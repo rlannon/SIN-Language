@@ -41,12 +41,19 @@ void compiler_warning(std::string message, unsigned int line = 0);
 
 class ParserException : public std::exception
 {
+protected:
 	std::string message_;
 	unsigned int code_;
 	unsigned int line_;
 public:
 	explicit ParserException(const std::string& message, const unsigned int& code, const unsigned int& line = 0);
 	virtual const char* what() const noexcept;
+};
+
+class MissingSemicolonError : public ParserException
+{
+public:
+	explicit MissingSemicolonError(const unsigned int& line = 0);
 };
 
 // like in the compiler, we sometimes want to print warnings without stopping parsing

@@ -14,6 +14,8 @@ The definition of the "Symbol" object, used in the Compiler's Symbol Table. Symb
 	- Whether the symbol has been freed (used for dynamic memory and garbage collection)
 	- The symbol's quality (Const, Dynamic, Static...)
 	- The offset from the start of the current scope's stack frame whether the symbol occurs; used for determining where local variables are stored
+
+The definition of the "FunctionSymbol" object, which contains:
 	- Formal parameters, if the symbol is a function
 
 */
@@ -29,13 +31,15 @@ The definition of the "Symbol" object, used in the Compiler's Symbol Table. Symb
 
 
 
-typedef struct Symbol
+struct Symbol
 {
 	/*
 
-	A struct to contain our Symbol data; this contains the variable's name, type, scope level, whether it is defined, its stack offset (if a local variable), and, if it is a function, a vector of Statements containing that symbol's formal parameters
+	A struct to contain our Symbol data; this contains the variable's name, type, scope level, whether it is defined, its stack offset (if a local variable)
 
 	*/
+
+	SymbolType symbol_type;
 
 	std::string name;	// the name of the variable / function
 	Type type;	// the variable type (for functions, the return type)
@@ -51,13 +55,28 @@ typedef struct Symbol
 
 	size_t stack_offset;	// used for local symbols to determine the offset (in words) from the initial address of the SP
 
-	// TODO: use struct inheritance so these are only members of FunctionSymbol, ArraySymbol, and StructSymbol?
-	std::vector<std::shared_ptr<Statement>> formal_parameters;	// used only for function symbols
 	size_t array_length;	// used only for arrays; contains the size of the array
 	std::string struct_name;	// used only for structs; contains the name of the struct
 
 	// constructor/destructor
-	Symbol(std::string name, Type type, std::string scope_name, size_t scope_level, Type sub_type = NONE, std::vector<SymbolQuality> quality = {}, bool defined = false, std::vector<std::shared_ptr<Statement>> formal_parameters = {}, size_t array_length = 0, std::string struct_name = "");
+	Symbol(std::string name, Type type, std::string scope_name, size_t scope_level, Type sub_type = NONE, std::vector<SymbolQuality> quality = {}, bool defined = false, size_t array_length = 0, std::string struct_name = "");
 	Symbol();
-	~Symbol();
+	virtual ~Symbol();
+};
+
+struct FunctionSymbol : public Symbol
+{
+	/*
+	
+	Function symbols also contain the formal parameters for the function, as a vector of Statement objects
+
+	*/
+	
+	std::vector<std::shared_ptr<Statement>> formal_parameters;
+
+	FunctionSymbol(std::string name, Type type, std::string scope_name, size_t scope_level, Type sub_type = NONE, std::vector<SymbolQuality> quality = {},
+		size_t array_length = 0, std::vector<std::shared_ptr<Statement>> formal_parameters = {});
+	FunctionSymbol(Symbol base_symbol, std::vector<std::shared_ptr<Statement>> formal_parameters);
+	FunctionSymbol();
+	~FunctionSymbol();
 };

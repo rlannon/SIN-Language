@@ -10,7 +10,7 @@ This project is a hands-on way of learning how parsers, compilers, and interpret
 
 ### Installation / Build
 
-There are currently no working binaries for the toolchain; you must compile and build it yourself.
+There are currently no working binaries for the toolchain; you must compile and build it yourself. Note that the program has only been built and debugged on Windows 10 using Microsoft Visual Studio 17; because of this, *NIX and OSX builds may face compilation issues due to differences between GCC and Visual Studio.
 
 ### Using SIN
 
@@ -23,5 +23,3 @@ I hope to use this project as a stepping stone to develop other language and exp
 * Compiler optimizations
 * Support for more target architectures
 * Debugging support
-* Better error-checking algorithms in the parser
-* Guards against multiple inclusion

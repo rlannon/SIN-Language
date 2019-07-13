@@ -281,7 +281,7 @@ void Assembler::construct_symbol_table() {
 				}
 
 				// next, skip ahead in our byte count by the wordsize (in bytes)
-				int offset = (this->_WORDSIZE / 8);	// _WORDSIZE / 8 is the number of bytes to offset
+				size_t offset = (this->_WORDSIZE / 8);	// _WORDSIZE / 8 is the number of bytes to offset
 				this->current_byte += offset;
 
 				continue;
@@ -414,17 +414,14 @@ void Assembler::construct_symbol_table() {
 					constant_data += *it;
 					constant_data += " ";	// spaces were removed, as they are the delimiter
 				}
+
 				// we need to remove the parens now -- we also added one too many spaces, so remove them
 				constant_data = constant_data.substr(1, constant_data.size() - 3);
 				
 				// add the constant to the data table
 				// if it is a number, we will use stoi
 				try {
-					int number_base = 10;
-
-					if (constant_data[0] == '#') {
-						constant_data.erase(0, 1);
-					}
+					short int number_base = 10;
 
 					if (constant_data[0] == '$') {
 						number_base = 16;
@@ -435,7 +432,7 @@ void Assembler::construct_symbol_table() {
 						constant_data.erase(0, 1);
 					}
 
-					int value = std::stoi(constant_data, nullptr, number_base);
+					unsigned int value = std::stoi(constant_data, nullptr, number_base);
 					std::vector<uint8_t> data_array;
 					for (size_t i = (this->_WORDSIZE / 8); i > 0; i--) {
 						uint8_t to_add = value >> ((i - 1) * 8);
@@ -445,7 +442,13 @@ void Assembler::construct_symbol_table() {
 				}
 				// if we can't use stoi, just push back the ASCII-encoded bytes
 				catch (std::exception& e) {
-					std::vector<uint8_t> data_array;
+					// first, get the length of the string
+					size_t str_len = constant_data.length();
+
+					// get the properly ordered big-endian bytes and create our data vector with them at the front
+					uint8_t len_bytes[2] = { ((uint8_t)str_len >> 8) & 0xFF, (uint8_t)str_len & 0xFF };
+					std::vector<uint8_t> data_array = { len_bytes[0], len_bytes[1] };
+
 					for (std::string::iterator it = constant_data.begin(); it != constant_data.end(); it++) {
 						data_array.push_back(*it);
 					}
@@ -453,15 +456,9 @@ void Assembler::construct_symbol_table() {
 				}
 
 				// add it to the symbol table as well so we can reference it from other files; we will not give its address, as it will live in the _DATA section and so its address will be unknown to us until link time
-				//this->symbol_table.push_back(std::make_tuple(macro_name, 0, "C"));
 				this->symbol_table.push_back(AssemblerSymbol(macro_name, 0, (this->_WORDSIZE / 8), C));
 			}
 		}
-		//// if it's not a label, directive, or mnemonic, but it isalpha(), then it must be a macro
-		//else if (isalpha(line_data[0]) || (line_data[0] == '_')) {
-		//	// macros skipped in pass 1
-		//	continue;
-		//}
 		// everything else will be skipped in pass 1
 		else {
 			continue;

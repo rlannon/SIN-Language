@@ -5,6 +5,177 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+7/1 commit to Compiler
+
+- Added support for initializer lists for arrays
+- Removed "Interpreter" class, as it was very out-of-date and poorly-written
+- Added a routine in the Compiler::get_expression_data_type function to get the type of a List expression and validate that the list is homogeneous
+- sizeof expressions now use angle brackets instead of parens (e.g., 'sizeof<int>'); this is because sizeof should not be thought of as a function, but as a keyword, and angle brackets are therefore more appropriate.
+- Moved many function implementations for the Parser class from Parser.cpp to ParserUtil.cpp, as they are more appropriately placed there
+- Minor code and comment fixes
+
+--------------------------------------------------------------------------------------------
+
+5/21 commit to Compiler
+
+- Assembler now puts the length of const strings before the string data when the @db directive is used
+- Modified how string constants and const strings are fetched in Compiler::fetch_value(...) to reflect the new structure of how constants are allocated in program memory with @db directive
+- Modified how const variables are initialized in the global scope; they may not be initialized with pointers and the values that are used to initialize constants must be able to be determined at compile time
+	- Note local variables currently are only allowed to be initialized with constants
+- Modified how strings are pushed to functions so that they only take up one word -- rather than pushing the length and address, it only pushes the address
+- Modified the 'builtins' library so this new string parameter handling is supported
+- Changed boolean constants from 'True' and 'False' to 'true' and 'false' (from Python style to C style)
+- Moved some functions into a 'CompilerUtilites.cpp' file for organization purposes
+- Modified 'builtins-sinasm16.sina' to use a constant address for the input length -- this allows us to return the address of _INPUT_LEN as the string start
+
+--------------------------------------------------------------------------------------------
+
+5/5 commit to Compiler
+
+- Added support for postfixed symbol qualities, using the following syntax:
+	alloc/decl <type> <name> &<quality>
+	alloc/decl <type> <name>: <expression> &<quality>
+- Continuing process of breaking the Parser implementation into multiple files
+- Added a function to the Parser to get the appropriate SymbolQuality given a lexeme
+- Added a function to the Parser to generate a vector<SymbolQuality> when the qualities given are postfixed
+- A bug was discovered in const data members (particularly strings) due to the generated assembly. An assembler overhaul is long due and this issue will be revised (at least partially) in the process.
+	
+--------------------------------------------------------------------------------------------
+
+5/4 commit to Compiler
+
+- Modified 'Symbol':
+	- No longer uses 'typedef struct'; it is simply a struct
+	- Removed formal_parameters
+- Added 'FunctionSymbol':
+	- Child of 'Symbol'
+	- Has a formal_parameters member
+
+	Note polymorphism is being used because it simply doesn't make sense for every variable to have a member 'formal_parameters'. Polymorphism will also be used as such when it comes time to implement structs; there will be a StructSymbol class to contain the appropriate data about a particular struct type
+
+- As such, the SymbolTable class was modified for the newly added polymorphism. Table members are now shared_ptr objects
+- Added an enum 'SymbolType', and 'Symbol' now contains a member of such type; it is similar to stmt_type and exp_type in that it allow us to make distinctions between the various types of Symbols, so we can behave appropriately based on the type of Symbol we have
+- Because the symbol table now contains shared_ptr instead of Symbol, all insert and lookup references had to be modified to accomodate
+- Function definitions now use the new 'get_type(...)' method in the Parser, rather than the naive single-lexeme type approach
+- The 'Definition' class was modified for the new approach; it now contains and vector of 'SymbolQuality' called 'qualities', as well as a subtype and the appropriate methods to fetch those members and the appropriate modifications to the constructor
+- FunctionSymbol now contains the appropriate qualities and subtype for the function symbol due to the modifications to the Definition class
+
+--------------------------------------------------------------------------------------------
+
+5/3 commit to Compiler
+
+- Added a void function 'Compiler::handle_declaration(...)' to add the symbol declared by the 'decl' keyword to the symbol table
+- Added support for initial values in decl statements in the Parser. Note that initial values will be _ignored_ unless they are for default function parameters, so they should not be used in decl statements. In the implementation of the function, the default parameter syntax can then be ignored, as this value only matters for when the function is called (this is assuming that function will not be called in the implementation file with default parameters)
+	- For this case, added 'bool is_function_parameter = false' to 'parse_statement' and 'parse_declaration'; if this is _false_, the parser will generate an error for alloc-assign syntax in decl statements outside of function parameters
+- Modified 'Compiler::call(...)' so that formal parameters are casted to the proper type (if they are allocations, cast to Allocation*; if they are declarations, cast to Declaration*)
+- Moved functions to generate the asm for assignment functions to their own implementation file 'Assign.cpp'
+- General maintenance including removing unused headers, updating comments, etc.
+
+--------------------------------------------------------------------------------------------
+
+5/2 commit to Compiler
+
+- Moved implementations of functions to parse statements and expressions into their own respective files, 'ParseExpression.cpp' and 'ParseStatement.cpp'
+
+--------------------------------------------------------------------------------------------
+
+4/30 commit to Compiler
+
+- Added 'DECLARATION' to enumerated type 'stmt_type'
+- Added and implemented 'Declaration' as a child class of 'Statement'; this is to be used to add header-like functionality into SIN (allowing symbols to be added to a file's symbol table without a corresponding implementation -- this allows the implementation of such symbols to be located in compiled SIN files).
+- Added a function 'Parser::get_type()' that returns an instance of the struct TypeData, which keeps track of the type, subtype, array size, and qualities of a variable.
+- Parser::parse_allocation(...) now uses the newly added Parser::get_type() function to get the data type of the allocated variable. This resulted in large code refactorings.
+- Added a 'MissingSemicolonError' exception, inherited from 'ParserException'; this is used by the Parser for missing semicolon errors, because they appear fairly frequently in the source (the only parameter is the line number). This required making members of 'ParserException' protected instead of private
+
+--------------------------------------------------------------------------------------------
+
+4/29 commit to VM
+
+- Expanded the ALU class, implementing the DIV instructions
+- Added an "undefined" flag in the STATUS register to signal the result of an expression is undefined (e.g., if a division by zero is attempted)
+- Added and began implementation of an 'Interrupt' flag in the STATUS register; this may be eliminated/replaced in future if it does not get used
+- Updated some occurrences of 'int' in the SINVM to 'uint16_t' (built-in 'int' type is not necessary for the VM, as it is a 16-bit machine and unsigned values are represented with two's complement in a 16-bit word)
+
+--------------------------------------------------------------------------------------------
+
+4/7 commit to VM
+
+- Began splitting the SINVM's implementation across multiple source files for organization purposes
+- Added SINVM_INT_MIN and SINVM_INT_MAX constants, for future use in the compiler
+- Previously, SINVM exceptions did not display the hexadecimal prefix (0x) before the address of the PC when the exception occurred; this has been modified
+- Added a StatusConstants namespace to contain numeric constants for the various bit positions of the flags in the STATUS register
+- All bit-manipulation functions in the VM now throw exceptions if the function is called using an invalid flag
+- Added an ALU class, to be used by the SINVM for all mathematical and logical functionality
+- Updated the addition, subtraction, multiplication, and division algorithms to use the N, V, Z, and C flags appropriately
+- ADDCA and SUBCA actually /use/ the carry now, unlike before:
+	- The carry flag (C) is _always_ used in these instructions, so it is necessary to clear/set (addition/subtraction, respectively) before operations that do not want to take a carry or borrow operation into account; when working with 32-bit integers (instead of 16), this is only done once. However, since 32-bit addition and subtraction have not been implemented in the compiler, this is a moot point for now
+- Modified all occurrences of the ADDCA and SUBCA instructions to include appropriate CLC/SEC instruction
+
+--------------------------------------------------------------------------------------------
+
+4/4 commit to Compiler
+
+- Fixed a bug that would cause errors in the parser if the block in a while statement was empty; this was the same problem faced in empty if/else blocks, and has been resolved
+- Empty statement blocks in loops or conditions generate compiler warnings
+- Fixed a bug that would cause stack corruption in while loops; a single call to Compiler::fetch_value(...) did not pass max_offset as a parameter, which caused the fetch_value function to think the max offset was 0 when it may have been higher. This caused the compiler to fetch and assign values to incorrect places in while loops, which caused data corruption. This has been amended by passing max_offset to fetch_value
+- Removed some checks for max_offset's validity in the Compiler::compile_to_sinasm(...) function; since it is no longer a pointer, but rather a value, we don't need to check to see if it is a nullptr
+- Added a way to initialize an empty statement of type STATEMENT_GENERAL
+- Added a "pass" statement to the language; these will not be turned into any code by the compiler, and is equivalent to a NOOP in assembly or a pass statement in Python. The compiler will generate a warning if it finds any empty statements, so putting pass statements in a program will cause compiler warnings (but not errors)
+- 'unsigned int line_number' and 'size_t max_offset' are no longer default parameters in the Compiler::fetch_value(...) function. The call to fetch_value in Compiler::return_value(...) passes in 0, as it passed in nothing before. This may be changed in the future if it ends up causing problems
+- Updated the SINVM::push_stack(...) and SINVM::pop_stack() functions; updated data types (from int to size_t or uint16_t) and cleaned up the data writing functions in order to make it easier to understand how they work. These functions may be updated so that reading from a location in the stack can be understood in big-endian format, rather than little endian. For example:
+		$23FF: $04
+		$23FE: $00
+	Pulling from the stack will cause no problem; it creates a word ($23FF)($23FE); if you try to do something like
+		loada $23FE
+	or
+		loada $23FF
+	there will be an error; the former will reverse the bytes, as it will create a byte ($23FE)($23FF), which is backwards from how a pull instruction does it; the latter will try to create a word using ($23FF)($2400)
+	The reason it works as it currently does it due to the fact that the stack grows downwards.
+
+--------------------------------------------------------------------------------------------
+
+4/1 commit to Compiler
+
+- String concatenation with string array indexing is now supported. Previously, there was no check in the tree evaluation for the right side to allow for indexed expressions, so the right value was never fetched. This resulted in a concatenation of the first value onto itself, as the register values were never updated. This has been resolved.
+- Local strings can now be indexed in addition to globals.
+
+--------------------------------------------------------------------------------------------
+
+3/30 commit to Compiler
+
+- Added support for string arrays in both local and global scopes
+- Added a "safe reallocation" syscall in the SINVM that will allocate a new dynamic object if it cannot find the dynamic object specified; this is used in string arrays, but nothing else at this point
+
+--------------------------------------------------------------------------------------------
+
+3/29 commit to Compiler
+
+- Updated README.md
+- Removed some TODO comments that have already been addressed (or are otherwise no longer necessary) and updated some other existing ones
+- Added "DataWidths.h", to allow references to the widths of different data types (in bytes) without hard-coding them; this makes the code more maintainable and more readable
+- Updated the Compiler::string_assignment(...) function to modify stack offsets properly; previously, it was not adjusting the stack offset after calling __builtins_memcpy, which makes three pulls from the stack. As such, the compiler _thought_ the offset was three greater than it actually was, resulting in stack underflows when the .sml file was executed. This has been fixed.
+- Fixed many bugs in Compiler::move_sp_to_target_address(...):
+	- Fixed a typo that moved the stack pointer to A, adjusted it, and then failed to move it back, resulting in the stack pointer never being moved, which caused corruption with local variables. This has been fixed.
+	- One of the conditions in the aforementioned function did not update the stack offset, which resulted in further stack data corruption. This has been fixed.
+	- When the difference between locations the SP needs to move is more than three words, it uses the TSPA/ADDCA/TASP instructions; there were a few issues with the way this was being done before:
+		- It was previously moving the SP by _bytes_ when it should have been moving it by _words_, which resulted in stack data corruption. This has been resolved.
+		- It was adding and subtracting incorrectly -- although we were using INCSP and DECSP correctly, we were inverting the uses of ADDCA and SUBCA. This has been resolved
+
+--------------------------------------------------------------------------------------------
+
+3/27 commit to Compiler
+
+- Fixed a parser bug that caused the program to crash when a value returning function call was used as a part of another expression (not in all cases, but some, particularly when the call was followed by an operator). This was due to the value returning expression being returned without being passed into the maybe_binary function, as all expressions are supposed to. This change fixed the issue.
+- Fixed a bug in parsing if/else statements that caused bugs when one of the blocks was empty. This has been resolved through skipping closing curly braces only if the statement was not empty; otherwise, we eat through one too many tokens and get errors
+- Added stack fixes into function calls for default arguments
+- Fixed a bug in the SymbolTable::lookup(...) function that returned wrong symbols; if the symbol was found in a different scope, it might return it, which is incorrect (unless that scope is global). The first check (that avoids dereferencing a nullptr) was modified so that it checks to see if the symbol name and scope are the same, or if the symbol is in the global scope
+- Added stack tracking fixes in the string assignment function; the compiler now tracks where it should be in the stack as it does it (as it should) rather than updating it all at the end. Because the stack is used for it, the tracking mechanisms must be updated
+- ITE statements can now evaluate binary conditions (instead of literals and unaries only)
+- Added a fix to assignments through pointer dereferencing; the compiler previously attempted to fetch a dereferenced value twice, which resulted in any assignments to a dereferenced value becoming corrupted--rather than assigning the appropriate value, it would fetch the target address and then write that. This has been fixed; pointers (at least through two levels of dereferencing) work properly.
+	- Note, however, that if an _initial_ assignment is made through a pointer, it does not mark the variable being pointed to as defined, so references to it will generate compiler errors.
+
+--------------------------------------------------------------------------------------------
+
 3/21 commit to Compiler
 
 - Implemented default parameters in function definitions. Like C, they must be declared last, and all parameters are assigned as declared. That is to say, if you have three default arguments, and you pass in 2, it will assign the first two parameters and the third will be the default

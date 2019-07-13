@@ -39,6 +39,7 @@ public:
 	void set_line_number(unsigned int line_number);
 
 	Statement();
+	Statement(stmt_type statement_type, unsigned int line_number);
 	virtual ~Statement();
 };
 
@@ -58,6 +59,51 @@ public:
 	std::string get_filename();
 	Include(std::string filename);
 	Include();
+};
+
+class Declaration : public Statement
+{
+	/*
+	
+	When we want to add a symbol to our symbol table, but not include an implementation of that symbol, the 'decl' keyword is used; e.g.,
+		decl int myInt;	<- declares an integer variable 'myInt'
+		decl int length(alloc string to_get);	<- declares a function called 'length'
+	
+	This allows a program to add symbols to its table without the implementation of those symbols; they can be added to the executable file at link time.
+	This is useful for compiled libraries, removing the requirement of compiling said library every time a project using it is compiled.
+	
+	*/
+
+	Type data_type;	// the data type of the symbol
+	Type subtype;	// the subtype of the data
+	bool function_definition;	// whether it's the declaration of a function
+	bool struct_definition;	// whether it's the declaration of a struct
+
+	std::string var_name;
+
+	size_t array_length;
+	std::vector<SymbolQuality> qualities;
+
+	std::shared_ptr<Expression> initial_value;
+	std::vector<std::shared_ptr<Statement>> formal_parameters;
+public:
+	std::string get_var_name();
+
+	Type get_data_type();
+	Type get_subtype();
+	bool is_function();
+	bool is_struct();
+
+	size_t get_length();
+	std::vector<SymbolQuality> get_qualities();
+
+	std::shared_ptr<Expression> get_initial_value();
+	std::vector<std::shared_ptr<Statement>> get_formal_parameters();
+
+	Declaration(Type data_type, std::string var_name, Type subtype = NONE, size_t array_length = 0, std::vector<SymbolQuality> qualities = {},
+		std::shared_ptr<Expression> initial_value = std::make_shared<Expression>(EXPRESSION_GENERAL), bool is_function = false, bool is_struct = false,
+		std::vector<std::shared_ptr<Statement>> formal_parameters = {});
+	Declaration();
 };
 
 class Allocation : public Statement
@@ -97,7 +143,7 @@ class Allocation : public Statement
 
 	std::shared_ptr<LValue> struct_name;	// structs will require a name
 
-	std::shared_ptr<Expression> initial_value;
+	std::shared_ptr<Expression> initial_value;	// todo: use the parser to expand allocations with initial values into two statements
 public:
 	Type get_var_type();
 	Type get_var_subtype();
@@ -170,19 +216,23 @@ public:
 
 class Definition : public Statement
 {
-	std::shared_ptr<Expression> name;
+	std::shared_ptr<Expression> name;	// todo: why are function names Expressions but names in allocations are strings?
+	std::vector<SymbolQuality> qualities;
 	Type return_type;
+	Type return_subtype;
 	std::vector<std::shared_ptr<Statement>> args;
 	std::shared_ptr<StatementBlock> procedure;
 
 	// TODO: add function qualities? currently, definitions just put "none" for the symbol's quality
 public:
 	std::shared_ptr<Expression> get_name();
+	std::vector<SymbolQuality> get_qualities();
 	Type get_return_type();
+	Type get_return_subtype();
 	std::shared_ptr<StatementBlock> get_procedure();
 	std::vector<std::shared_ptr<Statement>> get_args();
 
-	Definition(std::shared_ptr<Expression> name_ptr, Type return_type_ptr, std::vector<std::shared_ptr<Statement>> args_ptr, std::shared_ptr<StatementBlock> procedure_ptr);
+	Definition(std::shared_ptr<Expression> name_ptr, Type return_type, Type return_subtype, std::vector<SymbolQuality> qualities, std::vector<std::shared_ptr<Statement>> args_ptr, std::shared_ptr<StatementBlock> procedure_ptr);
 	Definition();
 };
 
