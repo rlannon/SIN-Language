@@ -335,7 +335,7 @@ std::list<AssemblerSymbol>* SinObjectFile::get_symbol_table()
 	return &this->symbol_table;
 }
 
-std::list<std::tuple<std::string, int, std::vector<uint8_t>>>* SinObjectFile::get_data_table()
+std::list<std::tuple<std::string, size_t, std::vector<uint8_t>>>* SinObjectFile::get_data_table()
 {
 	return &this->data_table;
 }

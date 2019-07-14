@@ -54,9 +54,9 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 		binary_ss << this->evaluate_binary_tree(*left_op, line_number, max_offset, left_type).str();
 
 		if (left_type == STRING) {
-			binary_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;
+			binary_ss << "\t" << "tax" << "\n\t" << "tby" << std::endl;
 			binary_ss << this->move_sp_to_target_address(max_offset).str();
-			binary_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;
+			binary_ss << "\t" << "tyb" << "\n\t" << "txa" << std::endl;
 			binary_ss << "\t" << "pha" << "\n\t" << "phb" << std::endl;
 			this->stack_offset += 2;
 			max_offset += 2;
@@ -84,9 +84,9 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 			binary_ss << this->fetch_value(bin_exp.get_left(), line_number, max_offset).str();	// get the left operand
 
 			if (left_type == STRING) {
-				binary_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;
+				binary_ss << "\t" << "tax" << "\n\t" << "tby" << std::endl;
 				binary_ss << this->move_sp_to_target_address(max_offset).str();
-				binary_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;
+				binary_ss << "\t" << "tyb" << "\n\t" << "txa" << std::endl;
 				binary_ss << "\t" << "pha" << "\n\t" << "phb" << std::endl;
 				this->stack_offset += 2;
 				max_offset += 2;
@@ -178,7 +178,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 				// left side goes in A, right side goes in B
 				binary_ss << "\t" << "tax" << std::endl;	// protect the value in A
 				binary_ss << this->move_sp_to_target_address(max_offset).str();	// move to the end of the stack frame so we can pull properly
-				binary_ss << "\t" << "txa" << "\n\t" << "tab" << std::endl;	// get the right side in B
+				binary_ss << "\t" << "txb" << std::endl;	// get the right side in B
 				binary_ss << "\t" << "pla" << std::endl;
 				this->stack_offset -= 1;
 				max_offset -= 1;
@@ -188,16 +188,6 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 		else {
 			throw CompilerException("Types in binary expression do not match!", 0, line_number);
 		}
-	}
-
-	// set STATUS bits accordingly
-	if (left_type == FLOAT) {
-		binary_ss << "\n\t" << "; Set 'float' bit in STATUS" << std::endl;
-		binary_ss << "\t" << "tay" << std::endl;
-		binary_ss << "\t" << "tstatusa" << std::endl;
-		binary_ss << "\t" << "ora #%00000100" << std::endl;	// set the F bit in STATUS
-		binary_ss << "\t" << "tastatus" << std::endl;
-		binary_ss << "\t" << "tya" << std::endl << std::endl;
 	}
 
 	// now, we can perform the specified operation on the two operands
@@ -257,35 +247,59 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 			binary_ss << "\t" << "loada __INPUT_LEN" << std::endl;
 		}
 		else {
-			// todo: update the addition routine to support 32-bit addition as well
-			binary_ss << "\t" << "clc" << std::endl;	// we must clear the carry bit before addition
-			binary_ss << "\t" << "addca b" << std::endl;
+			// floats use different instructions
+			if (left_type == FLOAT) {
+				// binary_ss << "\t" << "clc" << std::endl;	// todo: do we need a CLC for floating-point arithmetic?
+				binary_ss << "\t" << "fadda b" << std::endl;	// floats use the FADDA instruction, not ADDCA
+			}
+			else {
+				// todo: update the addition routine to support 32-bit addition as well
+				binary_ss << "\t" << "clc" << std::endl;	// we must clear the carry bit before addition
+				binary_ss << "\t" << "addca b" << std::endl;
+			}
 		}
 	}
 	else if (bin_exp.get_operator() == MINUS) {
-		// todo: update the subtraction compilation routine to support 32-bit subtraction
-		binary_ss << "\t" << "sec" << std::endl;	// we must set the carry bit before subtraction or we will get an off-by-one error
-		binary_ss << "\t" << "subca b" << std::endl;
-	}
-	else if (bin_exp.get_operator() == MULT) {
-		// if we have _signed numbers_, use MULTA; otherwise use MULTUA
-		if (this->is_signed(std::make_shared<Binary>(bin_exp), line_number)) {
-			binary_ss << "\t" << "multa b" << std::endl;
+		if (left_type == FLOAT) {
+			// todo: do we need to set the carry on floating-point subtraction?
+			binary_ss << "\t" << "fsuba b" << std::endl;
 		}
 		else {
-			binary_ss << "\t" << "multua b" << std::endl;
+			// todo: update the subtraction compilation routine to support 32-bit subtraction
+			binary_ss << "\t" << "sec" << std::endl;	// we must set the carry bit before subtraction or we will get an off-by-one error
+			binary_ss << "\t" << "subca b" << std::endl;
+		}
+	}
+	else if (bin_exp.get_operator() == MULT) {
+		if (left_type == FLOAT) {
+			binary_ss << "\t" << "fmulta b" << std::endl;
+		}
+		else {
+			// if we have _signed numbers_, use MULTA; otherwise use MULTUA
+			if (this->is_signed(std::make_shared<Binary>(bin_exp), line_number)) {
+				binary_ss << "\t" << "multa b" << std::endl;
+			}
+			else {
+				binary_ss << "\t" << "multua b" << std::endl;
+			}
 		}
 	}
 	else if (bin_exp.get_operator() == DIV) {
-		// if we have signed numbers, use DIVA; otherwise, use DIVUA
-		if (this->is_signed(std::make_shared<Binary>(bin_exp), line_number)) {
-			binary_ss << "\t" << "diva b" << std::endl;
+		if (left_type == FLOAT) {
+			binary_ss << "\t" << "fdiva b" << std::endl;
 		}
 		else {
-			binary_ss << "\t" << "divua b" << std::endl;
+			// if we have signed numbers, use DIVA; otherwise, use DIVUA
+			if (this->is_signed(std::make_shared<Binary>(bin_exp), line_number)) {
+				binary_ss << "\t" << "diva b" << std::endl;
+			}
+			else {
+				binary_ss << "\t" << "divua b" << std::endl;
+			}
 		}
 	}
 	else if (bin_exp.get_operator() == MODULO) {
+		// todo: floating-point modulo
 		// to get the modulo, simply use a div instruction and transfer B (the remainder) into A -- use diva/divua depending on whether the operands are signed or not
 		if (this->is_signed(std::make_shared<Binary>(bin_exp), line_number)) {
 			binary_ss << "\t" << "diva b" << std::endl;
@@ -337,13 +351,16 @@ std::stringstream Compiler::evaluate_unary_tree(Unary unary_exp, unsigned int li
 
 	*/
 
+	Type unary_operand_type;
+
 	// First, we need the fetch the operand and load it into register A -- how we do this depends on the type of expression in our unary
 	if (unary_exp.get_operand()->get_expression_type() == LITERAL) {
 		// cast the operand to a literal type
 		Literal* unary_operand = dynamic_cast<Literal*>(unary_exp.get_operand().get());
+		unary_operand_type = unary_operand->get_type();
 
 		// act according to its data type
-		if (unary_operand->get_type() == BOOL) {
+		if (unary_operand_type == BOOL) {
 			if (unary_operand->get_value() == "true") {
 				unary_ss << "\tloada #$01" << std::endl;
 			}
@@ -354,13 +371,20 @@ std::stringstream Compiler::evaluate_unary_tree(Unary unary_exp, unsigned int li
 				throw CompilerException("Invalid boolean literal value.", 0, line_number);
 			}
 		}
-		else if (unary_operand->get_type() == INT) {
+		else if (unary_operand_type == INT) {
 			unary_ss << "\t" << "loada #$" << std::hex << std::stoi(unary_operand->get_value()) << std::endl;
 		}
-		else if (unary_operand->get_type() == FLOAT) {
-			// TODO: handle floats
+		else if (unary_operand_type == FLOAT) {
+			// first, use stof to get the floating-point representation from C++
+			float operand_data = std::stof(unary_operand->get_value());
+
+			// next, use reinterpret_cast and pack_32 to get our 16-bit floating-point representation
+			uint16_t half_operand = pack_32(*reinterpret_cast<uint32_t*>(&operand_data));
+
+			// finally, load the register with that value (static_cast to int so it doesn't print a character)
+			unary_ss << "\t" << "loada #$" << std::hex << static_cast<unsigned int>(half_operand) << std::endl;
 		}
-		else if (unary_operand->get_type() == STRING) {
+		else if (unary_operand_type == STRING) {
 			// define the string constant
 			unary_ss << "@db __STRC__NUM_" << std::dec << this->strc_number << " (" << unary_operand->get_value() << ")" << std::endl;
 
@@ -377,7 +401,8 @@ std::stringstream Compiler::evaluate_unary_tree(Unary unary_exp, unsigned int li
 		unary_ss << this->fetch_value(unary_exp.get_operand(), line_number, max_offset).str();
 	}
 	else if (unary_exp.get_operand()->get_expression_type() == BINARY) {
-		// TODO: parse binary tree to get the result in A
+		Binary* binary_operand = dynamic_cast<Binary*>(unary_exp.get_operand().get());	// cast to Binary type
+		unary_ss << this->evaluate_binary_tree(*binary_operand, line_number, max_offset).str();		// evaluate the tree; the result will be in A
 	}
 	else if (unary_exp.get_operand()->get_expression_type() == UNARY) {
 		// Our unary operand can be another unary expression -- if so, simply get the operand and call this function recursively
@@ -389,14 +414,25 @@ std::stringstream Compiler::evaluate_unary_tree(Unary unary_exp, unsigned int li
 
 	if (unary_exp.get_operator() == PLUS) {
 		// the unary plus operator does nothing
+		compiler_warning("Expression seems to have no effect.");
 	}
 	else if (unary_exp.get_operator() == MINUS) {
-		// the unary minus operator will flip every bit and then add 1 to it (to get two's complement) -- this works to convert both ways
-		// the N and Z flags will automatically be set or cleared by the ADDCA instruction
+		// the minus operator can only be used on numbers
+		if (unary_operand_type == FLOAT) {
+			// floats have a sign bit but do not use two's complement; simply flip the most significant bit
+			unary_ss << "\t" << "xora #$8000" << std::endl;
+		}
+		else if (unary_operand_type == INT) {
+			// the unary minus operator will flip every bit and then add 1 to it (to get two's complement) -- this works to convert both ways
+			// the N and Z flags will automatically be set or cleared by the ADDCA instruction
 
-		unary_ss << "\t" << "xora #$FFFF" << std::endl;	// using XOR on A with the value 0xFFFF will flip all bits (0110 XOR 1111 => 1001)
-		unary_ss << "\t" << "clc" << std::endl;
-		unary_ss << "\t" << "addca #$01" << std::endl;	// adding 1 finishes two's complement
+			unary_ss << "\t" << "xora #$FFFF" << std::endl;	// using XOR on A with the value 0xFFFF will flip all bits (0110 XOR 1111 => 1001)
+			unary_ss << "\t" << "clc" << std::endl;
+			unary_ss << "\t" << "addca #$01" << std::endl;	// adding 1 finishes two's complement
+		}
+		else {
+			throw CompilerException("Cannot use unary operator with this data type!", 0, line_number);
+		}
 	}
 	else if (unary_exp.get_operator() == NOT) {
 		// 0 is the only value considered to be false; all other values are true -- as such, the not operator will set +/- values to 0, and 0 to 1

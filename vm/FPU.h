@@ -13,6 +13,7 @@ Definition of the FPU (floating-point unit) class
 #include <cinttypes>
 #include "../util/DataWidths.h"
 #include "StatusConstants.h"
+#include "../util/FloatingPoint.h"
 
 class FPU {
 	// Since the FPU can operate in 16- or 32-bit mode, there are separate implementations for each function
@@ -20,13 +21,10 @@ class FPU {
 	uint16_t* REG_A;
 	uint16_t* REG_B;
 
-	uint8_t* STATUS;
+	uint16_t* STATUS;
 
 	uint32_t combine_registers();
 	void split_to_registers(uint32_t to_split);
-
-	static uint32_t unpack_16(uint16_t to_unpack);
-	static uint16_t pack_32(uint32_t to_pack);
 public:
 	// 16-bit
 	void fadda(uint16_t right);
@@ -40,7 +38,7 @@ public:
 	void single_fmulta(uint32_t right);
 	void single_fdiva(uint32_t right);
 
-	FPU(uint16_t* REG_A, uint16_t* REG_B, uint8_t* STATUS);
+	FPU(uint16_t* REG_A, uint16_t* REG_B, uint16_t* STATUS);
 	FPU();
 	~FPU();
 };

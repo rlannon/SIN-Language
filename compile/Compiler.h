@@ -20,6 +20,7 @@ This class defines the SIN Compiler; given an AST produced by the Parser, will p
 #include "../assemble/Assembler.h"	// so we can assemble our compiled files into .sinc files
 #include "../util/Exceptions.h"	// so that we can use our custom exceptions
 #include "../util/DataWidths.h"	// for maintainability and avoiding obfuscation, avoid hard coding data widths where possible
+#include "../util/FloatingPoint.h"	// contains useful utility functions for converting data to floating-point representation
 
 
 class Compiler

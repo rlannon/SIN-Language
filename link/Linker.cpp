@@ -66,7 +66,7 @@ void Linker::create_sml_file(std::string file_name) {
 
 			if (symbol_iter->symbol_class == C) {
 				// iterate through the file's constants list to find the constant's data
-				std::list<std::tuple<std::string, int, std::vector<uint8_t>>>::iterator data_iter = file_iter->data_table.begin();
+				std::list<std::tuple<std::string, size_t, std::vector<uint8_t>>>::iterator data_iter = file_iter->data_table.begin();
 				bool found_constant = false;
 				while (!found_constant && (data_iter != file_iter->data_table.end())) {
 					if (std::get<0>(*data_iter) == symbol_iter->name) {
@@ -78,7 +78,7 @@ void Linker::create_sml_file(std::string file_name) {
 				}
 				if (found_constant) {
 					// get the total offset
-					int offset_from_text_end = std::get<1>(*data_iter);
+					size_t offset_from_text_end = std::get<1>(*data_iter);
 
 					// add the total offset to <1>(symbol_iter), which is the offset for the current symbol in the symbol table; this symbol is class "C"
 					symbol_iter->value += offset_from_text_end;
@@ -113,7 +113,7 @@ void Linker::create_sml_file(std::string file_name) {
 		// we then need to update current_offset to add the size of the .data section, as these will get added onto the program sections at the end
 		size_t data_section_offset = 0;
 
-		for (std::list<std::tuple<std::string, int, std::vector<uint8_t>>>::iterator data_it = file_iter->data_table.begin(); data_it != file_iter->data_table.end(); data_it++) {
+		for (std::list<std::tuple<std::string, size_t, std::vector<uint8_t>>>::iterator data_it = file_iter->data_table.begin(); data_it != file_iter->data_table.end(); data_it++) {
 			size_t constant_size = std::get<2>(*data_it).size();
 			data_section_offset += constant_size;
 		}
@@ -184,11 +184,11 @@ void Linker::create_sml_file(std::string file_name) {
 					// the start address is the value in the relocation iter
 					size_t value_start_address = relocation_iter->value;
 
-					int data = 0;
+					unsigned int data = 0;
 					size_t wordsize_bytes = (size_t)file_iter->_wordsize / 8;
 
 					// the value to write is located at value_start_address
-					for (int i = 0; i < (wordsize_bytes - 1); i++) {
+					for (size_t i = 0; i < (wordsize_bytes - 1); i++) {
 						data += file_iter->program_data[value_start_address + i];
 						data = data << (i * 8);
 					}
@@ -203,7 +203,7 @@ void Linker::create_sml_file(std::string file_name) {
 					// retrieve "value" from the master symbol table
 					std::vector<AssemblerSymbol>::iterator master_table_iter = master_symbol_table.begin();
 					bool found = false;
-					int value = 0;
+					size_t value = 0;
 					while ((master_table_iter != master_symbol_table.end()) && !found) {
 						// if the names are the same
 						if (master_table_iter->name == relocation_iter->name) {
@@ -245,7 +245,7 @@ void Linker::create_sml_file(std::string file_name) {
 		// create a vector of uint8_ts from our file to contain all of the .data information
 		std::vector<uint8_t> data_section;
 		// iterate through the .data section of the file
-		for (std::list<std::tuple<std::string, int, std::vector<uint8_t>>>::iterator data_table_iter = file_iter->data_table.begin(); data_table_iter != file_iter->data_table.end(); data_table_iter++) {
+		for (std::list<std::tuple<std::string, size_t, std::vector<uint8_t>>>::iterator data_table_iter = file_iter->data_table.begin(); data_table_iter != file_iter->data_table.end(); data_table_iter++) {
 			// iterate through the actual data bytes in the section
 			for (std::vector<uint8_t>::iterator data_iter = std::get<2>(*data_table_iter).begin(); data_iter != std::get<2>(*data_table_iter).end(); data_iter++) {
 				// push those bytes onto data_section

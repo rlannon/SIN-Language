@@ -49,7 +49,7 @@ class SinObjectFile
 
 	// a list of tuples for our symbol and relocation tables
 	std::list<AssemblerSymbol> symbol_table;
-	std::list<std::tuple<std::string, int, std::vector<uint8_t>>> data_table;	// includes an int to tell the offset from the end of the .text section
+	std::list<std::tuple<std::string, size_t, std::vector<uint8_t>>> data_table;	// includes a size_t to tell the offset from the end of the .text section
 	std::list<RelocationSymbol> relocation_table;
 
 	// the wordsize of our program
@@ -69,7 +69,7 @@ public:
 	uint8_t get_wordsize();
 	std::vector<uint8_t> get_program_data();
 	std::list<AssemblerSymbol>* get_symbol_table();
-	std::list<std::tuple<std::string, int, std::vector<uint8_t>>>* get_data_table();
+	std::list<std::tuple<std::string, size_t, std::vector<uint8_t>>>* get_data_table();
 	std::list<RelocationSymbol>* get_relocation_table();
 
 	SinObjectFile();

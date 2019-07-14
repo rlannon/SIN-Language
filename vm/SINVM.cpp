@@ -17,9 +17,7 @@ const bool SINVM::address_is_valid(size_t address, bool privileged) {
 	
 	Checks to see whether the address may be accessed by the program.
 	If we set the privileged flag, we may write to any area of memory except the word at 0x0000
-	Otherwise, we may not write to:
-		- the call stack
-		- program memory
+	Otherwise, we may not write to the call stack
 	Generally, we will not be checking for valid addresses with the privileged flag set, but there are instances where we may want to
 
 	*/
@@ -32,9 +30,8 @@ const bool SINVM::address_is_valid(size_t address, bool privileged) {
 	else {
 		return (
 			valid &&
-			(address < _CALL_STACK_BOTTOM) &&	// make sure the address isn't within the call stack
-			(address > _CALL_STACK) &&
-			(address < _PRG_BOTTOM)		// make sure the address isn't within program memory
+			(address < _CALL_STACK_BOTTOM) ||	// make sure the address isn't within the call stack
+			(address > _CALL_STACK)
 			);
 	}
 }

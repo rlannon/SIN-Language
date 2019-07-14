@@ -1,9 +1,9 @@
 #include "Assembler.h"
 
 
-const bool is_standalone(int opcode) {
+const bool is_standalone(uint8_t opcode) {
 	// returns true if the instruction is to be used without a value following
-	int i = 0;
+	size_t i = 0;
 	bool found = false;
 	while (!found && (i < num_standalone_opcodes)) {
 		if (opcode == standalone_opcodes[i]) {
@@ -17,7 +17,7 @@ const bool is_standalone(int opcode) {
 	return found;
 }
 
-const bool is_bitshift(int opcode) {
+const bool is_bitshift(uint8_t opcode) {
 	// returns true if the instruction is a bitshift instruction
 	return (opcode == LSL || opcode == LSR || opcode == ROL || opcode == ROR);
 }
@@ -129,7 +129,7 @@ bool Assembler::is_label(std::string candidate) {
 bool Assembler::is_mnemonic(std::string candidate) {
 	// if the candidate is an opcode mnemonic, return true
 
-	int index = 0;
+	size_t index = 0;
 	bool found = false;
 
 	while (!found && (index < num_instructions)) {
@@ -145,11 +145,11 @@ bool Assembler::is_mnemonic(std::string candidate) {
 	return found;
 }
 
-bool Assembler::is_opcode(int candidate)
+bool Assembler::is_opcode(uint8_t candidate)
 {
 	// if the candidate is an opcode mnemonic, return true
 
-	int index = 0;
+	size_t index = 0;
 	bool found = false;
 
 	while (!found && (index < num_instructions)) {
@@ -204,7 +204,7 @@ int Assembler::get_integer_value(std::string value) {
 }
 
 
-bool Assembler::can_use_immediate_addressing(int opcode) {
+bool Assembler::can_use_immediate_addressing(uint8_t opcode) {
 	// determine what CAN'T use immediate addressing
 	if (opcode == STOREA || opcode == STOREB || opcode == STOREX || opcode == STOREY) {
 		return false;
@@ -467,7 +467,7 @@ void Assembler::construct_symbol_table() {
 }
 
 // Look into the symbol table and get the value stored there for the symbol we want
-int Assembler::get_value_of(std::string symbol) {
+size_t Assembler::get_value_of(std::string symbol) {
 	
 	std::list<AssemblerSymbol>::iterator symbol_table_iter = this->symbol_table.begin();
 	bool found = false;
@@ -501,10 +501,10 @@ int Assembler::get_value_of(std::string symbol) {
 
 // Get the opcode of some mnemonic without addressing more information
 // note this is a static function
-int Assembler::get_opcode(std::string mnemonic) {
+uint8_t Assembler::get_opcode(std::string mnemonic) {
 	// some utility variables -- an index and a variable to tell us whether we have found the right instruction
 	bool found = false;
-	int index = 0;
+	size_t index = 0;
 
 	// iterate through the list as long as we a) haven't found the right opcode and b) haven't gone past the end
 	while ((!found) && (index < num_instructions)) {
@@ -532,11 +532,11 @@ int Assembler::get_opcode(std::string mnemonic) {
 }
 
 // get the mnemonic of a given opcode
-std::string Assembler::get_mnemonic(int opcode)
+std::string Assembler::get_mnemonic(uint8_t opcode)
 {
 	// some utility variables -- an index and a variable to tell us whether we have found the right instruction
 	bool found = false;
-	int index = 0;
+	size_t index = 0;
 
 	// iterate through the list as long as we a) haven't found the right opcode and b) haven't gone past the end
 	while ((!found) && (index < num_instructions)) {
@@ -664,7 +664,7 @@ std::vector<uint8_t> Assembler::assemble()
 				// first, increment the current_byte by one; it now points to the byte AFTER the opcode
 				this->current_byte++;
 				// get the opcode of our mnemonic
-				int opcode = get_opcode(opcode_or_symbol);
+				uint8_t opcode = get_opcode(opcode_or_symbol);
 
 				// if the next character is not a comment and it's not the end of the vector
 				if ((string_delimited.size() > 1) && (!is_comment(string_delimited[1][0]))) {
@@ -854,7 +854,7 @@ std::vector<uint8_t> Assembler::assemble()
 						this->current_byte += (this->_WORDSIZE / 8);	// increment 1 per byte in the _WORDSIZE
 
 						// turn the value into a series of big-endian bytes
-						for (int i = this->_WORDSIZE / 8; i > 0; i--) {
+						for (size_t i = this->_WORDSIZE / 8; i > 0; i--) {
 							//uint8_t byte = label_value << ((i - 1) * 8);
 							//program_data.push_back(byte);
 							program_data.push_back(0x00);	// push back 0s; this will be updated by the linker
@@ -875,7 +875,7 @@ std::vector<uint8_t> Assembler::assemble()
 					// if the value is 'B'
 					else if ((value.size() == 1) && ((value == "B") || (value == "b"))) {
 						// make sure it is an addition, subtraction, multiplication, division, or comparison to A
-						if ((opcode == ADDCA) || (opcode == SUBCA) || (opcode == MULTA) || (opcode == MULTUA) || (opcode == DIVA) || (opcode == DIVUA) || (opcode == CMPA)) {
+						if ((opcode == ADDCA) || (opcode == SUBCA) || (opcode == MULTA) || (opcode == MULTUA) || (opcode == DIVA) || (opcode == DIVUA) || (opcode == CMPA) || (opcode == FADDA) || (opcode == FSUBA) || (opcode == FMULTA) || (opcode == FDIVA)) {
 							addressing_mode = addressingmode::reg_b;
 							program_data.push_back(addressing_mode);
 						}
@@ -938,14 +938,14 @@ std::vector<uint8_t> Assembler::assemble()
 						// if "value" was a symbol
 						if (isalpha(value[0]) || (value[0] == '.') || (value[0] == '_')) {
 							// push back all 0x00 if it is a label; it will be resolved
-							for (int i = (this->_WORDSIZE / 8); i > 0; i--) {
+							for (size_t i = (this->_WORDSIZE / 8); i > 0; i--) {
 								program_data.push_back(0x00);
 							}
 						}
 						// otherwise, it must be an actual value
 						else {
 							// Get the bytes in big-endian format -- we first get the highest byte, then the second-highest...
-							for (int i = this->_WORDSIZE / 8; i > 0; i--) {
+							for (size_t i = this->_WORDSIZE / 8; i > 0; i--) {
 								// because it is an actual value, we can push back the bytes in it
 								uint8_t byte = converted_value >> ((i - 1) * 8);
 								program_data.push_back(byte);

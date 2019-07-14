@@ -34,6 +34,7 @@ class SINVM
 
 	// the VM's word size
 	const uint8_t _WORDSIZE = 16;
+	uint16_t _DB_START;
 
 	// the VM will contain an ALU instance
 	ALU alu;	// todo: allocate alu and fpu on heap?
@@ -50,7 +51,7 @@ class SINVM
 	uint16_t REG_X;
 	uint16_t REG_Y;
 
-	uint8_t STATUS;	// our byte to hold our status information
+	uint16_t STATUS;	// a register to our status information
 
 	// create an array to hold our program memory
 	uint8_t memory[memory_size];

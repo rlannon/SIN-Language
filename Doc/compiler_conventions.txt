@@ -1,0 +1,57 @@
+SOME_COMPILER_CONVENTIONS.TXT
+
+Includes information about naming schemes, global variables for every program, etc..
+
+SYMBOL NAMES:
+	To prevent symbol collisions, symbol names in SIN, like in other languages, get mangled by the compiler. The only mangling done by this compiler is:
+		- Prepend '__@SIN_' to all symbols -- this is done so no collisions can occurr in the generated assembly or with any user defined variables; '@' cannot occur in an identifier in SIN, but they must begin with an underscore for the assembler's recognition
+	Therefore, the code:
+		alloc int myInt;
+	would produce the following symbol:
+		__@SIN_myInt
+	
+
+BUILTINS:
+	All SIN files compiled to SINASM include the "builtins.sina" file, which is the implementation of all of SIN's built-in functions (such as 'print' or 'input'); it can be ommitted in compilation settings, but this is inadvisable as it would require hand-coded assembly using the 'asm' keyword for every single I/O instruction.
+
+STRING LITERALS:
+	While some literals can be easily expressed in assembly, string literals are a little special--they require their own string literals in the .data section of the file, and as such, require '@db' directives. The naming convention for these literals is as follows:
+	
+	__STRC__NUM_xxxx, where 'xxxx' is the number string literal
+
+	A good compiler optimization (for memory usage) will be to find all of the string literals that are the same, and updating the assembly code to remove unnecessary literal definitions, instead using ones that already exist
+
+GLOBAL VARIABLES
+	Global variables will be declared using the '@rs' assembler directive.
+
+	Note that string types are special; they must be dynamically allocated
+
+CONDITIONALS:
+	Conditionals require labels for branching purposes. They use the following naming convention:
+		__<scope name>_<scope level>__ITE_<branch number>__
+	For example, this code:
+		if (myFeast) {
+			...
+		}
+
+		if (something) {
+			if (something_else) {
+				...
+			}
+		}
+	Would produce the following labels:
+		__global_0__ITE_0__:
+		__global_0__ITE_1__:
+		__global_1__ITE_2__:
+
+	The ITE number continually increments as we add ITE statements. This is only used so that we can keep the various branches separate in the assembler/linker
+
+	Variables local to conditionals will also have different scope names. The convention is as follows:
+		<parent scope>__ITE_<branch number>
+
+WHILE LOOPS:
+	While loops also require labels for branching purposes. They use a similar naming convention to ITE statements:
+		__<scope name>_<scope level>__WHILE_<branch number>__
+
+	This naming also applies to a generic loop:
+		__<scope name>_<scope level>__LOOP_<branch number>__

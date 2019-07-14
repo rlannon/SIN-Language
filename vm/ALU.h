@@ -25,7 +25,7 @@ class ALU {
 	*/
 	uint16_t* REG_A;
 	uint16_t* REG_B;
-	uint8_t* STATUS;
+	uint16_t* STATUS;
 public:
 	/*
 	
@@ -41,7 +41,7 @@ public:
 	void div_unsigned(uint16_t right);
 	void div_signed(uint16_t right);
 
-	ALU(uint16_t* REG_A, uint16_t* REG_B, uint8_t* STATUS);
+	ALU(uint16_t* REG_A, uint16_t* REG_B, uint16_t* STATUS);
 	ALU();
 	~ALU();
 };

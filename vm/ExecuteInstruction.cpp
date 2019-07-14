@@ -55,7 +55,7 @@ void SINVM::execute_instruction(uint16_t opcode) {
 			this->SP = this->REG_A;
 			break;
 		case TASTATUS:
-			this->STATUS = (uint8_t)this->REG_A;
+			this->STATUS = this->REG_A;
 			break;
 		case INCA:
 			this->REG_A += 1;
@@ -84,7 +84,7 @@ void SINVM::execute_instruction(uint16_t opcode) {
 			this->SP = this->REG_B;
 			break;
 		case TBSTATUS:
-			this->STATUS = (uint8_t)this->REG_B;
+			this->STATUS = this->REG_B;
 			break;
 		case INCB:
 			this->REG_B += 1;
@@ -348,6 +348,65 @@ void SINVM::execute_instruction(uint16_t opcode) {
 		case PLB:
 			REG_B = this->pop_stack();
 			break;
+		case PRSR:
+			/*
+			
+			Preserve registers, pushed in the following order:
+				- A
+				- B
+				- X
+				- Y
+				- SP
+				- STATUS
+			One word is used for each register, meaning we need 6 words total, or 12 bytes
+
+			*/
+
+			if (this->CALL_SP > (_CALL_STACK_BOTTOM + 12)) {
+				// create an array of uint8_t holding all of our data; push low byte, then high byte, as we do for other stack data
+				uint8_t to_push[12] = { this->REG_A & 0xFF, this->REG_A >> 8, this->REG_B & 0xFF, this->REG_B >> 8, this->REG_X & 0xFF, this->REG_X >> 8,  this->REG_Y & 0xFF, this->REG_Y >> 8, this->SP & 0xFF, this->SP >> 8, this->STATUS, 0x00 };
+
+				// push the elements of the array to our stack
+				for (size_t i = 0; i < 12; i++) {
+					this->memory[this->CALL_SP] = to_push[i];
+					this->CALL_SP--;
+				}
+			}
+			else {
+				// if there isn't enough room to push all of our data, it triggers a stack fault (stack overflow)
+				this->send_signal(SINSIGSTKFLT);
+			}
+
+			break;
+		case RSTR:
+			/*
+			
+			Pull registers in the reverse order as we pushed them
+			Make sure the call stack pointer has enough room to walk itself back up
+
+			*/
+
+			if (this->CALL_SP <= (_CALL_STACK - 12)) {
+				// pull all of our bytes into an array of uint8_t
+				uint8_t pulled_data[12];
+				for (size_t i = 0; i < 12; i++) {
+					this->CALL_SP++;
+					pulled_data[i] = this->memory[this->CALL_SP];
+				}
+				
+				// using an array of pointers, construct the appropriate register value one at a time and assign it to the appropriate place
+				uint16_t* register_pointers[6] = { &this->STATUS, &this->SP, &this->REG_Y, &this->REG_X, &this->REG_B, &this->REG_A };
+				for (size_t i = 0; i < 6; i++) {
+					uint16_t register_value = (pulled_data[i * 2] << 8) | (pulled_data[(i * 2) + 1]);
+					*register_pointers[i] = register_value;
+				}
+			}
+			else {
+				// if we are too close to the top of the stack, we have a stack fault (stack underflow)
+				this->send_signal(SINSIGSTKFLT);
+			}
+
+			break;
 		case TSPA:
 			this->REG_A = this->SP;
 			break;
@@ -404,10 +463,10 @@ void SINVM::execute_instruction(uint16_t opcode) {
 			this->set_status_flag('F');
 			break;
 		case TSTATUSA:
-			this->REG_A = (uint16_t)this->STATUS;
+			this->REG_A = this->STATUS;
 			break;
 		case TSTATUSB:
-			this->REG_B = (uint16_t)this->STATUS;
+			this->REG_B = this->STATUS;
 			break;
 
 		/*

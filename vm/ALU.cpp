@@ -272,7 +272,7 @@ void ALU::div_signed(uint16_t right)
 	return;
 }
 
-ALU::ALU(uint16_t * REG_A, uint16_t* REG_B, uint8_t * STATUS) : REG_A(REG_A), REG_B(REG_B), STATUS(STATUS)
+ALU::ALU(uint16_t * REG_A, uint16_t* REG_B, uint16_t * STATUS) : REG_A(REG_A), REG_B(REG_B), STATUS(STATUS)
 {
 }
 

@@ -324,20 +324,14 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 			fetch_ss << "\t" << "loada #$" << std::hex << bool_expression_as_int << std::endl;
 		}
 		else if (literal_expression->get_type() == FLOAT) {
-			// floats are unique in SIN in that they are the only data type that is larger than the machine's word size; even in 16-bit SIN, floats are 32 bits
+			// for now, we will only deal with a half-precision float type, though a single-precision could be implemented as well
 			// copy the bits of the float value into a uint32_t
 			float literal_value = std::stof(literal_expression->get_value());
-			uint32_t converted_value;
-			memcpy(&converted_value, &literal_value, sizeof(uint32_t));
+			uint32_t converted_value = *reinterpret_cast<uint32_t*>(&literal_value);
 
-			// set the F bit in the status register using Y as our temp variable
-			fetch_ss << "\t" << "tay" << std::endl;
-			fetch_ss << "\t" << "tstatusa" << std::endl;
-			fetch_ss << "\t" << "ora #%00000100" << std::endl;
-			fetch_ss << "\t" << "tastatus" << std::endl;
-			fetch_ss << "\t" << "tya" << std::endl;
-
-			// TODO: continue implementing floating-point -- implement a 'half' type? Dynamically allocate floats?
+			// now, pack that 32-bit float into a 16-bit float and load reg_a with it
+			uint16_t literal_float = pack_32(converted_value);
+			fetch_ss << "\t" << "loada #$" << std::hex << static_cast<int>(literal_float) << std::endl;
 		}
 		else if (literal_expression->get_type() == STRING) {
 			// first, define a constant for the string using our naming convention
@@ -543,7 +537,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 							this->stack_offset -= 1;
 
 							// now, we must get the value at the address contained in B -- use the X register for this -- which is our string length
-							fetch_ss << "\t" << "tba" << "\n\t" << "tax" << std::endl;	// simply index -- we _already dereferenced the pointer_, this address does not contain another address to dereference, but rather the data we want
+							fetch_ss << "\t" << "tbx" << std::endl;	// simply index -- we _already dereferenced the pointer_, this address does not contain another address to dereference, but rather the data we want
 							fetch_ss << "\t" << "loada $00, X" << std::endl;
 
 							// now, increment B by 2 so that we point to the correct byte

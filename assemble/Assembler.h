@@ -11,7 +11,6 @@
 #include <sstream>	// to convert an integer into its hex equivalent string (e.g., convert decimal 10 into the string 'A' (10 in dexadecimal)
 
 #include "../util/SinObjectFile.h"
-//#include "BinaryIO.h"	// all the functions used to write data to binary files (for SIN bytecode/compiled-SIN (.sinc) files) -- included in "LoadSINC.h"
 #include "../util/OpcodeConstants.h"	// so we can reference opcodes by name rather than using hex values every time
 #include "../util/AddressingModeConstants.h"	// so we can reference addressing modes by name
 #include "../util/Exceptions.h"
@@ -78,10 +77,10 @@ class Assembler
 	// test for various types (label, macro, etc)
 	static bool is_label(std::string candidate);	// tests whether the string is a label
 	static bool is_mnemonic(std::string candidate);	// tests whether the string is an opcode mnemonic
-	static bool is_opcode(int candidate);	// tests whether the integer is a valid opcode
+	static bool is_opcode(uint8_t candidate);	// tests whether the integer is a valid opcode
 	static int get_integer_value(std::string value);	// converts the read value into an integer (converts numbers with prefixes)
 
-	static bool can_use_immediate_addressing(int opcode);	// determines whether the opcode is a store instruction (STOREA, STOREB, etc.)
+	static bool can_use_immediate_addressing(uint8_t opcode);	// determines whether the opcode is a store instruction (STOREA, STOREB, etc.)
 
 	// we need a symbol table to keep track of addresses when macros are used; we will use a list of tuples
 	// tuple is (symbol_name, symbol_value, class)
@@ -99,11 +98,11 @@ class Assembler
 	void construct_symbol_table();
 
 	// look into our symbol table to get the value of the symbol requested
-	int get_value_of(std::string symbol);
+	size_t get_value_of(std::string symbol);
 
 	// get the opcode/mnemonic
-	static int get_opcode(std::string mnemonic);
-	static std::string get_mnemonic(int opcode);
+	static uint8_t get_opcode(std::string mnemonic);
+	static std::string get_mnemonic(uint8_t opcode);
 	static uint8_t get_addressing_mode(std::string value, std::string offset="");
 
 	// TODO: write more assembler-related functions as needed

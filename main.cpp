@@ -33,8 +33,8 @@ void help(std::string flag="") {
 }
 
 
-// TODO: make the main function more modular
-// todo: redo command-line argument parsing
+// TODO: modularize int main()
+// todo: redo command-line argument parsing -- perhaps using an external library
 int main (int argc, char* argv[]) {
 	// first, make a vector of strings to hold **argv 
 	std::vector<std::string> program_arguments;
