@@ -15,46 +15,72 @@ void SINVM::push_stack(uint16_t reg_to_push) {
 	// push the current value in "reg_to_push" (A or B) onto the stack, decrementing the SP (because the stack grows downwards)
 
 	// first, make sure the stack hasn't hit its bottom -- it must be at least 2 above the stack bottom (wordsize)
-	if (this->SP < _STACK_BOTTOM + 2) {
-		this->send_signal(SINSIGSTKFLT);
-	}
-	else {
-		for (size_t i = (this->_WORDSIZE / 8); i > 0; i--) {
-			uint8_t val = (reg_to_push >> ((i - 1) * 8)) & 0xFF;
-			this->memory[SP] = val;
+	if (this->SP > _STACK_BOTTOM) {
+		uint8_t bytes[2] = { reg_to_push & 0xFF, (reg_to_push >> 8) };
+
+		for (size_t i = 0; i < (this->_WORDSIZE / 8); i++) {
+			this->memory[SP] = bytes[i];
 			this->SP--;
 		}
+	}
+	else {
+		this->send_signal(SINSIGSTKFLT);
 	}
 
 	return;
 }
 
 uint16_t SINVM::pop_stack() {
-	/*
-	Pops the most recently pushed value off the stack; this means we must:
-		1) increment the SP (as the current value pointed to by SP is the one to which we will write next; also, the stack grows downwards so we want to increase the address if we pop something off)
-		2) dereference; this means this area of memory is the next to be written to if we push something onto the stack
-	*/
-
 	// first, make sure we aren't going to have an underflow
-	if (this->SP >= _STACK) {
-		this->send_signal(SINSIGSTKFLT);
-		return 0;
-	}
-	else {
-		/*
-		For each byte in a word, we must:
-			1) increment the stack pointer by one byte (increments BEFORE reading, as the SP points to the next AVAILABLE byte)
-			2) get the data, shifted over according to what byte number we are on
-				Remember: we are reading the data back in little-endian byte order, not big, so we shift BEFORE we add
-		*/
-		uint16_t stack_data = 0;
+	if (this->SP < _STACK) {
+		uint8_t stack_data[2];
 		for (size_t i = 0; i < (this->_WORDSIZE / 8); i++) {
 			this->SP++;
-			stack_data += (this->memory[SP] << (i * 8));
+			stack_data[i] = this->memory[this->SP];
 		}
 
 		// finally, return the stack data
-		return stack_data;
+		uint16_t popped_value = (stack_data[0] << 8) | stack_data[1];
+		return popped_value;
+	}
+	else {
+		this->send_signal(SINSIGSTKFLT);
+	}
+}
+
+void SINVM::push_call_stack(uint16_t to_push)
+{
+	// pushes a value onto the call stack
+
+	// the call stack pointer has to be greater than the lowest address in the call stack
+	if (this->CALL_SP > _CALL_STACK_BOTTOM) {
+		for (size_t i = 0; i < (this->_WORDSIZE / 8); i++) {
+			uint8_t val = to_push >> (i * 8);
+			this->memory[this->CALL_SP] = val;
+			this->CALL_SP--;
+		}
+	}
+	else {
+		this->send_signal(SINSIGSTKFLT);
+	}
+	return;
+}
+
+uint16_t SINVM::pop_call_stack()
+{
+	if (this->CALL_SP < _CALL_STACK) {
+		uint8_t bytes[2] = { 0, 0 };
+		
+		for (size_t i = 0; i < (this->_WORDSIZE / 8); i++) {
+			this->CALL_SP++;
+			bytes[i] = this->memory[this->CALL_SP];
+		}
+
+		uint16_t to_return = (bytes[0] << 8) | bytes[1];
+		return to_return;
+	}
+	else {
+		this->send_signal(SINSIGSTKFLT);
+		return static_cast<uint16_t>(SINSIGSTKFLT);
 	}
 }

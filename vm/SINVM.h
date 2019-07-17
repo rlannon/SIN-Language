@@ -91,6 +91,9 @@ class SINVM
 	void push_stack(uint16_t reg_to_push);
 	uint16_t pop_stack();
 
+	void push_call_stack(uint16_t to_push);
+	uint16_t pop_call_stack();
+
 	// syscall utility
 	void free_heap_memory();
 	void allocate_heap_memory();

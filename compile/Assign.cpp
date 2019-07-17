@@ -363,13 +363,19 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 		if (is_const) {
 			throw CompilerException("Cannot make an assignment to a const-qualified variable!", 0, assignment_statement.get_line_number());
 		}
+		// if we have a dereferenced lvalue, make the assignment using that function
+		else if (lvalue_exp_type == DEREFERENCED) {
+			Dereferenced* lvalue = dynamic_cast<Dereferenced*>(assignment_statement.get_lvalue().get());
+			assignment_ss << this->pointer_assignment(*lvalue, assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str();
+		}
 		// otherwise, make the assignment
 		else {
 			// get the anticipated type of the rvalue
 			Type rvalue_data_type = this->get_expression_data_type(assignment_statement.get_rvalue());
 
 			// if the types match, continue with the assignment
-			if ((fetched->type == rvalue_data_type) || (fetched->sub_type == rvalue_data_type)) {
+			//if ((fetched->type == rvalue_data_type) || (fetched->sub_type == rvalue_data_type)) {
+			if (this->types_are_compatible(assignment_statement.get_lvalue(), assignment_statement.get_rvalue())) {
 
 				// dynamic memory must be handled a little differently than automatic memory because under the hood, it is implemented through pointers
 				if (is_dynamic) {
@@ -442,13 +448,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 							assignment_ss << "\t" << "loady #$00" << std::endl;
 						}
 
-						// now, make the assignment
-						if (lvalue_exp_type == DEREFERENCED) {
-							assignment_ss << "\t" << "storea (" << var_name << ", y)" << std::endl;	// use indirect addressing for pointers
-						}
-						else {
-							assignment_ss << "\t" << "storea " << var_name << ", y" << std::endl;	// y will be zero if we have no index
-						}
+						assignment_ss << "\t" << "storea " << var_name << ", y" << std::endl;	// y will be zero if we have no index
 					}
 
 					// otherwise, if the scope level > 0, we have automatic memory
@@ -526,25 +526,12 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 							assignment_ss << this->fetch_value(assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str() << std::endl;
 
 							// move the SP to the target address, but store A and B in X and Y, respectively, before we move it
-							assignment_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;
+							assignment_ss << "\t" << "tax" << "\n\t" << "tby" << std::endl;
 							assignment_ss << this->move_sp_to_target_address(fetched->stack_offset).str();
-							assignment_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;	// move the register values back
+							assignment_ss << "\t" << "txa" << "\n\t" << "tyb" << std::endl;	// move the register values back
 
-
-							// make the assignment
-							if (lvalue_exp_type != DEREFERENCED) {
-								assignment_ss << "\t" << "pha" << std::endl;
-								this->stack_offset += 1;	// when we push a variable, we need to update our stack offset
-							}
-							else {
-								// we can use indexed indirect addressing with the x register to determine where the data should be stored
-								assignment_ss << "\t" << "decsp" << std::endl;
-								assignment_ss << "\t" << "tab" << std::endl;
-								assignment_ss << "\t" << "pla" << std::endl;
-								assignment_ss << "\t" << "tax" << std::endl;
-								assignment_ss << "\t" << "tba" << std::endl;
-								assignment_ss << "\t" << "storea ($00, X)" << std::endl;
-							}
+							assignment_ss << "\t" << "pha" << std::endl;
+							this->stack_offset += 1;
 						}
 					}
 
@@ -565,4 +552,65 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 
 	// return the assignment statement
 	return assignment_ss;
+}
+
+std::stringstream Compiler::dynamic_assignment(Symbol* target_symbol, std::shared_ptr<Expression> rvalue, unsigned int line_number, size_t max_offset)
+{
+	// todo: dynamic assignment implementation
+	return std::stringstream();
+}
+
+std::stringstream Compiler::pointer_assignment(Dereferenced lvalue, std::shared_ptr<Expression> rvalue, unsigned int line_number, size_t max_offset)
+{
+	/*
+	
+	Handles assignment where the lvalue is a dereferenced pointer, such as:
+		let *a = 10;
+	This is done by:
+		1) fetching the address referenced by the pointer
+		2) storing the rvalue at that address
+	To fetch the address, we use fetch_value on the second level of the pointer -- for example, for the tree
+			Dereferenced obj
+				LValue obj
+		We would pass the LValue in, as the LValue is what holds the address. Similarly,
+			Dereferenced obj
+				Dereferenced obj
+						LValue obj
+		We would pass in:
+			Dereferenced obj
+				LValue obj
+		As that will give us the _address_ we want without giving us the value
+
+	*/
+
+	std::stringstream pointer_assignment_ss;
+
+	// evaluate the rvalue first, preserve
+	pointer_assignment_ss << this->fetch_value(rvalue, line_number, max_offset).str();
+	pointer_assignment_ss << "\t" << "prsa" << std::endl;
+
+	// fetch the value of the shared pointer held by this object, not the value of this object itself; this will give the address we want
+	pointer_assignment_ss << this->fetch_value(lvalue.get_ptr_shared(), line_number, max_offset).str();
+
+	// now, A holds the address; the value is on the stack
+	pointer_assignment_ss << "\t" << "tay" << std::endl;
+
+	/*
+	
+	if we have a local variable, we need to decrement Y by 1
+	fetching the address of a stack value will give the value where the SP should be;
+		since the stack grows downwards, we need to adjust so we write to the proper bytes
+
+	todo: remodel so stack grows upwards? then this is a non-issue
+	
+	*/
+
+	if (this->current_scope > 0) {
+		pointer_assignment_ss << "\t" << "decy" << std::endl;
+	}
+
+	pointer_assignment_ss << "\t" << "rsta" << std::endl;
+	pointer_assignment_ss << "\t" << "storea $00, y" << std::endl;
+
+	return pointer_assignment_ss;
 }

@@ -348,7 +348,20 @@ void SINVM::execute_instruction(uint16_t opcode) {
 		case PLB:
 			REG_B = this->pop_stack();
 			break;
+		case PRSA:
+			this->push_call_stack(this->REG_A);
+			break;
+		case PRSB:
+			this->push_call_stack(this->REG_B);
+			break;
+		case RSTA:
+			this->REG_A = this->pop_call_stack();
+			break;
+		case RSTB:
+			this->REG_B = this->pop_call_stack();
+			break;
 		case PRSR:
+		{
 			/*
 			
 			Preserve registers, pushed in the following order:
@@ -362,51 +375,33 @@ void SINVM::execute_instruction(uint16_t opcode) {
 
 			*/
 
-			if (this->CALL_SP > (_CALL_STACK_BOTTOM + 12)) {
-				// create an array of uint8_t holding all of our data; push low byte, then high byte, as we do for other stack data
-				uint8_t to_push[12] = { this->REG_A & 0xFF, this->REG_A >> 8, this->REG_B & 0xFF, this->REG_B >> 8, this->REG_X & 0xFF, this->REG_X >> 8,  this->REG_Y & 0xFF, this->REG_Y >> 8, this->SP & 0xFF, this->SP >> 8, this->STATUS, 0x00 };
+			
+			// create an array of uint8_t holding all of our data
+			uint16_t to_push[6] = { this->REG_A, this->REG_B, this->REG_X,  this->REG_Y, this->SP, this->STATUS };
 
-				// push the elements of the array to our stack
-				for (size_t i = 0; i < 12; i++) {
-					this->memory[this->CALL_SP] = to_push[i];
-					this->CALL_SP--;
-				}
-			}
-			else {
-				// if there isn't enough room to push all of our data, it triggers a stack fault (stack overflow)
-				this->send_signal(SINSIGSTKFLT);
+			// push the elements of the array to our stack
+			for (size_t i = 0; i < 6; i++) {
+				this->push_call_stack(to_push[i]);
 			}
 
 			break;
+		}
 		case RSTR:
+		{
 			/*
-			
+
 			Pull registers in the reverse order as we pushed them
-			Make sure the call stack pointer has enough room to walk itself back up
 
 			*/
 
-			if (this->CALL_SP <= (_CALL_STACK - 12)) {
-				// pull all of our bytes into an array of uint8_t
-				uint8_t pulled_data[12];
-				for (size_t i = 0; i < 12; i++) {
-					this->CALL_SP++;
-					pulled_data[i] = this->memory[this->CALL_SP];
-				}
-				
-				// using an array of pointers, construct the appropriate register value one at a time and assign it to the appropriate place
-				uint16_t* register_pointers[6] = { &this->STATUS, &this->SP, &this->REG_Y, &this->REG_X, &this->REG_B, &this->REG_A };
-				for (size_t i = 0; i < 6; i++) {
-					uint16_t register_value = (pulled_data[i * 2] << 8) | (pulled_data[(i * 2) + 1]);
-					*register_pointers[i] = register_value;
-				}
-			}
-			else {
-				// if we are too close to the top of the stack, we have a stack fault (stack underflow)
-				this->send_signal(SINSIGSTKFLT);
+			uint16_t* popped[6] = { &this->STATUS, &this->SP, &this->REG_Y, &this->REG_X, &this->REG_B, &this->REG_A };
+
+			for (size_t i = 0; i < 6; i++) {
+				*(popped[i]) = this->pop_call_stack();
 			}
 
 			break;
+		}
 		case TSPA:
 			this->REG_A = this->SP;
 			break;
@@ -479,14 +474,14 @@ void SINVM::execute_instruction(uint16_t opcode) {
 			this->execute_jmp();
 			break;
 		case BRNE: case BRZ:	// BRNE and BRZ both test for the Z flag; no sense in repeating code
-			// if the comparison was unequal, the Z flag will be clear
+			// if the comparison was unequal, the Z flag will be clear; if it's set, we do not branch
 			if (this->is_flag_set('Z')) {
 				// skip past the addressing mode and address if it isn't set
 				// we need to skip past 3 bytes
 				this->PC += 3;
 			}
 			else {
-				// if it's clear, execute a jump
+				// if it's clear, branch
 				this->execute_jmp();
 			}
 			break;
@@ -555,46 +550,37 @@ void SINVM::execute_instruction(uint16_t opcode) {
 			// get the value
 			this->PC++;
 			uint16_t address_to_jump = this->get_data_of_wordsize();
+			uint16_t return_address = this->PC;	// the current address is the last of the instruction, which is where we want to return
 
-			// the return address should be one byte before the next instruction, as the PC is incremented at the _end_ of each cycle
-			uint16_t return_address = this->PC;
-
-			// if the CALL_SP is greater than _CALL_STACK_BOTTOM, we have not written past the end of it
-			if (this->CALL_SP >= _CALL_STACK_BOTTOM) {
-				// memory size is 16 bits but...do this anyways
-				for (size_t i = 0; i < (this->_WORDSIZE / 8); i++) {
-					uint8_t memory_byte = return_address >> (i * 8);
-					this->memory[CALL_SP] = memory_byte;
-					this->CALL_SP--;
-				}
+			if (this->CALL_SP > _CALL_STACK_BOTTOM) {
+				this->push_call_stack(return_address);
+				this->PC = address_to_jump - 1;	// jump to one byte before the next instruction, as the PC is incremented at the end of each cycle
 			}
 			else {
-				// first, back up the PC to the instruction's start address
 				this->PC -= 3;
-
-				// send the processor signal
 				this->send_signal(SINSIGSTKFLT);
 			}
-
-			this->PC = address_to_jump - 1;
-
 			break;
 		}
 		case RTS:
 		{
-			uint16_t return_address = 0;
-			if (this->CALL_SP <= _CALL_STACK) {
-				for (size_t i = (this->_WORDSIZE / 8); i > 0; i--) {
-					CALL_SP++;
-					return_address += memory[CALL_SP];
-					return_address = return_address << ((i - 1) * 8);
-				}
-			}
+			uint16_t return_address = this->pop_call_stack();
 			this->PC = return_address;	// we don't need to offset because the absolute address was pushed to the call stack
 			break;
 		}
 
 		// System instructions
+		case BRK:
+			std::cout << "A: $" << std::hex << this->REG_A << std::endl;
+			std::cout << "B: $" << this->REG_B << std::endl;
+			std::cout << "X: $" << this->REG_X << std::endl;
+			std::cout << "Y: $" << this->REG_Y << std::endl;
+			std::cout << "SP: $" << this->SP << std::endl;
+			std::cout << "CALL: $" << this->CALL_SP << std::endl;
+			std::cout << "STATUS: $" << this->STATUS << std::endl;
+			std::cin.clear();
+			std::cin.get();
+			break;
 		case SYSCALL:
 			this->execute_syscall();	// call the execute_syscall function; this will handle everything for us
 			break;

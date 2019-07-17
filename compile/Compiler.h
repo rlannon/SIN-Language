@@ -60,6 +60,7 @@ class Compiler
 	*/
 	Type get_expression_data_type(std::shared_ptr<Expression> to_evaluate, bool get_subtype = false);
 	bool is_signed(std::shared_ptr<Expression> to_evaluate, unsigned int line_number = 0);	// we may need to determine whether an expression is signed or not
+	bool types_are_compatible(std::shared_ptr<Expression> left, std::shared_ptr<Expression> right);
 
 	// Evaluate trees -- generate the assembly to represent that evaluation
 	std::stringstream evaluate_binary_tree(Binary bin_exp, unsigned int line_number, size_t max_offset = 0, Type left_type = NONE);
@@ -74,12 +75,16 @@ class Compiler
 
 	std::stringstream move_sp_to_target_address(size_t target_offset, bool preserve_registers = false);
 
-	std::stringstream string_assignment(Symbol* target_symbol, std::shared_ptr<Expression> rvalue, unsigned int line_number = 0, size_t max_offset = 0);
-
 	std::stringstream allocate(Allocation allocation_statement, size_t* max_offset = nullptr);	// add a variable to the symbol table (using an allocation statement)
+
 	std::stringstream define(Definition definition_statement);	// add a function definition (using a definition statement)
-	std::stringstream assign(Assignment assignment_statement, size_t max_offset = 0);
 	std::stringstream call(Call call_statement, size_t max_offset = 0);
+
+	std::stringstream assign(Assignment assignment_statement, size_t max_offset = 0);
+	std::stringstream string_assignment(Symbol* target_symbol, std::shared_ptr<Expression> rvalue, unsigned int line_number = 0, size_t max_offset = 0);
+	std::stringstream dynamic_assignment(Symbol* target_symbol, std::shared_ptr<Expression> rvalue, unsigned int line_number = 0, size_t max_offset = 0);
+	std::stringstream pointer_assignment(Dereferenced lvalue, std::shared_ptr<Expression> rvalue, unsigned int line_number = 0, size_t max_offset = 0);
+
 	std::stringstream ite(IfThenElse ite_statement, size_t max_offset = 0);
 	std::stringstream while_loop(WhileLoop while_statement, size_t max_offset = 0);
 	std::stringstream return_value(ReturnStatement return_statement, size_t previous_offset, unsigned int line_number = 0);

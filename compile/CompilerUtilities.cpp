@@ -25,7 +25,6 @@ std::shared_ptr<Statement> Compiler::get_next_statement(StatementBlock AST)
 	return stmt_ptr; // return the shared_ptr<Statement>
 }
 
-
 std::shared_ptr<Statement> Compiler::get_current_statement(StatementBlock AST)
 {
 	// Gets the current statement from the AST
@@ -279,6 +278,53 @@ bool Compiler::is_signed(std::shared_ptr<Expression> to_evaluate, unsigned int l
 	}
 	else {
 		return false;
+	}
+}
+
+bool Compiler::types_are_compatible(std::shared_ptr<Expression> left, std::shared_ptr<Expression> right) {
+	/*
+	
+	Checks whether two types are compatible with one another.
+	
+	*/
+
+	Type left_type, right_type = NONE;
+
+	// check to see whether the pointer has been dereferenced more than one time -- doubly-dereferenced pointers are _not_ type-safe
+	if (left->get_expression_type() == DEREFERENCED) {
+		Dereferenced* left_deref = dynamic_cast<Dereferenced*>(left.get());
+		if (left_deref->get_ptr_shared()->get_expression_type() == DEREFERENCED) {
+			left_type = RAW;	// RAW will be compatible with all types, and doubly-dereferenced will be treated as RAW
+		}
+		else {
+			left_type = this->get_expression_data_type(left);
+		}
+	}
+	else {
+		left_type = this->get_expression_data_type(left, (left->get_expression_type() == LVALUE));
+	}
+
+	// do the same for the right side
+	if (right->get_expression_type() == DEREFERENCED) {
+		Dereferenced* right_deref = dynamic_cast<Dereferenced*>(right.get());
+		if (right_deref->get_ptr_shared()->get_expression_type() == DEREFERENCED) {
+			right_type = RAW;
+		}
+		else {
+			right_type = this->get_expression_data_type(right, true);
+		}
+	}
+	else {
+		right_type = this->get_expression_data_type(right, (right->get_expression_type() == LVALUE));
+	}
+
+	// if either side is RAW, return true
+	if (left_type == RAW || right_type == RAW) {
+		return true;
+	}
+	// otherwise, see if they are the same
+	else {
+		return left_type == right_type;
 	}
 }
 
@@ -607,26 +653,27 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		}
 	}
 	else if (to_fetch->get_expression_type() == DEREFERENCED) {
-		// TODO: get the value of a dereferenced variable
+		/*
+		
+		To fetch a dereferenced variable, we use fetch_value on the shared_ptr contained within it recursively
+		Then, after each fetch, we use the following code:
+			tay
+			loada #$00, y
+		This should allow for doubly-dereferenced (and more) pointers
+		
+		*/
 		Dereferenced* dereferenced_exp = dynamic_cast<Dereferenced*>(to_fetch.get());;
 
-		if (dereferenced_exp->get_ptr_shared()->get_expression_type() == DEREFERENCED) {
-			fetch_ss << this->fetch_value(dereferenced_exp->get_ptr_shared(), line_number, max_offset).str();
-		}
-		else {
-			// check to make sure the variable is in the symbol table
-			if (this->symbol_table.is_in_symbol_table(dereferenced_exp->get_ptr().getValue(), this->current_scope_name)) {
-				// if the variable is in the symbol table, only use recursion if the type is still a pointer
-				std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(dereferenced_exp->get_ptr().getValue(), this->current_scope_name, this->current_scope);
-				Symbol* referenced_var = dynamic_cast<Symbol*>(fetched.get());	// todo: validate symbol_type?
+		fetch_ss << this->fetch_value(dereferenced_exp->get_ptr_shared(), line_number, max_offset).str();
+		fetch_ss << "\t" << "tay" << std::endl;
 
-				fetch_ss << "\t" << "loady #$00" << std::endl;
-				fetch_ss << "\t" << "loada (" << referenced_var->name << "), y" << std::endl;
-			}
-			else {
-				throw CompilerException("Could not find '" + dereferenced_exp->get_ptr().getValue() + "' in symbol table; perhaps it is out of scope?", 0, line_number);
-			}
+		// since the stack grows downwards, local variables will need to decrement y by 1 so they have the correct start address for the variable
+		// todo: changing the stack to grow upwards will eliminate the need for this
+		if (this->current_scope > 0) {
+			fetch_ss << "\t" << "decy" << std::endl;
 		}
+
+		fetch_ss << "\t" << "loada $00, y" << std::endl;	// todo: peephole optimization here
 	}
 	else if (to_fetch->get_expression_type() == ADDRESS_OF) {
 		// dynamic cast to AddressOf and get the variable's symbol from the symbol table

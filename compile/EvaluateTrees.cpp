@@ -153,7 +153,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 		// make sure the types match
 		Type right_type = this->get_expression_data_type(current_tree.get_right());
 
-		if (right_type == left_type) {
+		if (/* right_type == left_type */ this->types_are_compatible(current_tree.get_right(), current_tree.get_left()) ) {
 			if (right_exp->get_expression_type() == LVALUE || right_exp->get_expression_type() == INDEXED ||  right_exp->get_expression_type() == LITERAL || right_exp->get_expression_type() == DEREFERENCED || right_exp->get_expression_type() == VALUE_RETURNING_CALL) {
 				binary_ss << this->fetch_value(bin_exp.get_right(), line_number, max_offset).str();
 			}

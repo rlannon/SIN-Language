@@ -5,6 +5,16 @@ This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
 
+7/17 commit to master
+
+- Made stack reading/writing cleaner and more modular, particularly with operations using the call stack (implemented push/pop functions for the call stack)
+- Fixed pointers and how they are handled both in static and automatic memory -- multiple dereferences work in both scopes for both fetching and writing values
+- Began work on modularizing the assignment function in the compiler; various types of assignments will be handled by different functions to break up the old function, which was getting pretty massive
+- Implemented a function to check whether two types are compatible; this takes two expressions and determines whether they can be used together (this is better than checking whether the types are equal to subtypes and so on)
+- Implemented four new instructions, PRSA/B, RSTA/B -- for preserving and restoring A/B on the call stack, respectively
+
+--------------------------------------------------------------------------------------------
+
 7/14 commit to master
 
 - Changed occurrences of int to size_t, unsigned int, and uint_t where appropriate (C++ standard int is rarely necessary in this project). These changes occurred mostly in the assembler and linker as well as the various data structures we use to track data within them.
