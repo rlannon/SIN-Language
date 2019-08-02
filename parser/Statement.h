@@ -18,6 +18,7 @@ Contains the "Statement" class an its child classes. Such objects are generated 
 
 #include "Expression.h"
 #include "../util/EnumeratedTypes.h"
+#include "../util/DataType.h"
 
 
 // Statement is the base class for all statements
@@ -47,6 +48,7 @@ class StatementBlock
 {
 public:
 	std::vector<std::shared_ptr<Statement>> statements_list;
+	bool has_return;	// for functions, a return statement is necessary; this will also help determine if all control paths have a return value
 
 	StatementBlock();
 	~StatementBlock();
@@ -74,35 +76,25 @@ class Declaration : public Statement
 	
 	*/
 
-	Type data_type;	// the data type of the symbol
-	Type subtype;	// the subtype of the data
+	DataType type;
 	bool function_definition;	// whether it's the declaration of a function
 	bool struct_definition;	// whether it's the declaration of a struct
 
 	std::string var_name;
-
-	size_t array_length;
-	std::vector<SymbolQuality> qualities;
 
 	std::shared_ptr<Expression> initial_value;
 	std::vector<std::shared_ptr<Statement>> formal_parameters;
 public:
 	std::string get_var_name();
 
-	Type get_data_type();
-	Type get_subtype();
+	DataType get_type_information();
 	bool is_function();
 	bool is_struct();
-
-	size_t get_length();
-	std::vector<SymbolQuality> get_qualities();
 
 	std::shared_ptr<Expression> get_initial_value();
 	std::vector<std::shared_ptr<Statement>> get_formal_parameters();
 
-	Declaration(Type data_type, std::string var_name, Type subtype = NONE, size_t array_length = 0, std::vector<SymbolQuality> qualities = {},
-		std::shared_ptr<Expression> initial_value = std::make_shared<Expression>(EXPRESSION_GENERAL), bool is_function = false, bool is_struct = false,
-		std::vector<std::shared_ptr<Statement>> formal_parameters = {});
+	Declaration(DataType type, std::string var_name, std::shared_ptr<Expression> initial_value = std::make_shared<Expression>(EXPRESSION_GENERAL), bool is_function = false, bool is_struct = false, std::vector<std::shared_ptr<Statement>> formal_parameters = {});
 	Declaration();
 };
 
@@ -131,12 +123,8 @@ class Allocation : public Statement
 
 	*/
 	
-	Type type;	// the variable's type
-	Type subtype;	// the subtype
+	DataType type_information;
 	std::string value;
-
-	size_t array_length;	// arrays need to specify their length
-	std::vector<SymbolQuality> qualities;	// the "quality" of the variable (defaults to "none" (or "signed" for an int), but can be const, etc)
 
 	// If we have an alloc-define statement, we will need:
 	bool initialized;	// whether the variable was defined upon allocation
@@ -145,21 +133,14 @@ class Allocation : public Statement
 
 	std::shared_ptr<Expression> initial_value;	// todo: use the parser to expand allocations with initial values into two statements
 public:
-	Type get_var_type();
-	Type get_var_subtype();
+	DataType get_type_information();
 	static std::string get_var_type_as_string(Type to_convert);
 	std::string get_var_name();
-
-	size_t get_array_length();
-	std::vector<SymbolQuality> get_qualities();
 
 	bool was_initialized();
 	std::shared_ptr<Expression> get_initial_value();
 
-	void add_symbol_quality(SymbolQuality new_quality);
-	void set_symbol_qualities(std::vector<SymbolQuality> qualities);
-
-	Allocation(Type type, std::string value, Type subtype = NONE, bool was_initialized = false, std::shared_ptr<Expression> initial_value = std::make_shared<Expression>(), std::vector<SymbolQuality> quality = { NO_QUALITY }, size_t length = 0);	// use default parameters to allow us to use alloc-define syntax, but we don't have to
+	Allocation(DataType type_information, std::string value, bool was_initialized = false, std::shared_ptr<Expression> initial_value = std::make_shared<Expression>());	// use default parameters to allow us to use alloc-define syntax, but we don't have to
 	Allocation();
 };
 

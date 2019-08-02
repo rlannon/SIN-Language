@@ -12,7 +12,7 @@ Contains the implementation of two Compiler functions that evaluate unary and bi
 #include "Compiler.h"
 
 
-std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int line_number, size_t max_offset, Type left_type)
+std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int line_number, size_t max_offset, DataType left_type)
 {
 	std::stringstream binary_ss;
 
@@ -51,7 +51,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 			left_type = this->get_expression_data_type(current_tree.get_left());
 		}
 
-		binary_ss << this->evaluate_binary_tree(*left_op, line_number, max_offset, left_type).str();
+		binary_ss << this->evaluate_binary_tree(*left_op, line_number, max_offset).str();
 
 		if (left_type == STRING) {
 			binary_ss << "\t" << "tax" << "\n\t" << "tby" << std::endl;
@@ -79,7 +79,7 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 
 			*/
 
-			left_type = this->get_expression_data_type(bin_exp.get_left(), (left_exp->get_expression_type() == INDEXED));	// get the subtype if the expression is an indexed expression
+			left_type = this->get_expression_data_type(bin_exp.get_left());	// get the subtype if the expression is an indexed expression
 
 			binary_ss << this->fetch_value(bin_exp.get_left(), line_number, max_offset).str();	// get the left operand
 
@@ -151,9 +151,9 @@ std::stringstream Compiler::evaluate_binary_tree(Binary bin_exp, unsigned int li
 	}
 	else {
 		// make sure the types match
-		Type right_type = this->get_expression_data_type(current_tree.get_right());
+		DataType right_type = this->get_expression_data_type(current_tree.get_right());
 
-		if (/* right_type == left_type */ this->types_are_compatible(current_tree.get_right(), current_tree.get_left()) ) {
+		if (this->types_are_compatible(current_tree.get_right(), current_tree.get_left(), line_number) ) {
 			if (right_exp->get_expression_type() == LVALUE || right_exp->get_expression_type() == INDEXED ||  right_exp->get_expression_type() == LITERAL || right_exp->get_expression_type() == DEREFERENCED || right_exp->get_expression_type() == VALUE_RETURNING_CALL) {
 				binary_ss << this->fetch_value(bin_exp.get_right(), line_number, max_offset).str();
 			}

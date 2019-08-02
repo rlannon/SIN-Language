@@ -38,8 +38,16 @@ StatementBlock Parser::create_ast() {
 			this->next();
 		}
 
-		// Parse a statement and add it to our AST
-		prog.statements_list.push_back(this->parse_statement());
+		// Parse a statement
+		std::shared_ptr<Statement> next = this->parse_statement();
+
+		// check to see if it is a return statement; function definitions require them, but they are forbidden outside of them
+		if (next->get_statement_type() == RETURN_STATEMENT) {
+			prog.has_return = true;
+		}
+
+		// push the statement back
+		prog.statements_list.push_back(next);
 
 		// check to see if we are at the end now that we have advanced through the tokens list; if not, continue; if so, do nothing and the while loop will abort and return the AST we have produced
 		if (!this->is_at_end() && !(this->peek().value == "}")) {

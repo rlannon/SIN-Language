@@ -28,7 +28,7 @@ The definition of the "FunctionSymbol" object, which contains:
 
 #include "../parser/Statement.h"
 #include "../util/EnumeratedTypes.h"
-
+#include "../util/DataType.h"
 
 
 struct Symbol
@@ -42,8 +42,7 @@ struct Symbol
 	SymbolType symbol_type;
 
 	std::string name;	// the name of the variable / function
-	Type type;	// the variable type (for functions, the return type)
-	Type sub_type;	// the subtype -- e.g., on "ptr<int>", the type is "ptr" and the subtype is "int"
+	DataType type_information;	// contains all information regarding our symbol's type
 
 	std::string scope_name;	// the name of the scope -- either "global" or the name of the function
 	size_t scope_level;	// the /level/ of scope within the program; if we are in a loop or ite block, the level will increase
@@ -51,15 +50,13 @@ struct Symbol
 	bool defined;	// tracks whether the variable has been defined; we cannot use it before it is defined
 	bool allocated;	// tracks whether dynamic memory has been allocated on the heap
 	bool freed;	// tracks whether the variable has been freed; this is used for dynamic memory when we want to do garbage collection
-	std::vector<SymbolQuality> qualities;	// tells us whether something is const, etc.
 
 	size_t stack_offset;	// used for local symbols to determine the offset (in words) from the initial address of the SP
 
-	size_t array_length;	// used only for arrays; contains the size of the array
 	std::string struct_name;	// used only for structs; contains the name of the struct
 
 	// constructor/destructor
-	Symbol(std::string name, Type type, std::string scope_name, size_t scope_level, Type sub_type = NONE, std::vector<SymbolQuality> quality = {}, bool defined = false, size_t array_length = 0, std::string struct_name = "");
+	Symbol(std::string name, DataType type, std::string scope_name, size_t scope_level, bool defined = false, std::string struct_name = "");
 	Symbol();
 	virtual ~Symbol();
 };
@@ -74,8 +71,7 @@ struct FunctionSymbol : public Symbol
 	
 	std::vector<std::shared_ptr<Statement>> formal_parameters;
 
-	FunctionSymbol(std::string name, Type type, std::string scope_name, size_t scope_level, Type sub_type = NONE, std::vector<SymbolQuality> quality = {},
-		size_t array_length = 0, std::vector<std::shared_ptr<Statement>> formal_parameters = {});
+	FunctionSymbol(std::string name, DataType type, std::string scope_name, size_t scope_level, std::vector<std::shared_ptr<Statement>> formal_parameters = {});
 	FunctionSymbol(Symbol base_symbol, std::vector<std::shared_ptr<Statement>> formal_parameters);
 	FunctionSymbol();
 	~FunctionSymbol();

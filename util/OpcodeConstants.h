@@ -47,7 +47,7 @@ Instructions may be added as needed into the available pages
 #include <cinttypes>	// we need uint8_t
 
 // the number of instructions in our machine language
-const size_t num_instructions = 97;
+const size_t num_instructions = 98;
 
 // General instructions
 const uint8_t NOOP = 0x00;
@@ -194,6 +194,7 @@ const uint8_t JSR = 0xBE;
 const uint8_t RTS = 0xBF;
 
 // Machine instructions
+const uint8_t BRK = 0xF0;	// temporary debugging instruction to view processor status
 const uint8_t SYSCALL = 0xFA;
 const uint8_t RESET = 0xFE;
 const uint8_t HALT = 0xFF;
@@ -207,10 +208,10 @@ This allows us to find the appropriate opcode for a given mnemonic easily simply
   2) indexing to the same place in the second array
 
 */
-const std::string instructions_list[num_instructions] = { "NOOP", "LOADA", "STOREA", "TAB", "TAX", "TAY", "TASP", "TASTATUS", "INCA", "DECA", "LOADB", "STOREB", "TBA", "TBX", "TBY", "TBSP", "TBSTATUS", "INCB", "DECB", "LOADX", "STOREX", "TXA", "TXB", "TXY", "TXSP", "INCX", "DECX", "LOADY", "STOREY", "TYA", "TYB", "TYX", "TYSP", "INCY", "DECY", "ROL", "ROR", "LSL", "LSR", "INCM", "DECM", "ADDCA", "ADDCB", "MULTA", "MULTUA", "DIVA", "DIVUA", "ANDA", "ORA", "XORA", "CMPA", "CMPB", "CMPX", "CMPY", "FADDA", "FSUBA", "FMULTA", "FDIVA", "PHA", "PHB", "PLA", "PLB", "PRSA", "PRSB", "RSTA", "RSTB", "PRSR", "RSTR", "TSPA", "TSPB", "TSPX", "TSPY", "INCSP", "DECSP", "CLC", "SEC", "CLN", "SEN", "CLF", "SEF", "TSTATUSA", "TSTATUSB", "JMP", "BRNE", "BREQ", "BRGT", "BRLT", "BRZ", "BRN", "BRPL", "IRQ", "RTI", "JSR", "RTS", "SYSCALL", "RESET", "HALT"};
-const uint8_t opcodes[num_instructions] = { NOOP, LOADA, STOREA, TAB, TAX, TAY, TASP, TASTATUS, INCA, DECA, LOADB, STOREB, TBA, TBX, TBY, TBSP, TBSTATUS, INCB, DECB, LOADX, STOREX, TXA, TXB, TXY, TXSP, INCX, DECX, LOADY, STOREY, TYA, TYB, TYX, TYSP, INCY, DECY, ROL, ROR, LSL, LSR, INCM, DECM, ADDCA, ADDCB, MULTA, MULTUA, DIVA, DIVUA, ANDA, ORA, XORA, CMPA, CMPB, CMPX, CMPY, FADDA, FSUBA, FMULTA, FDIVA, PHA, PHB, PLA, PLB, PRSA, PRSB, RSTA, RSTB, PRSR, RSTR, TSPA, TSPB, TSPX, TSPY, INCSP, DECSP, CLC, SEC, CLN, SEN, CLF, SEF, TSTATUSA, TSTATUSB, JMP, BRNE, BREQ, BRGT, BRLT, BRZ, BRN, BRPL, IRQ, RTI, JSR, RTS, SYSCALL, RESET, HALT };
+const std::string instructions_list[num_instructions] = { "NOOP", "LOADA", "STOREA", "TAB", "TAX", "TAY", "TASP", "TASTATUS", "INCA", "DECA", "LOADB", "STOREB", "TBA", "TBX", "TBY", "TBSP", "TBSTATUS", "INCB", "DECB", "LOADX", "STOREX", "TXA", "TXB", "TXY", "TXSP", "INCX", "DECX", "LOADY", "STOREY", "TYA", "TYB", "TYX", "TYSP", "INCY", "DECY", "ROL", "ROR", "LSL", "LSR", "INCM", "DECM", "ADDCA", "ADDCB", "MULTA", "MULTUA", "DIVA", "DIVUA", "ANDA", "ORA", "XORA", "CMPA", "CMPB", "CMPX", "CMPY", "FADDA", "FSUBA", "FMULTA", "FDIVA", "PHA", "PHB", "PLA", "PLB", "PRSA", "PRSB", "RSTA", "RSTB", "PRSR", "RSTR", "TSPA", "TSPB", "TSPX", "TSPY", "INCSP", "DECSP", "CLC", "SEC", "CLN", "SEN", "CLF", "SEF", "TSTATUSA", "TSTATUSB", "JMP", "BRNE", "BREQ", "BRGT", "BRLT", "BRZ", "BRN", "BRPL", "IRQ", "RTI", "JSR", "RTS", "BRK", "SYSCALL", "RESET", "HALT"};
+const uint8_t opcodes[num_instructions] = { NOOP, LOADA, STOREA, TAB, TAX, TAY, TASP, TASTATUS, INCA, DECA, LOADB, STOREB, TBA, TBX, TBY, TBSP, TBSTATUS, INCB, DECB, LOADX, STOREX, TXA, TXB, TXY, TXSP, INCX, DECX, LOADY, STOREY, TYA, TYB, TYX, TYSP, INCY, DECY, ROL, ROR, LSL, LSR, INCM, DECM, ADDCA, ADDCB, MULTA, MULTUA, DIVA, DIVUA, ANDA, ORA, XORA, CMPA, CMPB, CMPX, CMPY, FADDA, FSUBA, FMULTA, FDIVA, PHA, PHB, PLA, PLB, PRSA, PRSB, RSTA, RSTB, PRSR, RSTR, TSPA, TSPB, TSPX, TSPY, INCSP, DECSP, CLC, SEC, CLN, SEN, CLF, SEF, TSTATUSA, TSTATUSB, JMP, BRNE, BREQ, BRGT, BRLT, BRZ, BRN, BRPL, IRQ, RTI, JSR, RTS, BRK, SYSCALL, RESET, HALT };
 
 
 // Some opcodes stand by themselves; keep an array of them so that we can easily check
-const size_t num_standalone_opcodes = 55;
-const uint8_t standalone_opcodes[num_standalone_opcodes] = { NOOP, TAB, TAY, TAX, TASP, TASTATUS, INCA, DECA, TBA, TBX, TBY, TBSP, TBSTATUS, INCB, DECB, TXA, TXB, TXY, TXSP, INCX, DECX, TYA, TYB, TYX, TYSP, INCY, DECY, ROL, PHA, PLA, PHB, PLB, PRSA, PRSB, RSTA, RSTB, PRSR, RSTR, TSPA, TSPB, TSPX, TSPY, INCSP, DECSP, CLC, SEC, CLN, SEN, CLF, SEF, TSTATUSA, TSTATUSB, RTS, RESET, HALT };
+const size_t num_standalone_opcodes = 56;
+const uint8_t standalone_opcodes[num_standalone_opcodes] = { NOOP, TAB, TAY, TAX, TASP, TASTATUS, INCA, DECA, TBA, TBX, TBY, TBSP, TBSTATUS, INCB, DECB, TXA, TXB, TXY, TXSP, INCX, DECX, TYA, TYB, TYX, TYSP, INCY, DECY, ROL, PHA, PLA, PHB, PLB, PRSA, PRSB, RSTA, RSTB, PRSR, RSTR, TSPA, TSPB, TSPX, TSPY, INCSP, DECSP, CLC, SEC, CLN, SEN, CLF, SEF, TSTATUSA, TSTATUSB, RTS, BRK, RESET, HALT };

@@ -22,6 +22,7 @@ void SINVM::send_signal(uint8_t sig) {
 
 	*/
 
+	// set the interrupt flag
 	this->set_status_flag('I');
 
 	// two signals may not be trapped
@@ -85,11 +86,7 @@ void SINVM::send_signal(uint8_t sig) {
 		if (was_caught) {
 			// write the return address -- the current address - 1 -- to the call stack
 			uint16_t return_address = this->PC - 1;
-			for (size_t i = 0; i < (this->_WORDSIZE / 8); i++) {
-				uint8_t memory_byte = return_address >> (i * 8);
-				this->memory[CALL_SP] = memory_byte;
-				this->CALL_SP--;
-			}
+			this->push_call_stack(return_address);
 
 			// set the PC equal to vector_data - 1 to perform the jump
 			this->PC = vector_data - 1;

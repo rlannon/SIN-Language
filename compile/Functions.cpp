@@ -25,9 +25,7 @@ std::stringstream Compiler::define(Definition definition_statement) {
 	std::shared_ptr<Expression> func_name_expr = definition_statement.get_name();
 	LValue* lvalue_ptr = dynamic_cast<LValue*>(func_name_expr.get());
 	std::string func_name = lvalue_ptr->getValue();
-	Type return_type = definition_statement.get_return_type();
-	Type return_subtype = definition_statement.get_return_subtype();
-	std::vector<SymbolQuality> qualities = definition_statement.get_qualities();
+	DataType return_type(definition_statement.get_return_type(), definition_statement.get_return_subtype(), definition_statement.get_qualities());
 
 	// create a stringstream for our function data
 	std::stringstream function_asm;
@@ -35,7 +33,7 @@ std::stringstream Compiler::define(Definition definition_statement) {
 	// function definitions have to be in the global scope
 	if (current_scope_name == "global" && current_scope == 0) {
 		// add the function symbol to the symbol table
-		FunctionSymbol definition_symbol(func_name, return_type, "global", 0, return_subtype, qualities, 0, definition_statement.get_args());
+		FunctionSymbol definition_symbol(func_name, return_type, "global", 0, definition_statement.get_args());
 		this->symbol_table.insert(std::make_shared<FunctionSymbol>(definition_symbol), definition_statement.get_line_number());
 
 		// next, we will make sure that all of the function code gets written to a stringstream; once we have gone all the way through the AST, we will write our functions as subroutines to the end of the file
@@ -64,7 +62,7 @@ std::stringstream Compiler::define(Definition definition_statement) {
 
 				// add the variable to the symbol table, giving it the function's scope name at scope level 1
 				// make sure we set "was_initialized" in the definition so that when the function is compiled, we don't get a "referenced before assignment" error; the definition assumes all arguments will be passed, because the call will throw an error if they aren't
-				Symbol argument_symbol(arg_alloc->get_var_name(), arg_alloc->get_var_type(), func_name, 1, arg_alloc->get_var_subtype(), arg_alloc->get_qualities(), true, arg_alloc->get_array_length());
+				Symbol argument_symbol(arg_alloc->get_var_name(), arg_alloc->get_type_information(), func_name, 1, true);
 				argument_symbol.stack_offset = this->stack_offset;	// update the stack offset before pushing
 				this->symbol_table.insert(std::make_shared<Symbol>(argument_symbol), definition_statement.get_line_number());	// this variable is only accessible inside this function's scope
 
@@ -79,10 +77,10 @@ std::stringstream Compiler::define(Definition definition_statement) {
 
 				*/
 
-				if (arg_alloc->get_var_type() == ARRAY) {
+				if (arg_alloc->get_type_information().get_type() == ARRAY) {
 					// TODO: implement arrays
 				}
-				else if (arg_alloc->get_var_type() == STRUCT) {
+				else if (arg_alloc->get_type_information().get_type() == STRUCT) {
 					// TODO: implement structs
 				}
 				else {
@@ -173,19 +171,19 @@ std::stringstream Compiler::call(Call call_statement, size_t max_offset) {
 		for (size_t i = 0; i < call_statement.get_args_size(); i++) {
 			// get the expression for the argument
 			std::shared_ptr<Expression> argument = call_statement.get_arg(i);
-			Type argument_type = this->get_expression_data_type(argument);
+			DataType argument_type = this->get_expression_data_type(argument, call_statement.get_line_number());
 
 			// a variable to hold our formal type
-			Type formal_type = NONE;
+			DataType formal_type = NONE;
 
 			// and the expression for the formal parameter -- since they can be allocations or declarations, we must base it on the statement type
 			if (formal_parameters[i]->get_statement_type() == ALLOCATION) {
 				Allocation* formal_parameter = dynamic_cast<Allocation*>(formal_parameters[i].get());
-				formal_type = formal_parameter->get_var_type();
+				formal_type = formal_parameter->get_type_information();
 			}
 			else if (formal_parameters[i]->get_statement_type() == DECLARATION) {
 				Declaration* formal_parameter = dynamic_cast<Declaration*>(formal_parameters[i].get());
-				formal_type = formal_parameter->get_data_type();
+				formal_type = formal_parameter->get_type_information();
 			}
 			else {
 				throw CompilerException("Functions must must allocation statements or declaration statements for their formal parameter declarations", 0,
@@ -264,7 +262,7 @@ std::stringstream Compiler::call(Call call_statement, size_t max_offset) {
 					}
 					// if we have a default value, proceed
 					else {
-						Type var_type = this->get_expression_data_type(arg_to_push);
+						DataType var_type = this->get_expression_data_type(arg_to_push, call_statement.get_line_number());
 
 						// fetch the value
 						call_ss << this->fetch_value(arg_to_push, call_statement.get_line_number(), max_offset).str();
@@ -315,13 +313,14 @@ std::stringstream Compiler::call(Call call_statement, size_t max_offset) {
 
 	*/
 
-	if (func_to_call_symbol.type == INT || func_to_call_symbol.type == FLOAT || func_to_call_symbol.type == BOOL || func_to_call_symbol.type == PTR || func_to_call_symbol.type == STRING || func_to_call_symbol.type == VOID || func_to_call_symbol.type == NONE) {
+	Type primary_return = func_to_call_symbol.type_information.get_type();
+	if (primary_return == INT || primary_return == FLOAT || primary_return == BOOL || primary_return == PTR || primary_return == STRING || primary_return == VOID || primary_return == NONE) {
 		this->stack_offset = function_stack_frame_base;
 	}
-	else if (func_to_call_symbol.type == ARRAY) {
+	else if (func_to_call_symbol.type_information.get_type() == ARRAY) {
 		// get the array size; note that only integral types are allowed (structs and arrays are forbidden; arrays of pointers to such types are allowed)
 		size_t subtype_size;
-		if (func_to_call_symbol.sub_type == STRING) {
+		if (func_to_call_symbol.type_information.get_type() == STRING) {
 			subtype_size = 2;
 		}
 		else {
@@ -329,7 +328,7 @@ std::stringstream Compiler::call(Call call_statement, size_t max_offset) {
 		}
 
 		// get the size of the object we are returning; this is the array size (number of elements) multiplied by the size of each element
-		this->stack_offset = (function_stack_frame_base - (func_to_call_symbol.array_length * subtype_size));
+		this->stack_offset = (function_stack_frame_base - (func_to_call_symbol.type_information.get_array_length() * subtype_size));
 	}
 
 	// finally, return the call_ss
@@ -350,28 +349,47 @@ std::stringstream Compiler::return_value(ReturnStatement return_statement, size_
 	std::stringstream return_ss;	// the stringstream that contains our compiled code
 
 	// get the return type
-	Type return_type = this->get_expression_data_type(return_statement.get_return_exp());
+	DataType return_type = this->get_expression_data_type(return_statement.get_return_exp(), line_number);
 
-	// Some types can be loaded into registers
-	// todo: should strings be returned in the string buffer? A and B would still be loaded with the length and address, but this way it would not need to live in the stack
-	if (return_type == INT || return_type == STRING || return_type == BOOL || return_type == FLOAT) {
-		return_ss << this->fetch_value(return_statement.get_return_exp(), line_number, 0).str();	// get the expression to return
+	// get the expected return type of the function
+	Symbol* function_symbol = this->symbol_table.lookup(this->current_scope_name).get();
+	DataType expected_return_type;
+	if (function_symbol) {
+		expected_return_type = function_symbol->type_information;
 
-		return_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;	// move A and B into X and Y to preserve their values
-		return_ss << this->move_sp_to_target_address(previous_offset).str();	// this allows us to use A to unwind the stack, if we need
-		return_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;
+		// check to see whether the types are compatible
+		if (return_type.is_compatible(expected_return_type)) {
+
+			// Some types can be loaded into registers
+			// todo: should strings be returned in the string buffer? A and B would still be loaded with the length and address, but this way it would not need to live in the stack
+			if (return_type == INT || return_type == STRING || return_type == BOOL || return_type == FLOAT) {
+				return_ss << this->fetch_value(return_statement.get_return_exp(), line_number, 0).str();	// get the expression to return
+
+				return_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;	// move A and B into X and Y to preserve their values
+				return_ss << this->move_sp_to_target_address(previous_offset).str();	// this allows us to use A to unwind the stack, if we need
+				return_ss << "\t" << "tya" << "\n\t" << "tab" << "\n\t" << "txa" << std::endl;
+			}
+			else if (return_type == VOID) {
+				return_ss << this->move_sp_to_target_address(previous_offset).str();
+			}
+			else if (return_type == ARRAY) {
+				// TODO: use stack to return an array
+			}
+			else if (return_type == STRUCT) {
+				// TODO: use stack to return struct type once structs are implemented
+			}
+			else {
+				throw CompilerException("Cannot return an expression of the specified type", 0, line_number);
+			}
+		}
+		// if types are not compatible
+		else {
+			throw CompilerException("'return' value does not match function signature", 0, line_number);
+		}
 	}
-	else if (return_type == VOID) {
-		return_ss << this->move_sp_to_target_address(previous_offset).str();
-	}
-	else if (return_type == ARRAY) {
-		// TODO: use stack to return an array
-	}
-	else if (return_type == STRUCT) {
-		// TODO: use stack to return struct type once structs are implemented
-	}
+	// if we had an invalid pointer from lookup(...)
 	else {
-		throw CompilerException("Cannot return an expression of the specified type", 0, line_number);
+		throw CompilerException("Cannot find function symbol data for '" + this->current_scope_name + "'", 0, line_number);
 	}
 
 	return return_ss;

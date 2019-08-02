@@ -152,8 +152,7 @@ void Compiler::handle_declaration(Declaration declaration_statement)
 	*/
 
 	// generate the symbol
-	Symbol to_add(declaration_statement.get_var_name(), declaration_statement.get_data_type(), "global", 0, declaration_statement.get_subtype(),
-		declaration_statement.get_qualities(), true, declaration_statement.get_length());
+	Symbol to_add(declaration_statement.get_var_name(), declaration_statement.get_type_information(), "global", 0, true);
 
 	// if it's a function, we have to construct a FunctionSymbol from the Symbol; insert the proper symbol
 	if (declaration_statement.is_function()) {
@@ -190,16 +189,16 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 	std::stringstream allocation_ss;
 
 	std::shared_ptr<Expression> initial_value = allocation_statement.get_initial_value();
-	Symbol to_allocate(allocation_statement.get_var_name(), allocation_statement.get_var_type(), current_scope_name, current_scope,
-		allocation_statement.get_var_subtype(), allocation_statement.get_qualities(), allocation_statement.was_initialized(),
-		allocation_statement.get_array_length());
+	
+	Symbol to_allocate(allocation_statement.get_var_name(), allocation_statement.get_type_information(), current_scope_name, current_scope, allocation_statement.was_initialized());
 
 	// get our qualities
 	bool is_const = false;
 	bool is_dynamic = false;
 	bool is_signed;
-	std::vector<SymbolQuality>::iterator quality_iter = to_allocate.qualities.begin();
-	while (quality_iter != to_allocate.qualities.end()) {
+	std::vector<SymbolQuality> symbol_qualities = to_allocate.type_information.get_qualities();
+	std::vector<SymbolQuality>::iterator quality_iter = symbol_qualities.begin();
+	while (quality_iter != symbol_qualities.end()) {
 		if (*quality_iter == CONSTANT) {
 			is_const = true;
 		}
@@ -230,7 +229,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 				Literal* const_literal = dynamic_cast<Literal*>(initial_value.get());
 
 				// make sure the types match
-				if (to_allocate.type == const_literal->get_type()) {
+				if (to_allocate.type_information.get_type() == const_literal->get_type()) {
 					std::string const_value = const_literal->get_value();
 
 					// use "@db"
@@ -258,11 +257,12 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 				// todo: consider whether run-time constants should be allowed
 				// verify the lvalue we are initializing this const-qualified variable with is also const-qualified
 				bool is_const = false;
-				std::vector<SymbolQuality>::iterator it = initializer_symbol->qualities.begin();
-				while (it != initializer_symbol->qualities.end()) {
+				std::vector<SymbolQuality> symbol_qualities = initializer_symbol->type_information.get_qualities();
+				std::vector<SymbolQuality>::iterator it = symbol_qualities.begin();
+				while (it != symbol_qualities.end()) {
 					if (*it == CONSTANT) {
 						is_const = true;
-						it = initializer_symbol->qualities.end();
+						it = symbol_qualities.end();
 					}
 					else {
 						it++;
@@ -273,12 +273,12 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 					// verify the symbol is defined
 					if (initializer_symbol->defined) {
 						// verify the types match -- we don't need to worry about subtypes just yet
-						if (initializer_symbol->type == to_allocate.type) {
+						if (initializer_symbol->type_information.get_type() == to_allocate.type_information.get_type()) {
 							// define the constant using a dummy value
 							allocation_ss << "@db " << to_allocate.name << " (0)" << std::endl;
 
 							// different data types must be treated differently
-							if (to_allocate.type == STRING) {
+							if (to_allocate.type_information.get_type() == STRING) {
 								/*
 
 								To allocate a string constant, we must fetch the value and then utilize memcpy to copy the data from our old location to the new one.
@@ -319,7 +319,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 			else if (initial_value->get_expression_type() == UNARY) {
 				Unary* initializer_unary = dynamic_cast<Unary*>(initial_value.get());
 				// if the types match
-				if (this->get_expression_data_type(initial_value) == to_allocate.type) {
+				if (this->get_expression_data_type(initial_value, allocation_statement.get_line_number()) == to_allocate.type_information) {
 					allocation_ss << "@db " << to_allocate.name << " (0)" << std::endl;
 					// get the evaluated unary
 					this->evaluate_unary_tree(*initializer_unary, allocation_statement.get_line_number(), *max_offset).str();	// evaluate the unary expression
@@ -332,7 +332,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 			else if (initial_value->get_expression_type() == BINARY) {
 				Binary* initializer_binary = dynamic_cast<Binary*>(initial_value.get());
 				// if the types match
-				if (this->get_expression_data_type(initial_value) == to_allocate.type) {
+				if (this->get_expression_data_type(initial_value, allocation_statement.get_line_number()) == to_allocate.type_information) {
 					allocation_ss << "@db " << to_allocate.name << " (0)";
 					this->evaluate_binary_tree(*initializer_binary, allocation_statement.get_line_number(), *max_offset).str();
 					allocation_ss << "storea " << to_allocate.name << std::endl;
@@ -361,14 +361,14 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 		this->symbol_table.insert(std::make_shared<Symbol>(to_allocate), allocation_statement.get_line_number());	// global variables do not need the stack, so add to the symbol table right away
 
 		// we must specify how many bytes to reserve depending on the data type; structs and arrays will use different sizes, but all other data types will use one word
-		if (to_allocate.type == ARRAY) {
+		if (to_allocate.type_information.get_type() == ARRAY) {
 			// arrays may only contain the integral types; you can have an array of pointers to arrays or structs, but not of arrays or structs themselves (at this time)
-			if (to_allocate.sub_type == ARRAY || to_allocate.sub_type == STRUCT) {
+			if (to_allocate.type_information.get_subtype() == ARRAY || to_allocate.type_information.get_subtype() == STRUCT) {
 				throw CompilerException("Arrays may not contain other arrays or structs (only pointers to such members)", 0, allocation_statement.get_line_number());
 			}
 			else {
 				// reserve one word for each element
-				size_t num_bytes = to_allocate.array_length * WORD_W;	// number of bytes = number of elements * number of bytes per word
+				size_t num_bytes = to_allocate.type_information.get_array_length() * WORD_W;	// number of bytes = number of elements * number of bytes per word
 				allocation_ss << "@rs " << std::dec << num_bytes << " " << to_allocate.name << std::endl;	// since we have been using std::hex, switch back to decimal mode here to be safe
 
 				// if we initialzed the array, make the initial assignments
@@ -422,7 +422,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 				}
 			}
 		}
-		else if (to_allocate.type == STRUCT) {
+		else if (to_allocate.type_information.get_type() == STRUCT) {
 			// TODO: implement structs
 		}
 		else {
@@ -430,7 +430,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 			allocation_ss << "@rs " << WORD_W  << " " << to_allocate.name << std::endl;
 
 			// if the variable type is anything with a variable length, we need a different mechanism for handling them
-			if (to_allocate.type == STRING) {
+			if (to_allocate.type_information.get_type() == STRING) {
 				// We can only allocate space dynamically if we have an initial value; we shouldn't guess on a size
 				if (to_allocate.defined) {
 					allocation_ss << this->string_assignment(&to_allocate, initial_value, allocation_statement.get_line_number(), *max_offset).str();
@@ -478,7 +478,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 				// we must handle dynamic memory differently
 				if (is_dynamic) {
 					// we don't need to check if the variable has been freed when we are allocating it
-					if (to_allocate.type == STRING) {
+					if (to_allocate.type_information.get_type() == STRING) {
 						// allocate a word on the stack for the pointer to the string
 						this->stack_offset += 1;
 						*max_offset += 1;
@@ -495,7 +495,7 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 					// TODO: implement more dynamic memory types
 				}
 				// array initializations must be handled slightly differently
-				else if (to_allocate.type == ARRAY) {
+				else if (to_allocate.type_information.get_type() == ARRAY) {
 					// arrays must be initialized with initializer-lists
 					if (allocation_statement.get_initial_value()->get_expression_type() == LIST) {
 						// todo: initialize local arrays with lists
@@ -550,15 +550,15 @@ std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* ma
 			// if it is not defined, 
 			else {
 				// update the stack offset -- all types will increment the stack offset by one word; allocate space in the stack and increase our offset
-				if (to_allocate.type == ARRAY) {
+				if (to_allocate.type_information.get_type() == ARRAY) {
 					// load B with the length, transfer SP to A, subtract the length from the stack pointer, and move the stack pointer back
-					allocation_ss << "\t" << "loadb #$" << std::hex << to_allocate.array_length << std::endl;
+					allocation_ss << "\t" << "loadb #$" << std::hex << to_allocate.type_information.get_array_length() << std::endl;
 					allocation_ss << "\t" << "tspa" << std::endl;
 					allocation_ss << "\t" << "sec" << "\n\t" << "subca b" << std::endl;		// must always set carry before subtraction
 					allocation_ss << "\t" << "tasp" << std::endl;
 
-					this->stack_offset += to_allocate.array_length;
-					(*max_offset) += to_allocate.array_length;
+					this->stack_offset += to_allocate.type_information.get_array_length();
+					(*max_offset) += to_allocate.type_information.get_array_length();
 				}
 				else {
 					allocation_ss << "\t" << "decsp" << std::endl;
@@ -872,9 +872,9 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 			bool is_const = false;
 			bool is_dynamic = false;
 			bool is_signed;
-
-			std::vector<SymbolQuality>::iterator quality_iter = to_free->qualities.begin();
-			while (quality_iter != to_free->qualities.end()) {
+			std::vector<SymbolQuality> symbol_qualities = to_free->type_information.get_qualities();
+			std::vector<SymbolQuality>::iterator quality_iter = symbol_qualities.begin();
+			while (quality_iter != symbol_qualities.end()) {
 				if (*quality_iter == CONSTANT) {
 					is_const = true;
 				}

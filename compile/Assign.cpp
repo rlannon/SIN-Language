@@ -22,7 +22,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 	std::stringstream string_assign_ss;
 
 	// if we have an indexed statement, temporarily store the Y value (the index value) in LOCAL_DYNAMIC_POINTER, as we don't need that address quite yet
-	if (target_symbol->type == ARRAY) {
+	if (target_symbol->type_information.get_type() == ARRAY) {
 		string_assign_ss << "\t" << "storey $" << std::hex << _LOCAL_DYNAMIC_POINTER << std::endl;
 	}
 
@@ -76,7 +76,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 
 		// if we have a static variable
 		if (target_symbol->scope_name == "global" && target_symbol->scope_level == 0) {
-			if (target_symbol->type == ARRAY) {
+			if (target_symbol->type_information.get_type() == ARRAY) {
 				string_assign_ss << "\t" << "loady $" << _LOCAL_DYNAMIC_POINTER << std::endl;
 				string_assign_ss << "\t" << "loadb " << target_symbol->name << ", y" << std::endl;
 			}
@@ -92,7 +92,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 			string_assign_ss << this->move_sp_to_target_address(target_symbol->stack_offset + 1).str();
 
 			// if we have a string array, we need to advance to the index position in the stack, pull, and then move back as far as we moved forward
-			if (target_symbol->type == ARRAY) {
+			if (target_symbol->type_information.get_type() == ARRAY) {
 				// subtract the offset from the stack pointer
 				string_assign_ss << "\t" << "tspa" << std::endl;
 				string_assign_ss << "\t" << "sec" << std::endl;
@@ -120,7 +120,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 			string_assign_ss << this->move_sp_to_target_address(former_offset).str();	// move the stack offset back
 		}
 
-		if (target_symbol->type == ARRAY) {
+		if (target_symbol->type_information.get_type() == ARRAY) {
 			string_assign_ss << "\t" << "txa" << std::endl;
 			string_assign_ss << "\t" << "syscall #$23" << std::endl;
 		}
@@ -151,7 +151,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 		*/
 
 		// if we have an indexed variable assignment, we need to fetch the value
-		if (target_symbol->type == ARRAY) {
+		if (target_symbol->type_information.get_type() == ARRAY) {
 			// load the Y register with the value at _LOCAL_DYNAMIC_POINTER, which contains the index value; it has already been multiplied (before we stored it at the address of _LOCAL_DYNAMIC_POINTER, so we don't need to worry about that
 			string_assign_ss << "\t" << "loady $" << std::hex << _LOCAL_DYNAMIC_POINTER << std::endl;
 			string_assign_ss << "\t" << "storeb " << target_symbol->name << ", y" << std::endl;	// store the value in REG_B at the symbol name indexed by the number of bytes by which our array member is offset
@@ -195,7 +195,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 		string_assign_ss << this->move_sp_to_target_address(target_symbol->stack_offset).str();
 
 		// if we have an indexed assignment, we must navigate further into the stack
-		if (target_symbol->type == ARRAY) {
+		if (target_symbol->type_information.get_type() == ARRAY) {
 			// preserve the A and B values by moving them to X and Y
 			string_assign_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;
 
@@ -315,7 +315,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 		}
 	}
 	else {
-		throw CompilerException("Cannot use expression of this type in lvalue!", 0, assignment_statement.get_line_number());
+		throw CompilerException("Expression is not a modifiable-lvalue", 0, assignment_statement.get_line_number());
 	}
 
 	// look for the symbol of the specified name in the symbol table
@@ -336,8 +336,9 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 		bool is_dynamic = false;
 		bool is_signed;
 
-		std::vector<SymbolQuality>::iterator quality_iter = fetched->qualities.begin();
-		while (quality_iter != fetched->qualities.end()) {
+		std::vector<SymbolQuality> symbol_qualities = fetched->type_information.get_qualities();
+		std::vector<SymbolQuality>::iterator quality_iter = symbol_qualities.begin();
+		while (quality_iter != symbol_qualities.end()) {
 			if (*quality_iter == CONSTANT) {
 				is_const = true;
 			}
@@ -355,7 +356,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 		}
 
 		// if the lvalue_exp_type is 'indexed', make sure 'fetched->type' is either a string or an array -- those are the only data types we can index
-		if (lvalue_exp_type == INDEXED && ((fetched->type != STRING) && (fetched->type != ARRAY))) {
+		if (lvalue_exp_type == INDEXED && ((fetched->type_information != STRING) && (fetched->type_information != ARRAY))) {
 			throw CompilerException("Cannot index variables of this type", 0, assignment_statement.get_line_number());
 		}
 
@@ -365,22 +366,44 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 		}
 		// if we have a dereferenced lvalue, make the assignment using that function
 		else if (lvalue_exp_type == DEREFERENCED) {
+			// first, make sure the symbol type is actually ptr<...> -- otherwise, throw an error
 			Dereferenced* lvalue = dynamic_cast<Dereferenced*>(assignment_statement.get_lvalue().get());
-			assignment_ss << this->pointer_assignment(*lvalue, assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str();
+			if (fetched->type_information.get_type() == PTR) {
+				assignment_ss << this->pointer_assignment(*lvalue, assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str();
+			}
+			else {
+				throw CompilerException("You may not dereference a variable whose type is not ptr<...>", 0, assignment_statement.get_line_number());
+			}
 		}
 		// otherwise, make the assignment
 		else {
-			// get the anticipated type of the rvalue
-			Type rvalue_data_type = this->get_expression_data_type(assignment_statement.get_rvalue());
+			/* 
+
+			First, get the anticipated type of the rvalue
+			If the rvalue expression type is ADDRESS_OF, its primary type should be PTR (as it is a "pointer literal") and its subtype should be the original primary type
+			
+			For example, an address of an integer will become:
+				primary: PTR
+				sub: INT
+			while a pointer to an integer will become:
+				primary: PTR
+				sub: PTR
+
+			*/
+
+			DataType rvalue_data_type = this->get_expression_data_type(assignment_statement.get_rvalue(), assignment_statement.get_line_number());
+			if (assignment_statement.get_rvalue()->get_expression_type() == ADDRESS_OF) {
+				rvalue_data_type.set_subtype(rvalue_data_type.get_type());
+				rvalue_data_type.set_primary(PTR);
+			}
 
 			// if the types match, continue with the assignment
-			//if ((fetched->type == rvalue_data_type) || (fetched->sub_type == rvalue_data_type)) {
-			if (this->types_are_compatible(assignment_statement.get_lvalue(), assignment_statement.get_rvalue())) {
+			if (this->types_are_compatible(assignment_statement.get_lvalue(), assignment_statement.get_rvalue(), assignment_statement.get_line_number())) {
 
 				// dynamic memory must be handled a little differently than automatic memory because under the hood, it is implemented through pointers
 				if (is_dynamic) {
 					// we don't need to check if the memory has been freed here -- we do that in string assignment
-					if (fetched->type == STRING) {
+					if (fetched->type_information.get_type() == STRING) {
 						// check to make sure the type isn't indexed; if it is, throw an exception -- string index assignment is disallowed
 						if (lvalue_exp_type == INDEXED) {
 							throw CompilerException("Index assignment on strings is forbidden", 0, assignment_statement.get_line_number());
@@ -418,7 +441,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 						// get the rvalue
 						if (lvalue_exp_type == INDEXED) {
 							// if we have a string, use string_assignment to handle it
-							if (fetched->sub_type == STRING) {
+							if (fetched->type_information.get_subtype() == STRING) {
 								// get the index value in the Y register
 								assignment_ss << this->fetch_value(assignment_index, assignment_statement.get_line_number(), max_offset).str();
 								assignment_ss << "\t" << "lsl a" << std::endl;	// multiply by 2 _before_ we go the string assignment function
@@ -459,7 +482,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 							assignment_ss << this->fetch_value(assignment_index, assignment_statement.get_line_number(), max_offset).str();
 
 							// now, we will behave differently based on whether the subtype is string or not
-							if (fetched->sub_type == STRING) {
+							if (fetched->type_information.get_subtype() == STRING) {
 								assignment_ss << "\t" << "lsl a" << std::endl;
 								assignment_ss << "\t" << "tay" << std::endl;
 								assignment_ss << this->string_assignment(fetched, assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str();
@@ -541,7 +564,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 			}
 			// if the types do not match, we must throw an exception
 			else {
-				throw CompilerException("Cannot match '" + get_string_from_type(fetched->type) + "' and '" + get_string_from_type(rvalue_data_type) + "'", 0, assignment_statement.get_line_number());
+				throw CompilerException("Cannot match '" + get_string_from_type(fetched->type_information.get_type()) + "' and '" + get_string_from_type(rvalue_data_type.get_type()) + "'", 0, assignment_statement.get_line_number());
 			}
 		}
 	}

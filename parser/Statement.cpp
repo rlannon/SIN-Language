@@ -46,6 +46,8 @@ Statement::~Statement() {
 
 
 StatementBlock::StatementBlock() {
+	this->statements_list = {};
+	this->has_return = false;
 }
 
 StatementBlock::~StatementBlock() {
@@ -75,12 +77,8 @@ std::string Declaration::get_var_name() {
 	return this->var_name;
 }
 
-Type Declaration::get_data_type() {
-	return this->data_type;
-}
-
-Type Declaration::get_subtype() {
-	return this->subtype;
+DataType Declaration::get_type_information() {
+	return this->type;
 }
 
 bool Declaration::is_function()
@@ -93,14 +91,6 @@ bool Declaration::is_struct()
 	return this->struct_definition;
 }
 
-size_t Declaration::get_length() {
-	return this->array_length;
-}
-
-std::vector<SymbolQuality> Declaration::get_qualities() {
-	return this->qualities;
-}
-
 std::shared_ptr<Expression> Declaration::get_initial_value()
 {
 	return this->initial_value;
@@ -111,13 +101,9 @@ std::vector<std::shared_ptr<Statement>> Declaration::get_formal_parameters() {
 }
 
 // Constructors
-Declaration::Declaration(Type data_type, std::string var_name, Type subtype, size_t array_length, std::vector<SymbolQuality> qualities,
-	std::shared_ptr<Expression> initial_value, bool is_function, bool is_struct, std::vector<std::shared_ptr<Statement>> formal_parameters) :
-	data_type(data_type),
+Declaration::Declaration(DataType type, std::string var_name, std::shared_ptr<Expression> initial_value, bool is_function, bool is_struct, std::vector<std::shared_ptr<Statement>> formal_parameters) :
+	type(type),
 	var_name(var_name),
-	subtype(subtype),
-	array_length(array_length),
-	qualities(qualities),
 	initial_value(initial_value),
 	function_definition(is_function),
 	struct_definition(is_struct),
@@ -133,12 +119,8 @@ Declaration::Declaration() {
 /*******************	ALLOCATION CLASS	********************/
 
 
-Type Allocation::get_var_type() {
-	return this->type;
-}
-
-Type Allocation::get_var_subtype() {
-	return this->subtype;
+DataType Allocation::get_type_information() {
+	return this->type_information;
 }
 
 std::string Allocation::get_var_type_as_string(Type to_convert) {
@@ -162,16 +144,6 @@ std::string Allocation::get_var_name() {
 	return this->value;
 }
 
-size_t Allocation::get_array_length()
-{
-	return this->array_length;
-}
-
-std::vector<SymbolQuality> Allocation::get_qualities()
-{
-	return this->qualities;
-}
-
 bool Allocation::was_initialized()
 {
 	return this->initialized;
@@ -182,45 +154,19 @@ std::shared_ptr<Expression> Allocation::get_initial_value()
 	return this->initial_value;
 }
 
-void Allocation::add_symbol_quality(SymbolQuality new_quality)
-{
-	if (this->qualities[0] == NO_QUALITY) {
-		this->qualities.erase(this->qualities.begin(), this->qualities.begin() + 1);
-	}
-
-	if (new_quality == NO_QUALITY) {
-		this->qualities.push_back(new_quality);
-	}
-	else {
-		throw std::runtime_error("**** Error in Statement.cpp : Cannot add 'NO_QUALITY' to the symbol");
-	}
-}
-
-void Allocation::set_symbol_qualities(std::vector<SymbolQuality> qualities)
-{
-	this->qualities = qualities;
-}
-
-Allocation::Allocation(Type type, std::string value, Type subtype, bool initialized, std::shared_ptr<Expression> initial_value,
-	std::vector<SymbolQuality> quality, size_t length) :
-	type(type),
+Allocation::Allocation(DataType type_information, std::string value, bool initialized, std::shared_ptr<Expression> initial_value) :
+	type_information(type_information),
 	value(value),
-	subtype(subtype),
 	initialized(initialized),
-	initial_value(initial_value),
-	qualities(quality),
-	array_length(length)
+	initial_value(initial_value)
 {
 	Allocation::statement_type = ALLOCATION;
 }
 
 Allocation::Allocation() {
-	Allocation::type = NONE;
-	Allocation::subtype = NONE;	// will remain 'NONE' unless 'type' is a ptr or array
+	Allocation::type_information = type_information;
 	Allocation::initialized = false;
 	Allocation::statement_type = ALLOCATION;
-	Allocation::qualities = { NO_QUALITY };
-	Allocation::array_length = 0;
 }
 
 
@@ -294,7 +240,7 @@ IfThenElse::IfThenElse(std::shared_ptr<Expression> condition_ptr, std::shared_pt
 	IfThenElse::statement_type = IF_THEN_ELSE;
 	IfThenElse::condition = condition_ptr;
 	IfThenElse::if_branch = if_branch_ptr;
-	IfThenElse::else_branch = NULL;
+	IfThenElse::else_branch = nullptr;
 }
 
 IfThenElse::IfThenElse() {

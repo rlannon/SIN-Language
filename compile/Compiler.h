@@ -5,6 +5,7 @@ Compiler.h
 Copyright 2019 Riley Lannon
 
 This class defines the SIN Compiler; given an AST produced by the Parser, will produce a .sina file that can execute the given code in the SIN VM.
+Since it is such a massive class, it should always be allocated on the heap.
 
 */
 
@@ -21,6 +22,7 @@ This class defines the SIN Compiler; given an AST produced by the Parser, will p
 #include "../util/Exceptions.h"	// so that we can use our custom exceptions
 #include "../util/DataWidths.h"	// for maintainability and avoiding obfuscation, avoid hard coding data widths where possible
 #include "../util/FloatingPoint.h"	// contains useful utility functions for converting data to floating-point representation
+#include "../util/DataType.h"	// for DataType class, useful for storing Type and Subtype
 
 
 class Compiler
@@ -44,6 +46,7 @@ class Compiler
 
 	uint8_t _wordsize;	// our target wordsize
 
+	// todo: allocate symbol_table on the heap? it may be a large object
 	SymbolTable symbol_table;	// create an object for our symbol table
 
 	size_t stack_offset;	// track the offset from the stack frame's base address; this allows us to store local variables in the stack
@@ -58,12 +61,12 @@ class Compiler
 	The following functions returns the type of the expression passed into it once fully evaluated
 	Note unary and binary trees are not fully parsed, only the first left-hand operand is returned -- any errors in type will be found once the tree or unary value is actually evaluated
 	*/
-	Type get_expression_data_type(std::shared_ptr<Expression> to_evaluate, bool get_subtype = false);
+	DataType get_expression_data_type(std::shared_ptr<Expression> to_evaluate, unsigned int line_number = 0);
 	bool is_signed(std::shared_ptr<Expression> to_evaluate, unsigned int line_number = 0);	// we may need to determine whether an expression is signed or not
-	bool types_are_compatible(std::shared_ptr<Expression> left, std::shared_ptr<Expression> right);
+	bool types_are_compatible(std::shared_ptr<Expression> left, std::shared_ptr<Expression> right, unsigned int line_number = 0);
 
 	// Evaluate trees -- generate the assembly to represent that evaluation
-	std::stringstream evaluate_binary_tree(Binary bin_exp, unsigned int line_number, size_t max_offset = 0, Type left_type = NONE);
+	std::stringstream evaluate_binary_tree(Binary bin_exp, unsigned int line_number, size_t max_offset = 0, DataType left_type = NONE);
 	std::stringstream evaluate_unary_tree(Unary unary_exp, unsigned int line_number, size_t max_offset = 0);
 
 	std::vector<std::string>* object_file_names;

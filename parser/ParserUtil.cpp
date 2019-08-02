@@ -168,7 +168,88 @@ bool Parser::is_opening_grouping_symbol(std::string to_test)
 	return (to_test == "(" || to_test == "[");
 }
 
-TypeData Parser::get_type()
+const bool Parser::has_return(StatementBlock to_test)
+{
+	/*
+	
+	Checks to see whether a statement block 'to_test' has a return statement in it.
+	This is useful for checking to ensure all of our functions have return statements in them.
+	This can be modified in the future to test whether all control paths return in a function, which is required. For now, keep it simple.
+	
+	*/
+
+	// our base case is that the statement block has a return statement
+	if (to_test.has_return) {
+		return true;
+	}
+	// if it doesn't, check to see whether we have a scope block in the last statement
+	else {
+		// if we have no statements in the scope block, we obviously have no return statement
+		if (to_test.statements_list.size() == 0) {
+			return false;
+		}
+		else {
+			/*
+			
+			The last statement in the function _must_ contain a return. For example:
+				def void myFunc(alloc int myVar) {
+					if (myVar = 0) {
+						return void;
+					}
+					else {
+						@print("myVar is not 0");
+					}
+
+					@print("unreachable");
+				}
+				
+				This will generate the error that the last print is unreachable, but it should also generate the error that the function does not return.
+				This is because the last statement has no return.
+			
+			*/
+			
+			// get the last statement and check its type
+			Statement* last_statement = to_test.statements_list.back().get();
+			if (last_statement->get_statement_type() == IF_THEN_ELSE) {
+				IfThenElse* ite = dynamic_cast<IfThenElse*>(last_statement);
+
+				// the branches may be null pointers; we have to be careful here so we can't just pass *ite->get_else_branch().get() in directly
+				StatementBlock* if_branch = ite->get_if_branch().get();
+				StatementBlock* else_branch = ite->get_else_branch().get();
+
+				bool if_has_return = has_return(*if_branch);
+				bool else_has_return = false;
+
+				if (else_branch == nullptr) {
+					else_has_return = true;
+				}
+				else {
+					else_has_return = has_return(*else_branch);
+				}
+
+				// if both branches return a value, we are golden
+				if (if_has_return && else_has_return) {
+					return true;
+				}
+				else {
+					compiler_warning("Not all control paths return a value", last_statement->get_line_number());
+					return if_has_return;
+				}
+			}
+			else if (last_statement->get_statement_type() == WHILE_LOOP) {
+				WhileLoop* while_loop = dynamic_cast<WhileLoop*>(last_statement);
+
+				// while loops are a little simpler, we can simply pass in the branch for the while loop
+				return has_return(*while_loop->get_branch().get());
+			}
+			else {
+				return false;
+			}
+		}
+	}
+}
+
+DataType Parser::get_type()
 {
 	/*
 
@@ -326,7 +407,7 @@ TypeData Parser::get_type()
 	}
 
 	// create the symbol type data
-	TypeData symbol_type_data(new_var_type, new_var_subtype, array_length, qualities);
+	DataType symbol_type_data(new_var_type, new_var_subtype, qualities, array_length);
 	return symbol_type_data;
 }
 

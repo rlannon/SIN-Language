@@ -4,6 +4,15 @@ A list of changes made since last git commit. This file will go into more detail
 This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
+8/1 commit to master
+
+- Added Parser::has_return to recursively determine whether a given StatementBlock object contains a return statement. This is used to check to ensure function definitions return a value. Further, the compiler also checks to ensure the data type of the expression being returned matches the function's return type
+- Implemented DataType class, replacing TypeData; it is to be used in place of all references to type/subtype combo
+- Implemented more type-checking through the use of the DataType class
+- Fixed some bugs in parser and compiler; particularly, fixed a bug that would crash the program on certain invalid characters. Further, compiler now gives more descriptive error message if something like 'let $myVar = ...' is found (previously, no code existed to handle address-of operators in lvalues)
+- BRK instruction now executes in the VM; it is a temporary breakpoint instruction that will be removed once the debugger is implemented
+
+--------------------------------------------------------------------------------------------
 
 7/17 commit to master
 

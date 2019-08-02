@@ -33,7 +33,7 @@ std::shared_ptr<Statement> Compiler::get_current_statement(StatementBlock AST)
 
 
 // todo: add line_number as parameter because this function may throw an exception
-Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate, bool get_subtype)
+DataType Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate, unsigned int line_number)
 {
 	/*
 
@@ -49,43 +49,25 @@ Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate,
 	if (to_evaluate->get_expression_type() == LITERAL) {
 		Literal* literal_exp = dynamic_cast<Literal*>(to_evaluate.get());
 
-		return literal_exp->get_type();
+		return DataType(literal_exp->get_type());
 	}
 	else if (to_evaluate->get_expression_type() == LVALUE || to_evaluate->get_expression_type() == INDEXED) {
 		LValue* lvalue_exp = dynamic_cast<LValue*>(to_evaluate.get());
-		std::shared_ptr<Symbol> fetched;
-		Symbol* lvalue_symbol = nullptr;
 
 		// make sure it's in the symbol table
 		if (this->symbol_table.is_in_symbol_table(lvalue_exp->getValue(), this->current_scope_name)) {
 			// get the variable's symbol and return the type
-			fetched = this->symbol_table.lookup(lvalue_exp->getValue(), this->current_scope_name, this->current_scope);
+			std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(lvalue_exp->getValue(), this->current_scope_name, this->current_scope);
 
 			// ensure we got a Symbol, and not something else
 			if (fetched->symbol_type == VARIABLE) {
-				lvalue_symbol = dynamic_cast<Symbol*>(fetched.get());
+				Symbol* lvalue_symbol = dynamic_cast<Symbol*>(fetched.get());
+
+				// return a DataType object with the type and subtype of lvalue_symbol
+				return lvalue_symbol->type_information;
 			}
 			else {
 				throw CompilerException("Expected modifiable-lvalue");
-			}
-
-			// if the expression is not indexed
-			if (to_evaluate->get_expression_type() != INDEXED) {
-				if (get_subtype && (lvalue_symbol->sub_type != NONE)) {
-					return lvalue_symbol->sub_type;
-				}
-				else {
-					return lvalue_symbol->type;
-				}
-			}
-			// if we have an indexed expression, return its subtype if it's an array; if it's a string, return the type
-			else {
-				if (lvalue_symbol->type == STRING) {
-					return lvalue_symbol->type;
-				}
-				else {
-					return lvalue_symbol->sub_type;
-				}
 			}
 		}
 		else {
@@ -97,23 +79,23 @@ Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate,
 		AddressOf* address_of_exp = dynamic_cast<AddressOf*>(to_evaluate.get());
 
 		// The routine for an address_of expression is the same as for an lvalue one...so we can just use recursion
-		return this->get_expression_data_type(std::make_shared<LValue>(address_of_exp->get_target()));
+		DataType address_of_type = this->get_expression_data_type(std::make_shared<LValue>(address_of_exp->get_target()), line_number);
+		return DataType(PTR, address_of_type.get_type());
 	}
 	else if (to_evaluate->get_expression_type() == UNARY) {
 		Unary* unary_exp = dynamic_cast<Unary*>(to_evaluate.get());
 
-		return this->get_expression_data_type(unary_exp->get_operand());
+		return this->get_expression_data_type(unary_exp->get_operand(), line_number);
 	}
 	else if (to_evaluate->get_expression_type() == BINARY) {
 		Binary* binary_exp = dynamic_cast<Binary*>(to_evaluate.get());
 
-		Type return_type = this->get_expression_data_type(binary_exp->get_left(), true);
-		return return_type;
+		return this->get_expression_data_type(binary_exp->get_left(), line_number);
 	}
 	else if (to_evaluate->get_expression_type() == DEREFERENCED) {
 		Dereferenced* dereferenced_exp = dynamic_cast<Dereferenced*>(to_evaluate.get());
 
-		return this->get_expression_data_type(dereferenced_exp->get_ptr_shared(), true);
+		return this->get_expression_data_type(dereferenced_exp->get_ptr_shared(), line_number);
 	}
 	else if (to_evaluate->get_expression_type() == VALUE_RETURNING_CALL) {
 		ValueReturningFunctionCall* val_ret_exp = dynamic_cast<ValueReturningFunctionCall*>(to_evaluate.get());
@@ -129,7 +111,7 @@ Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate,
 			throw CompilerException("Expected function definition symbol");
 		}
 
-		return func_symbol->type;
+		return func_symbol->type_information;
 	}
 	else if (to_evaluate->get_expression_type() == LIST) {
 		ListExpression* list_exp = dynamic_cast<ListExpression*>(to_evaluate.get());
@@ -138,13 +120,13 @@ Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate,
 
 		if (list_members.size() > 0) {
 			// get the type we expect for the list; the first member determines it
-			Type list_data_type = this->get_expression_data_type(list_members[0]);
+			DataType list_data_type = this->get_expression_data_type(list_members[0], line_number);
 
 			// iterate through the list and check to see if the types are homogenous
 			size_t list_item = 1;
 			bool abort = false;
 			while (list_item < list_members.size() && !abort) {
-				Type current_item_type = this->get_expression_data_type(list_members[list_item]);
+				DataType current_item_type = this->get_expression_data_type(list_members[list_item], line_number);
 				abort = current_item_type != list_data_type;
 				list_item++;
 			}
@@ -162,10 +144,10 @@ Type Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evaluate,
 		}
 	}
 	else if (to_evaluate->get_expression_type() == SIZE_OF) {
-		return INT;	// sizeof(...) always returns an unsigned int
+		return DataType(INT, NONE);		// sizeof(...) always returns an unsigned int
 	}
 	else {
-		return NONE;
+		return DataType(NONE, NONE);
 	}
 }
 
@@ -207,14 +189,15 @@ bool Compiler::is_signed(std::shared_ptr<Expression> to_evaluate, unsigned int l
 		Symbol* to_check = dynamic_cast<Symbol*>(fetched.get());	// todo: check symbol_type? or is this unnecessary?
 
 		// only ints and floats can be signed
-		if (to_check->type == INT) {
+		if (to_check->type_information.get_type() == INT) {
 			// check the int's quality
 			bool lvalue_is_signed = true;	// ints default to being signed
 			bool exit = false;
 
 			// iterate through the qualities vector to see if we have a sign indicator
-			std::vector<SymbolQuality>::iterator quality_iter = to_check->qualities.begin();
-			while (quality_iter != to_check->qualities.end() && !exit) {
+			std::vector<SymbolQuality> qualities = to_check->type_information.get_qualities();
+			std::vector<SymbolQuality>::iterator quality_iter = qualities.begin();
+			while (quality_iter != qualities.end() && !exit) {
 				if (*quality_iter == UNSIGNED) {
 					lvalue_is_signed = false;
 					exit = true;
@@ -229,7 +212,7 @@ bool Compiler::is_signed(std::shared_ptr<Expression> to_evaluate, unsigned int l
 
 			return lvalue_is_signed;
 		}
-		else if (to_check->type == FLOAT) {
+		else if (to_check->type_information.get_type() == FLOAT) {
 			return true;
 		}
 		else {
@@ -281,51 +264,18 @@ bool Compiler::is_signed(std::shared_ptr<Expression> to_evaluate, unsigned int l
 	}
 }
 
-bool Compiler::types_are_compatible(std::shared_ptr<Expression> left, std::shared_ptr<Expression> right) {
+bool Compiler::types_are_compatible(std::shared_ptr<Expression> left, std::shared_ptr<Expression> right, unsigned int line_number) {
 	/*
 	
 	Checks whether two types are compatible with one another.
+	Simply get the expression data type from each expression, create DataTypes from them, and run DataType::is_compatible(...)
 	
 	*/
 
-	Type left_type, right_type = NONE;
+	DataType left_type = this->get_expression_data_type(left, line_number);
+	DataType right_type = this->get_expression_data_type(right, line_number);
 
-	// check to see whether the pointer has been dereferenced more than one time -- doubly-dereferenced pointers are _not_ type-safe
-	if (left->get_expression_type() == DEREFERENCED) {
-		Dereferenced* left_deref = dynamic_cast<Dereferenced*>(left.get());
-		if (left_deref->get_ptr_shared()->get_expression_type() == DEREFERENCED) {
-			left_type = RAW;	// RAW will be compatible with all types, and doubly-dereferenced will be treated as RAW
-		}
-		else {
-			left_type = this->get_expression_data_type(left);
-		}
-	}
-	else {
-		left_type = this->get_expression_data_type(left, (left->get_expression_type() == LVALUE));
-	}
-
-	// do the same for the right side
-	if (right->get_expression_type() == DEREFERENCED) {
-		Dereferenced* right_deref = dynamic_cast<Dereferenced*>(right.get());
-		if (right_deref->get_ptr_shared()->get_expression_type() == DEREFERENCED) {
-			right_type = RAW;
-		}
-		else {
-			right_type = this->get_expression_data_type(right, true);
-		}
-	}
-	else {
-		right_type = this->get_expression_data_type(right, (right->get_expression_type() == LVALUE));
-	}
-
-	// if either side is RAW, return true
-	if (left_type == RAW || right_type == RAW) {
-		return true;
-	}
-	// otherwise, see if they are the same
-	else {
-		return left_type == right_type;
-	}
+	return left_type.is_compatible(right_type);
 }
 
 
@@ -434,8 +384,9 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		bool is_dynamic = false;
 		bool is_signed;
 
-		std::vector<SymbolQuality>::iterator quality_iter = variable_symbol->qualities.begin();
-		while (quality_iter != variable_symbol->qualities.end()) {
+		std::vector<SymbolQuality> qualities = variable_symbol->type_information.get_qualities();
+		std::vector<SymbolQuality>::iterator quality_iter = qualities.begin();
+		while (quality_iter != qualities.end()) {
 			if (*quality_iter == CONSTANT) {
 				is_const = true;
 			}
@@ -458,7 +409,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 			// check the scope; we need to do different things for global and local scopes
 			if ((variable_symbol->scope_name == "global") && (variable_symbol->scope_level == 0)) {
 				// const strings operate a little differently than regular strings; they do not use indirect addressing
-				if (is_const && variable_symbol->type == STRING) {
+				if (is_const && variable_symbol->type_information.get_type() == STRING) {
 					/*
 					
 					Const strings can use direct addressing -- 
@@ -517,7 +468,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 					// if we are loading an indexed value, index it
 					if (to_fetch->get_expression_type() == INDEXED) {
 						// check to see if we have an array of strings or of something else
-						if (variable_symbol->sub_type == STRING) {
+						if (variable_symbol->type_information.get_subtype() == STRING) {
 							// multiply the index offset by 2 with lsl and transfer to Y
 							fetch_ss << "\t" << "lsl a" << std::endl;
 							fetch_ss << "\t" << "tay" << std::endl;
@@ -632,7 +583,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 						fetch_ss << "\t" << "txa" << std::endl;
 
 						// if we have a string, we need to get the length and address into A and B
-						if (variable_symbol->sub_type == STRING) {
+						if (variable_symbol->type_information.get_subtype() == STRING) {
 							// right now, A contains the address of the dynamic object; transfer to Y and use indirect addressing to load the value
 							fetch_ss << "\t" << "tay" << std::endl;
 							fetch_ss << "\t" << "tab" << std::endl;	// now the B register contains the address as well
@@ -664,16 +615,26 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		*/
 		Dereferenced* dereferenced_exp = dynamic_cast<Dereferenced*>(to_fetch.get());;
 
-		fetch_ss << this->fetch_value(dereferenced_exp->get_ptr_shared(), line_number, max_offset).str();
-		fetch_ss << "\t" << "tay" << std::endl;
+		// check to make sure what we are dereferencing is /actually/ a pointer
+		LValue pointed_to = dereferenced_exp->get_ptr();
+		Symbol* pointed_symbol = this->symbol_table.lookup(pointed_to.getValue()).get();
+		if (pointed_symbol->type_information.get_type() == PTR) {
 
-		// since the stack grows downwards, local variables will need to decrement y by 1 so they have the correct start address for the variable
-		// todo: changing the stack to grow upwards will eliminate the need for this
-		if (this->current_scope > 0) {
-			fetch_ss << "\t" << "decy" << std::endl;
+			fetch_ss << this->fetch_value(dereferenced_exp->get_ptr_shared(), line_number, max_offset).str();
+			fetch_ss << "\t" << "tay" << std::endl;
+
+			// since the stack grows downwards, local variables will need to decrement y by 1 so they have the correct start address for the variable
+			// todo: changing the stack to grow upwards will eliminate the need for this
+			if (this->current_scope > 0) {
+				fetch_ss << "\t" << "decy" << std::endl;
+			}
+
+			fetch_ss << "\t" << "loada $00, y" << std::endl;	// todo: peephole optimization here
 		}
-
-		fetch_ss << "\t" << "loada $00, y" << std::endl;	// todo: peephole optimization here
+		// otherwise, throw an error
+		else {
+			throw CompilerException("You may not dereference a variable whose type is not ptr<...>", 0, line_number);
+		}
 	}
 	else if (to_fetch->get_expression_type() == ADDRESS_OF) {
 		// dynamic cast to AddressOf and get the variable's symbol from the symbol table
@@ -688,8 +649,9 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		bool is_dynamic = false;
 		bool is_signed;
 
-		std::vector<SymbolQuality>::iterator quality_iter = variable_symbol->qualities.begin();
-		while (quality_iter != variable_symbol->qualities.end()) {
+		std::vector<SymbolQuality> qualities = variable_symbol->type_information.get_qualities();
+		std::vector<SymbolQuality>::iterator quality_iter = qualities.begin();
+		while (quality_iter != qualities.end()) {
 			if (*quality_iter == CONSTANT) {
 				is_const = true;
 			}
@@ -764,15 +726,15 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		fetch_ss << this->call(to_call, max_offset).str();	// add that to the asm
 
 		// now, the returned value will be in the registers; if the type is of variable length (array or struct), handle it separately because it is on the stack
-		if (function_symbol->type == ARRAY) {
+		if (function_symbol->type_information.get_type() == ARRAY) {
 			// TODO: implement arrays
 		}
-		else if (function_symbol->type == STRUCT) {
+		else if (function_symbol->type_information.get_type() == STRUCT) {
 			// TODO: implement structs
 		}
-		else if (function_symbol->type == VOID || function_symbol->type == NONE) {
+		else if (function_symbol->type_information.get_type() == VOID || function_symbol->type_information.get_type() == NONE) {
 			// we cannot use void functions as value returning types
-			throw CompilerException("Cannot retrieve value of '" + get_string_from_type(function_symbol->type) + "' type", 0, line_number);
+			throw CompilerException("Cannot retrieve value of '" + get_string_from_type(function_symbol->type_information.get_type()) + "' type", 0, line_number);
 		}
 
 		// We are done -- the values are where they are expected to be

@@ -172,6 +172,9 @@ std::shared_ptr<Statement> Parser::parse_statement(bool is_function_parameter) {
 		if (current_lex.value == "@") {
 			return this->parse_function_call(current_lex);
 		}
+		else {
+			throw ParserException("Lexeme '" + current_lex.value + "' is not a valid beginning to a statement", 000, current_lex.line_number);
+		}
 	}
 
 	// if it is a curly brace, advance the character
@@ -226,7 +229,7 @@ std::shared_ptr<Statement> Parser::parse_declaration(lexeme current_lex, bool is
 	// the next lexeme must be a keyword (specifically, a type)
 	if (next_lexeme.type == "kwd") {
 		next_lexeme = this->next();
-		TypeData symbol_type_data = this->get_type();
+		DataType symbol_type_data = this->get_type();
 		std::shared_ptr<Expression> initial_value = std::make_shared<Expression>(EXPRESSION_GENERAL);
 
 		// get the variable name
@@ -287,16 +290,12 @@ std::shared_ptr<Statement> Parser::parse_declaration(lexeme current_lex, bool is
 				// append the posftixed qualities to symbol_type_data.qualities
 				this->next();
 				std::vector<SymbolQuality> postfixed_qualities = this->get_postfix_qualities();
-
-				// todo: ensure there are no duplicates and no collisions in symbol qualities
-
-				symbol_type_data.qualities.insert(symbol_type_data.qualities.end(), postfixed_qualities.begin(), postfixed_qualities.end());
+				symbol_type_data.add_qualities(postfixed_qualities);
 			}
 			
 			// finally, we must have a semicolon, a comma, or a closing paren
 			if (this->peek().value == ";" || this->peek().value == "," || this->peek().value == ")") {
-				Declaration decl_statement(symbol_type_data.data_type, var_name, symbol_type_data.subtype, symbol_type_data.array_length,
-					symbol_type_data.qualities, initial_value, is_function, false, formal_parameters);
+				Declaration decl_statement(symbol_type_data, var_name, initial_value, is_function, false, formal_parameters);
 				decl_statement.set_line_number(next_lexeme.line_number);
 
 				return std::make_shared<Declaration>(decl_statement);
@@ -403,7 +402,7 @@ std::shared_ptr<Statement> Parser::parse_allocation(lexeme current_lex)
 	lexeme next_token = this->next();
 	if (next_token.type == "kwd") {
 		// get the type data using Parser::get_type()
-		TypeData symbol_type_data = this->get_type();
+		DataType symbol_type_data = this->get_type();
 
 		// next, get the name
 		if (this->peek().type == "ident") {
@@ -426,17 +425,13 @@ std::shared_ptr<Statement> Parser::parse_allocation(lexeme current_lex)
 				// append the posftixed qualities to symbol_type_data.qualities
 				this->next();
 				std::vector<SymbolQuality> postfixed_qualities = this->get_postfix_qualities();
-				
-				// todo: ensure there are no duplicates and no collisions in symbol qualities
-
-				symbol_type_data.qualities.insert(symbol_type_data.qualities.end(), postfixed_qualities.begin(), postfixed_qualities.end());
+				symbol_type_data.add_qualities(postfixed_qualities);
 			}
 
 			// if it's a semicolon, comma, or closing paren, craft the statement and return
 			if (this->peek().value == ";" || this->peek().value == "," || this->peek().value == ")") {
 				// craft the statement
-				stmt = std::make_shared<Allocation>(symbol_type_data.data_type, new_var_name, symbol_type_data.subtype, initialized, initial_value,
-					symbol_type_data.qualities, symbol_type_data.array_length);
+				stmt = std::make_shared<Allocation>(symbol_type_data, new_var_name, initialized, initial_value);
 				stmt->set_line_number(next_token.line_number);	// set the line number
 			}
 			// otherwise, it's an invalid character
@@ -469,8 +464,7 @@ std::shared_ptr<Statement> Parser::parse_assignment(lexeme current_lex)
 		lexeme ptr_op = this->next();
 		// check to see if it is an address-of or dereference operator
 		if (ptr_op.value == "$") {
-			// set the LValue_Type to "var_address"
-			// might not need to do this -- as it will be dealing with the pointer data itself, not the variable to which it points
+			lvalue = this->parse_expression();
 		}
 		else if (ptr_op.value == "*") {
 			lvalue = this->create_dereference_object();
@@ -616,7 +610,7 @@ std::shared_ptr<Statement> Parser::parse_definition(lexeme current_lex)
 
 	// First, get the type of function that we have -- the return value
 	this->next();	// skip the 'def' keyword; 'get_type' begins parsing the function type _on the first token of the type data_
-	TypeData func_type_data = this->get_type();
+	DataType func_type_data = this->get_type();
 
 	// Get the function name and verify it is of the correct type
 	lexeme func_name = this->next();
@@ -660,12 +654,21 @@ std::shared_ptr<Statement> Parser::parse_definition(lexeme current_lex)
 				procedure = this->create_ast();
 				this->next();	// skip closing curly brace
 
-				// Return the pointer to our function
-				std::shared_ptr<LValue> _func = std::make_shared<LValue>(func_name.value, "func");
-				stmt = std::make_shared<Definition>(_func, func_type_data.data_type, func_type_data.subtype, func_type_data.qualities, args, std::make_shared<StatementBlock>(procedure));
-				stmt->set_line_number(current_lex.line_number);
+				// check to see if 'procedure' has a return statement using has_return
+				bool returned = has_return(procedure);
 
-				return stmt;
+				// if so, return it; otherwise, throw an error
+				if (returned) {
+					// Return the pointer to our function
+					std::shared_ptr<LValue> _func = std::make_shared<LValue>(func_name.value, "func");
+					stmt = std::make_shared<Definition>(_func, func_type_data.get_type(), func_type_data.get_subtype(), func_type_data.get_qualities(), args, std::make_shared<StatementBlock>(procedure));
+					stmt->set_line_number(current_lex.line_number);
+
+					return stmt;
+				}
+				else {
+					throw ParserException("All functions must return a value (if type is void, use 'return void')", 0, current_lex.line_number);
+				}
 			}
 			else {
 				throw ParserException("Function definition requires use of curly braces after arguments", 331, current_lex.line_number);

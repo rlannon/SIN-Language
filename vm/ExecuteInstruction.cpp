@@ -571,6 +571,9 @@ void SINVM::execute_instruction(uint16_t opcode) {
 
 		// System instructions
 		case BRK:
+			/*
+			Temporary debugging instruction; will be deleted once the actual debugger is implemented
+			*/
 			std::cout << "A: $" << std::hex << this->REG_A << std::endl;
 			std::cout << "B: $" << this->REG_B << std::endl;
 			std::cout << "X: $" << this->REG_X << std::endl;
