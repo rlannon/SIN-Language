@@ -147,12 +147,12 @@ void Compiler::handle_declaration(Declaration declaration_statement)
 	
 	Symbols generated with the 'decl' keyword are:
 		- assumed to be in the global scope at level 0, as the 'decl' keyword cannot generate symbols that will exist on the stack;
-		- assumed to be defined, but in a separate place
+		- isn't listed as defined unless a definition in an implementation file is found; if there is no definition, this will be caught by the linker
 
 	*/
 
 	// generate the symbol
-	Symbol to_add(declaration_statement.get_var_name(), declaration_statement.get_type_information(), "global", 0, true);
+	Symbol to_add(declaration_statement.get_var_name(), declaration_statement.get_type_information(), "global", 0);
 
 	// if it's a function, we have to construct a FunctionSymbol from the Symbol; insert the proper symbol
 	if (declaration_statement.is_function()) {
@@ -165,416 +165,6 @@ void Compiler::handle_declaration(Declaration declaration_statement)
 
 	// we are done; return
 	return;
-}
-
-
-std::stringstream Compiler::allocate(Allocation allocation_statement, size_t* max_offset) {
-	/*
-	
-	Allocates a variable, adding it to the symbol table.
-	
-	It operates as follows:
-		- First, get the qualities of the variable; if it is a constant, it _must_ be defined in the allocation
-		- Determine whether the variable should be allocated in the local or global scope.
-		- If global:
-			- Use a macro to reference the variable in the ASM
-		- It local:
-			- Move the stack pointer to the appropriate position -- the next available -- in the stack frame
-			- Take note of the offset from the stack frame base
-			- Create the symbol for the variable, using the current stack offset and current scope for the appropriate Symbol members
-			- If there is an initial value, make the assignment as is appropriate
-	
-	*/
-
-	std::stringstream allocation_ss;
-
-	std::shared_ptr<Expression> initial_value = allocation_statement.get_initial_value();
-	
-	Symbol to_allocate(allocation_statement.get_var_name(), allocation_statement.get_type_information(), current_scope_name, current_scope, allocation_statement.was_initialized());
-
-	// get our qualities
-	bool is_const = false;
-	bool is_dynamic = false;
-	bool is_signed;
-	std::vector<SymbolQuality> symbol_qualities = to_allocate.type_information.get_qualities();
-	std::vector<SymbolQuality>::iterator quality_iter = symbol_qualities.begin();
-	while (quality_iter != symbol_qualities.end()) {
-		if (*quality_iter == CONSTANT) {
-			is_const = true;
-		}
-		else if (*quality_iter == DYNAMIC) {
-			is_dynamic = true;
-		}
-		else if (*quality_iter == UNSIGNED) {
-			is_signed = false;
-		}
-		else if (*quality_iter == SIGNED) {
-			is_signed = true;
-		}
-
-		quality_iter++;
-	}
-
-	// if we have a global const, we can use the "@db" directive
-	if (is_const && current_scope == 0) {
-		// todo: validate the initial value of a constant will be known at compile time 
-
-		this->symbol_table.insert(std::make_shared<Symbol>(to_allocate), allocation_statement.get_line_number());	// constants have no need for the stack; we can add the symbol right away
-
-		// constants must initialized when they are allocated (i.e. they must use alloc-assign syntax)
-		if (to_allocate.defined) {
-			// get the initial value's expression type and handle it accordingly
-			if (initial_value->get_expression_type() == LITERAL) {
-				// literal values are easy
-				Literal* const_literal = dynamic_cast<Literal*>(initial_value.get());
-
-				// make sure the types match
-				if (to_allocate.type_information.get_type() == const_literal->get_type()) {
-					std::string const_value = const_literal->get_value();
-
-					// use "@db"
-					allocation_ss << "@db " << to_allocate.name << " (" << const_value << ")" << std::endl;	// todo: update constant definition syntax
-				}
-				else {
-					throw CompilerException("Types do not match", 0, allocation_statement.get_line_number());
-				}
-			}
-			else if (initial_value->get_expression_type() == LVALUE) {
-				// dynamic cast to lvalue
-				LValue* initializer_lvalue = dynamic_cast<LValue*>(initial_value.get());
-
-				// look through the symbol table to get the symbol
-				std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(initializer_lvalue->getValue(), this->current_scope_name, this->current_scope);	// this will throw an exception if the object isn't in the symbol table
-				Symbol* initializer_symbol = nullptr;	// todo: eliminate the validation of 'fetched' ?
-				
-				if (fetched->symbol_type == VARIABLE) {
-					initializer_symbol = dynamic_cast<Symbol*>(fetched.get());
-				}
-				else {
-					throw CompilerException("Symbol found was not a variable symbol", 0, allocation_statement.get_line_number());
-				}
-
-				// todo: consider whether run-time constants should be allowed
-				// verify the lvalue we are initializing this const-qualified variable with is also const-qualified
-				bool is_const = false;
-				std::vector<SymbolQuality> symbol_qualities = initializer_symbol->type_information.get_qualities();
-				std::vector<SymbolQuality>::iterator it = symbol_qualities.begin();
-				while (it != symbol_qualities.end()) {
-					if (*it == CONSTANT) {
-						is_const = true;
-						it = symbol_qualities.end();
-					}
-					else {
-						it++;
-					}
-				}
-
-				if (is_const) {
-					// verify the symbol is defined
-					if (initializer_symbol->defined) {
-						// verify the types match -- we don't need to worry about subtypes just yet
-						if (initializer_symbol->type_information.get_type() == to_allocate.type_information.get_type()) {
-							// define the constant using a dummy value
-							allocation_ss << "@db " << to_allocate.name << " (0)" << std::endl;
-
-							// different data types must be treated differently
-							if (to_allocate.type_information.get_type() == STRING) {
-								/*
-
-								To allocate a string constant, we must fetch the value and then utilize memcpy to copy the data from our old location to the new one.
-
-								Usage for memcpy is as follows:
-									- Push source
-									- Push destination
-									- Push number of bytes to copy
-
-								After fetch_value is called, A will contain the number of _bytes_, B will contain the address of the string
-
-								*/
-
-								allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), *max_offset).str();
-								allocation_ss << this->move_sp_to_target_address(*max_offset, true).str();	// increment the stack pointer to our stack frame, but preserve our register values
-
-								// push our parameters and invoke our memcpy subroutine
-								allocation_ss << "\t" << "phb" << "\n\t" << "loadb #" << to_allocate.name << "\n\t" << "phb" << "\n\t" << "pha" << std::endl;
-								allocation_ss << "\t" << "jsr __builtins_memcpy" << std::endl;
-							}
-							// todo: add initializer-lists for arrays
-							else {
-								// now, use fetch_value to get the value of our lvalue and store the value in A at the constant we have defined
-								allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), *max_offset).str();
-								allocation_ss << "storea " << to_allocate.name << std::endl;
-							}
-						}
-					}
-					else {
-						throw CompilerException("'" + initializer_symbol->name + "' was referenced before assignment.", 0, allocation_statement.get_line_number());
-					}
-				}
-				// otherwise, if it's not also a constant,
-				else {
-					throw CompilerException("Initializing const-qualified variables with non-const-qualified variables is illegal", 0, allocation_statement.get_line_number());
-				}
-			}
-			else if (initial_value->get_expression_type() == UNARY) {
-				Unary* initializer_unary = dynamic_cast<Unary*>(initial_value.get());
-				// if the types match
-				if (this->get_expression_data_type(initial_value, allocation_statement.get_line_number()) == to_allocate.type_information) {
-					allocation_ss << "@db " << to_allocate.name << " (0)" << std::endl;
-					// get the evaluated unary
-					this->evaluate_unary_tree(*initializer_unary, allocation_statement.get_line_number(), *max_offset).str();	// evaluate the unary expression
-					allocation_ss << "storea " << to_allocate.name << std::endl;
-				}
-				else {
-					throw CompilerException("Types do not match", 0, allocation_statement.get_line_number());
-				}
-			}
-			else if (initial_value->get_expression_type() == BINARY) {
-				Binary* initializer_binary = dynamic_cast<Binary*>(initial_value.get());
-				// if the types match
-				if (this->get_expression_data_type(initial_value, allocation_statement.get_line_number()) == to_allocate.type_information) {
-					allocation_ss << "@db " << to_allocate.name << " (0)";
-					this->evaluate_binary_tree(*initializer_binary, allocation_statement.get_line_number(), *max_offset).str();
-					allocation_ss << "storea " << to_allocate.name << std::endl;
-				}
-				else {
-					throw CompilerException("Types do not match", 0, allocation_statement.get_line_number());
-				}
-			}
-			// it is illegal to initialize const-qualified variables with pointers
-			else if (initial_value->get_expression_type() == DEREFERENCED || initial_value->get_expression_type() == ADDRESS_OF)
-			{
-				throw CompilerException("It is illegal to initialize const-qualified variables with pointers or addresses; these values must be computed at compile time", 0, allocation_statement.get_line_number());
-			}
-			else {
-				throw CompilerException("It is illegal to initialize a const-qualified variable with an expression of this type", 0, allocation_statement.get_line_number());
-			}
-		}
-		else {
-			// this error should have been caught by the parser, but just to be safe...
-			throw CompilerException("Const-qualified variables must be initialized in allocation", 0, allocation_statement.get_line_number());
-		}
-	}
-
-	// handle all non-const global variables
-	else if (current_scope_name == "global" && current_scope == 0) {
-		this->symbol_table.insert(std::make_shared<Symbol>(to_allocate), allocation_statement.get_line_number());	// global variables do not need the stack, so add to the symbol table right away
-
-		// we must specify how many bytes to reserve depending on the data type; structs and arrays will use different sizes, but all other data types will use one word
-		if (to_allocate.type_information.get_type() == ARRAY) {
-			// arrays may only contain the integral types; you can have an array of pointers to arrays or structs, but not of arrays or structs themselves (at this time)
-			if (to_allocate.type_information.get_subtype() == ARRAY || to_allocate.type_information.get_subtype() == STRUCT) {
-				throw CompilerException("Arrays may not contain other arrays or structs (only pointers to such members)", 0, allocation_statement.get_line_number());
-			}
-			else {
-				// reserve one word for each element
-				size_t num_bytes = to_allocate.type_information.get_array_length() * WORD_W;	// number of bytes = number of elements * number of bytes per word
-				allocation_ss << "@rs " << std::dec << num_bytes << " " << to_allocate.name << std::endl;	// since we have been using std::hex, switch back to decimal mode here to be safe
-
-				// if we initialzed the array, make the initial assignments
-				if (allocation_statement.was_initialized()) {
-					std::shared_ptr<Expression> initial_exp = allocation_statement.get_initial_value();
-					
-					// we cannot have an initialization of only one element -- the type must be 'LIST'
-					if (initial_exp->get_expression_type() == LIST) {
-						// first, get the list expression that is the initializer
-						ListExpression* list_exp = dynamic_cast<ListExpression*>(initial_exp.get());
-						std::vector<std::shared_ptr<Expression>> initializer_list = list_exp->get_list();
-
-						// keep track of our index in the list by using the X register and the stack
-						// since we are in the global scope, no need to move the SP around
-						allocation_ss << "\t" << "loadx #$FFFE" << std::endl;
-
-						// for each element in the list, fetch it and assign it to the next position in the list
-						// todo: could refactor by creating a data array in memory containing the proper values and making the assignments by indexing into that array
-						std::vector<std::shared_ptr<Expression>>::iterator it = initializer_list.begin();
-						while (it != initializer_list.end()) {
-							/*
-
-							Start by incrementing the X register at the top of every loop; start at 0xFFFF so when we increment, it rolls over to 0
-							This prevents us from pushing to the stack an extra time and requiring a 'decsp' instruction
-							It's an optimization, albeit a tiny one
-
-							After doing that, push it to the stack, fetch the value, pull the index from the stack, and make the assignment
-
-							*/
-
-							allocation_ss << "\t" << "incx" << std::endl;
-							allocation_ss << "\t" << "incx" << std::endl;	// increment X twice to skip ahead one word
-							allocation_ss << "\t" << "txa" << "\n\t" << "pha" << std::endl;
-
-							// dereference 'it' as the shared_ptr to pass into fetch_value(...)
-							allocation_ss << this->fetch_value(*it, allocation_statement.get_line_number(), *max_offset).str() << std::endl;
-
-							// now, get the index value from the stack into X and make the assignment
-							allocation_ss << "\t" << "tab" << "\n\t" << "pla" << "\n\t" << "tax" << "\n\t" << "tba" << std::endl;
-							allocation_ss << "\t" << "storea " << to_allocate.name << ", x" << std::endl;
-
-							// increment the iterator
-							it++;
-						}
-					}
-					// if the initial value is not a LIST expression type, throw an error
-					else {
-						throw CompilerException("Expected initializer list for initialization of aggregate data type", 0,
-							allocation_statement.get_line_number());
-					}
-				}
-			}
-		}
-		else if (to_allocate.type_information.get_type() == STRUCT) {
-			// TODO: implement structs
-		}
-		else {
-			// reserve the variable itself first -- it may be a pointer to the variable if we need to dynamically allocate it
-			allocation_ss << "@rs " << WORD_W  << " " << to_allocate.name << std::endl;
-
-			// if the variable type is anything with a variable length, we need a different mechanism for handling them
-			if (to_allocate.type_information.get_type() == STRING) {
-				// We can only allocate space dynamically if we have an initial value; we shouldn't guess on a size
-				if (to_allocate.defined) {
-					allocation_ss << this->string_assignment(&to_allocate, initial_value, allocation_statement.get_line_number(), *max_offset).str();
-
-					// We need to update the symbol's 'allocated' member
-					std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(to_allocate.name, to_allocate.scope_name, to_allocate.scope_level);
-					Symbol* allocated_symbol = dynamic_cast<Symbol*>(fetched.get());	// todo: validate the symbol_type?
-					allocated_symbol->allocated = to_allocate.allocated;
-				}
-			}
-			else {
-				// check to see if we have alloc-assign syntax for our other data types
-				if (to_allocate.defined) {
-					allocation_ss << this->fetch_value(allocation_statement.get_initial_value(), allocation_statement.get_line_number(), *max_offset).str();
-					allocation_ss << "\t" << "storea " << to_allocate.name << std::endl;
-				}
-			}
-		}
-	}
-
-	// handle all non-const local variables
-	else {
-		// make sure we have a valid max_offset pointer
-		if (max_offset) {
-			// our local variables will use the stack; they will directly modify the list of variable names and the stack offset
-			allocation_ss << this->move_sp_to_target_address(*max_offset).str();	// make sure the stack pointer is at the end of the stack frame before allocating a local variable (so we don't overwrite anything)
-			
-			to_allocate.stack_offset = this->stack_offset;	// the stack offset for the symbol will now be the current stack offset
-			this->symbol_table.insert(std::make_shared<Symbol>(to_allocate), allocation_statement.get_line_number());	// now that the symbol's stack offset has been determined, we can add the symbol to the table
-
-			// if we have a const local variable, we need to make sure it is defined
-			if (is_const && !to_allocate.defined) {
-				throw CompilerException("Const-qualified variables must be initialized in allocation", 0, allocation_statement.get_line_number());
-			}
-
-			// todo: consider whether runtime constants should be allowed
-			// the initializer must also be a literal -- it cannot change at runtime
-			else if (is_const && initial_value->get_expression_type() != LITERAL) {
-				// todo: write some function to ensure the variable's value can be determined at compile time
-				throw CompilerException("Const-qualified variables must be initialized with literal values", 0, allocation_statement.get_line_number());
-			}
-
-			// If the variable is defined, we can push its initial value
-			if (to_allocate.defined) {
-				// we must handle dynamic memory differently
-				if (is_dynamic) {
-					// we don't need to check if the variable has been freed when we are allocating it
-					if (to_allocate.type_information.get_type() == STRING) {
-						// allocate a word on the stack for the pointer to the string
-						this->stack_offset += 1;
-						*max_offset += 1;
-						allocation_ss << "\t" << "decsp" << std::endl;
-
-						// strings will use the member function for string assignment
-						allocation_ss << this->string_assignment(&to_allocate, initial_value, allocation_statement.get_line_number(), *max_offset).str();
-
-						// update the symbol's 'allocated' member
-						std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(to_allocate.name, to_allocate.scope_name, to_allocate.scope_level);
-						Symbol* allocated_symbol = dynamic_cast<Symbol*>(fetched.get());	// todo: validate the symbol_type of fetched?
-						allocated_symbol->allocated = to_allocate.allocated;
-					}
-					// TODO: implement more dynamic memory types
-				}
-				// array initializations must be handled slightly differently
-				else if (to_allocate.type_information.get_type() == ARRAY) {
-					// arrays must be initialized with initializer-lists
-					if (allocation_statement.get_initial_value()->get_expression_type() == LIST) {
-						// todo: initialize local arrays with lists
-						ListExpression* list_exp = dynamic_cast<ListExpression*>(allocation_statement.get_initial_value().get());
-						std::vector<std::shared_ptr<Expression>> initializer_list = list_exp->get_list();
-
-						// first, we must move to the end of the stack frame so we can use the stack without overwriting our local variables
-						allocation_ss << this->move_sp_to_target_address(*max_offset).str();
-						to_allocate.stack_offset = *max_offset;
-
-						// next, we need to set up our loop
-						// todo: we could also create a list in memory and index the list to make the assignment here using a loop -- could be useful for lists of constants
-						for (std::vector<std::shared_ptr<Expression>>::iterator it = initializer_list.begin(); it != initializer_list.end(); it++) {
-							// next, fetch the value
-							allocation_ss << this->fetch_value(*it, allocation_statement.get_line_number(), *max_offset);
-
-							// next, move the SP back to the end -- but only if we aren't at the end already
-							if (this->stack_offset != *max_offset) {
-								// if the difference between the two values is greater than three, we need to preserve the A register
-								if (abs((int)this->stack_offset - (int)*max_offset) > 3) {
-									allocation_ss << "\t" << "tab" << std::endl;	// preserve in B, as it's untouched by our move function
-									allocation_ss << this->move_sp_to_target_address(*max_offset);
-									allocation_ss << "\t" << "tba" << std::endl;
-								}
-								// otherwise, no sense in making the transfer
-								else {
-									allocation_ss << this->move_sp_to_target_address(*max_offset);
-								}
-							}
-
-							// since the object is at the end, we don't actually have to move anywhere to push the value
-							allocation_ss << "\t" << "pha" << std::endl;
-							this->stack_offset += 1;
-							*max_offset += 1;
-						}
-					}
-					else {
-						throw CompilerException("Expected initializer list for initialization of aggregate type", 0,
-							allocation_statement.get_line_number());
-					}
-				}
-				// all other data types can simply fetch the value and push the A register
-				else {
-					// get the initial value
-					allocation_ss << this->fetch_value(initial_value, allocation_statement.get_line_number(), *max_offset).str();
-					// push the A register and increment our counters
-					allocation_ss << "\t" << "pha" << std::endl;
-					this->stack_offset += 1;
-					(*max_offset) += 1;
-				}
-			}
-			// if it is not defined, 
-			else {
-				// update the stack offset -- all types will increment the stack offset by one word; allocate space in the stack and increase our offset
-				if (to_allocate.type_information.get_type() == ARRAY) {
-					// load B with the length, transfer SP to A, subtract the length from the stack pointer, and move the stack pointer back
-					allocation_ss << "\t" << "loadb #$" << std::hex << to_allocate.type_information.get_array_length() << std::endl;
-					allocation_ss << "\t" << "tspa" << std::endl;
-					allocation_ss << "\t" << "sec" << "\n\t" << "subca b" << std::endl;		// must always set carry before subtraction
-					allocation_ss << "\t" << "tasp" << std::endl;
-
-					this->stack_offset += to_allocate.type_information.get_array_length();
-					(*max_offset) += to_allocate.type_information.get_array_length();
-				}
-				else {
-					allocation_ss << "\t" << "decsp" << std::endl;
-					this->stack_offset += 1;
-					(*max_offset) += 1;
-				}
-			}	
-		}
-		else {
-			// if we forgot to supply the address of our counter, it will throw an exception
-			throw CompilerException("Cannot allocate memory for variable; expected pointer to stack offset counter, but found 'nullptr' instead.");
-		}
-	}
-
-	// return our allocation statement
-	return allocation_ss;
 }
 
 
@@ -827,152 +417,141 @@ std::stringstream Compiler::compile_to_sinasm(StatementBlock AST, unsigned int l
 	
 	for (std::vector<std::shared_ptr<Statement>>::iterator statement_iter = AST.statements_list.begin(); statement_iter != AST.statements_list.end(); statement_iter++) {
 
-		Statement* current_statement = statement_iter->get();
-		stmt_type statement_type = current_statement->get_statement_type();
-
-		if (statement_type == INCLUDE) {
-			// dynamic_cast to an Include type
-			Include* include_statement = dynamic_cast<Include*>(current_statement);
-
-			// "compile" an include statement
-			this->include_file(*include_statement);
-
-			// TODO: import symbol tables from included files
+		// check to make sure our shared_ptr<Statement> is not a nullptr; this is equivalent to an empty statement
+		if (*statement_iter == nullptr) {
+			std::cout << "Empty statement found; skipping..." << std::endl;
 		}
-		else if (statement_type == DECLARATION) {
-			// cast to Declaration type and handle it
-			Declaration* decl_statement = dynamic_cast<Declaration*>(current_statement);
-			this->handle_declaration(*decl_statement);
-		}
-		else if (statement_type == INLINE_ASM) {
-			// dynamic cast to an InlineAssembly type
-			InlineAssembly* asm_statement = dynamic_cast<InlineAssembly*>(current_statement);
+		else {
+			Statement* current_statement = statement_iter->get();
+			stmt_type statement_type = current_statement->get_statement_type();
 
-			// check to make sure the asm type is valid
-			if (asm_statement->get_asm_type() == this->asm_type) {
-				// simply copy the asm into our file with comments denoting where it begins/ends
-				sinasm_ss << ";; BEGIN ASM FROM .SIN FILE" << std::endl;
-				sinasm_ss << asm_statement->asm_code;
-				sinasm_ss << ";; END ASM FROM .SIN FILE" << std::endl;
+			if (statement_type == INCLUDE) {
+				// dynamic_cast to an Include type
+				Include* include_statement = dynamic_cast<Include*>(current_statement);
+
+				// "compile" an include statement
+				this->include_file(*include_statement);
+
+				// TODO: import symbol tables from included files
 			}
-			else {
-				// if the types do not match, throw an exception
-				throw CompilerException("Inline ASM in file does not match compiler's ASM version", 0, asm_statement->get_line_number());
+			else if (statement_type == DECLARATION) {
+				// cast to Declaration type and handle it
+				Declaration* decl_statement = dynamic_cast<Declaration*>(current_statement);
+				this->handle_declaration(*decl_statement);
 			}
-		}
-		else if (statement_type == FREE_MEMORY) {
-			// dynamic cast to FreeMemory type
-			FreeMemory* free_statement = dynamic_cast<FreeMemory*>(current_statement);
+			else if (statement_type == INLINE_ASM) {
+				// dynamic cast to an InlineAssembly type
+				InlineAssembly* asm_statement = dynamic_cast<InlineAssembly*>(current_statement);
 
-			// look for a symbol in the table with the same name as is indicated by the free statement
-			std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(free_statement->get_freed_memory().getValue(), this->current_scope_name,
-				this->current_scope);
-			Symbol* to_free = dynamic_cast<Symbol*>(fetched.get());	// todo: validate symbol_type of 'fetched' ?
-
-			bool is_const = false;
-			bool is_dynamic = false;
-			bool is_signed;
-			std::vector<SymbolQuality> symbol_qualities = to_free->type_information.get_qualities();
-			std::vector<SymbolQuality>::iterator quality_iter = symbol_qualities.begin();
-			while (quality_iter != symbol_qualities.end()) {
-				if (*quality_iter == CONSTANT) {
-					is_const = true;
-				}
-				else if (*quality_iter == DYNAMIC) {
-					is_dynamic = true;
-				}
-				else if (*quality_iter == SIGNED) {
-					is_signed = true;
-				}
-				else if (*quality_iter == UNSIGNED) {
-					is_signed = false;
-				}
-
-				quality_iter++;
-			}
-
-			// we can only free dynamic memory that hasn't already been freed
-			if (!to_free->freed && (is_dynamic)) {
-				/*
-				
-				The SINASM method to free dynamic memory is simply loading the B register with the address where the variable is in the heap, and use the syscall instruction with syscall number 0x20.
-				
-				*/
-
-				// fetch global and local variables differently
-				if (to_free->scope_level == 0) {
-					sinasm_ss << "\t" << "loadb " << to_free->name << std::endl;
+				// check to make sure the asm type is valid
+				if (asm_statement->get_asm_type() == this->asm_type) {
+					// simply copy the asm into our file with comments denoting where it begins/ends
+					sinasm_ss << ";; BEGIN ASM FROM .SIN FILE" << std::endl;
+					sinasm_ss << asm_statement->asm_code;
+					sinasm_ss << ";; END ASM FROM .SIN FILE" << std::endl;
 				}
 				else {
-					sinasm_ss << "\t" << this->move_sp_to_target_address(to_free->stack_offset + 1).str();
-					sinasm_ss << "\t" << "plb" << std::endl;
-					this->stack_offset -= 1;
-				}
-
-				// make the syscall
-				sinasm_ss << "\t" << "syscall #$20" << to_free->name << std::endl;
-
-				// mark the variable as freed and undefined
-				to_free->defined = false;
-				to_free->freed = true;
-			}
-			else {
-				throw CompilerException("Cannot free the variable specified; can only free dynamic memory that has not already been freed.", 0, current_statement->get_line_number());
-			}
-		}
-		else if (statement_type == ALLOCATION) {
-			// dynamic_cast to an Allocation type
-			Allocation* alloc_statement = dynamic_cast<Allocation*>(current_statement);
-
-			// compile an alloc statement
-			sinasm_ss << this->allocate(*alloc_statement, &max_offset).str();
-		}
-		else if (statement_type == ASSIGNMENT) {
-			// dynamic cast to an Assignment type and compile an assignment
-			Assignment* assign_statement = dynamic_cast<Assignment*>(current_statement);
-			sinasm_ss << this->assign(*assign_statement, max_offset).str();
-		}
-		else if (statement_type == RETURN_STATEMENT) {
-			// if the current scope name is "global", throw an error
-			if (this->current_scope_name == "global") {
-				throw CompilerException("Cannot execute return statement outside of a function.", 0, current_statement->get_line_number());
-			}
-			else {
-				// dynamic cast to a Return type
-				ReturnStatement* return_statement = dynamic_cast<ReturnStatement*>(current_statement);
-
-				sinasm_ss << this->return_value(*return_statement, stack_frame_base, return_statement->get_line_number()).str();
-
-				// if the statement is not the last statement, display a warning stating the code is unreachable
-				if (statement_iter + 1 != AST.statements_list.end()) {
-					compiler_warning("Code after return statement is unreachable", return_statement->get_line_number());
+					// if the types do not match, throw an exception
+					throw CompilerException("Inline ASM in file does not match compiler's ASM version", 0, asm_statement->get_line_number());
 				}
 			}
-		}
-		else if (statement_type == IF_THEN_ELSE) {
-			IfThenElse ite_statement = *dynamic_cast<IfThenElse*>(current_statement);
-			sinasm_ss << this->ite(ite_statement, max_offset).str();
-		}
-		else if (statement_type == WHILE_LOOP) {
-			WhileLoop* while_statement = dynamic_cast<WhileLoop*>(current_statement);
-			sinasm_ss << this->while_loop(*while_statement, max_offset).str();
-		}
-		else if (statement_type == DEFINITION) {
-			Definition* def_statement = dynamic_cast<Definition*>(current_statement);
+			else if (statement_type == FREE_MEMORY) {
+				// dynamic cast to FreeMemory type
+				FreeMemory* free_statement = dynamic_cast<FreeMemory*>(current_statement);
 
-			// write the definition to our stringstream containing our function definitions
-			this->functions_ss << this->define(*def_statement).str();
-		}
-		else if (statement_type == CALL) {
-			Call* call_statement = dynamic_cast<Call*>(current_statement);
+				// look for a symbol in the table with the same name as is indicated by the free statement
+				std::shared_ptr<Symbol> fetched = this->symbol_table.lookup(free_statement->get_freed_memory().getValue(), this->current_scope_name,
+					this->current_scope);
+				Symbol* to_free = dynamic_cast<Symbol*>(fetched.get());	// todo: validate symbol_type of 'fetched' ?
 
-			// compile a call to a function
-			sinasm_ss << this->call(*call_statement, max_offset).str();
-		}
-		// if we have a STATEMENT_GENERAL, we had an explicit pass or some sort of parser error
-		else if (statement_type == STATEMENT_GENERAL) {
-			// generate a compiler warning stating we found an empty statement
-			compiler_warning("Empty statement found; could be the result of a parser error or a 'pass' statement", current_statement->get_line_number());
+				bool is_const = to_free->type_information.get_qualities().is_const();
+				bool is_dynamic = to_free->type_information.get_qualities().is_dynamic();
+				bool is_signed = to_free->type_information.get_qualities().is_signed();
+
+				// we can only free dynamic memory that hasn't already been freed
+				// however, do not throw this error for a plain pointer because it may point to dynamic memory
+				if ( (!to_free->freed && (is_dynamic)) || to_free->type_information.get_primary() == PTR) {
+					/*
+
+					The SINASM method to free dynamic memory is simply loading the B register with the address where the variable is in the heap, and use the syscall instruction with syscall number 0x20.
+
+					*/
+
+					// fetch global and local variables differently
+					if (to_free->scope_level == 0) {
+						sinasm_ss << "\t" << "loadb " << to_free->name << std::endl;
+					}
+					else {
+						sinasm_ss << "\t" << this->move_sp_to_target_address(to_free->stack_offset + 1).str();
+						sinasm_ss << "\t" << "plb" << std::endl;
+						this->stack_offset -= 1;
+					}
+
+					// make the syscall
+					sinasm_ss << "\t" << "syscall #$20" << std::endl;
+
+					// mark the variable as freed and undefined
+					to_free->defined = false;
+					to_free->freed = true;
+				}
+				else {
+					throw CompilerException("Cannot free the variable specified; can only free dynamic memory that has not already been freed.", 0, current_statement->get_line_number());
+				}
+			}
+			else if (statement_type == ALLOCATION) {
+				// dynamic_cast to an Allocation type
+				Allocation* alloc_statement = dynamic_cast<Allocation*>(current_statement);
+
+				// compile an alloc statement
+				sinasm_ss << this->allocate(*alloc_statement, &max_offset).str();
+			}
+			else if (statement_type == ASSIGNMENT) {
+				// dynamic cast to an Assignment type and compile an assignment
+				Assignment* assign_statement = dynamic_cast<Assignment*>(current_statement);
+				sinasm_ss << this->assign(*assign_statement, max_offset).str();
+			}
+			else if (statement_type == RETURN_STATEMENT) {
+				// if the current scope name is "global", throw an error
+				if (this->current_scope_name == "global") {
+					throw CompilerException("Cannot execute return statement outside of a function.", 0, current_statement->get_line_number());
+				}
+				else {
+					// dynamic cast to a Return type
+					ReturnStatement* return_statement = dynamic_cast<ReturnStatement*>(current_statement);
+
+					sinasm_ss << this->return_value(*return_statement, stack_frame_base, return_statement->get_line_number()).str();
+
+					// if the statement is not the last statement, display a warning stating the code is unreachable
+					if (statement_iter + 1 != AST.statements_list.end()) {
+						compiler_warning("Code after return statement is unreachable", return_statement->get_line_number());
+					}
+				}
+			}
+			else if (statement_type == IF_THEN_ELSE) {
+				IfThenElse ite_statement = *dynamic_cast<IfThenElse*>(current_statement);
+				sinasm_ss << this->ite(ite_statement, max_offset).str();
+			}
+			else if (statement_type == WHILE_LOOP) {
+				WhileLoop* while_statement = dynamic_cast<WhileLoop*>(current_statement);
+				sinasm_ss << this->while_loop(*while_statement, max_offset).str();
+			}
+			else if (statement_type == DEFINITION) {
+				Definition* def_statement = dynamic_cast<Definition*>(current_statement);
+
+				// write the definition to our stringstream containing our function definitions
+				this->functions_ss << this->define(*def_statement).str();
+			}
+			else if (statement_type == CALL) {
+				Call* call_statement = dynamic_cast<Call*>(current_statement);
+
+				// compile a call to a function
+				sinasm_ss << this->call(*call_statement, max_offset).str();
+			}
+			// if we have a STATEMENT_GENERAL, we had an explicit pass or some sort of parser error
+			else if (statement_type == STATEMENT_GENERAL) {
+				// generate a compiler warning stating we found an empty statement
+				compiler_warning("Empty statement found; could be the result of a parser error or a 'pass' statement", current_statement->get_line_number());
+			}
 		}
 	}
 
@@ -1024,7 +603,9 @@ std::stringstream Compiler::compile_to_stringstream(bool include_builtins) {
 	This function is to be used when we want to produce an object file from the .sin file. The stringstream this file creates can be passed directly into our assembler, as it takes an istream as input (as such, it can be a stringstream or a filestream). This should be what is called by default unless we specify that we want to create an assembly file during the compilation process.
 
 	*/
-	
+
+	std::cout << "Beginning code generation..." << std::endl;
+
 	// declare a stringstream to hold our generated ASM code
 	std::stringstream generated_asm;
 
@@ -1056,8 +637,10 @@ Compiler::Compiler(std::istream& sin_file, uint8_t _wordsize, std::vector<std::s
 	Lexer lex(sin_file);
 	Parser parser(lex);
 
+	std::cout << "Beginning parse..." << std::endl;
 	// get the AST from the parser
 	this->AST = parser.create_ast();
+	std::cout << "Done parsing." << std::endl;
 
 	this->current_scope = 0;	// start at the global scope
 	this->current_scope_name = "global";

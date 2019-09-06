@@ -49,7 +49,7 @@ DataType Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evalu
 	if (to_evaluate->get_expression_type() == LITERAL) {
 		Literal* literal_exp = dynamic_cast<Literal*>(to_evaluate.get());
 
-		return DataType(literal_exp->get_type());
+		return DataType(literal_exp->get_data_type());
 	}
 	else if (to_evaluate->get_expression_type() == LVALUE || to_evaluate->get_expression_type() == INDEXED) {
 		LValue* lvalue_exp = dynamic_cast<LValue*>(to_evaluate.get());
@@ -80,7 +80,7 @@ DataType Compiler::get_expression_data_type(std::shared_ptr<Expression> to_evalu
 
 		// The routine for an address_of expression is the same as for an lvalue one...so we can just use recursion
 		DataType address_of_type = this->get_expression_data_type(std::make_shared<LValue>(address_of_exp->get_target()), line_number);
-		return DataType(PTR, address_of_type.get_type());
+		return DataType(PTR, address_of_type.get_primary());
 	}
 	else if (to_evaluate->get_expression_type() == UNARY) {
 		Unary* unary_exp = dynamic_cast<Unary*>(to_evaluate.get());
@@ -163,7 +163,7 @@ bool Compiler::is_signed(std::shared_ptr<Expression> to_evaluate, unsigned int l
 		Literal* literal_exp = dynamic_cast<Literal*>(to_evaluate.get());
 
 		// only INT and FLOAT can be signed
-		if (literal_exp->get_type() == INT) {
+		if (literal_exp->get_data_type() == INT) {
 			// an int may be signed or unsigned; we must get the value to determine whether to return true or false
 			int value = std::stoi(literal_exp->get_value());
 
@@ -175,7 +175,7 @@ bool Compiler::is_signed(std::shared_ptr<Expression> to_evaluate, unsigned int l
 				return false;
 			}
 		}
-		else if (literal_exp->get_type() == FLOAT) {
+		else if (literal_exp->get_data_type() == FLOAT) {
 			// floats are _always_ signed
 			return true;
 		}
@@ -189,31 +189,12 @@ bool Compiler::is_signed(std::shared_ptr<Expression> to_evaluate, unsigned int l
 		Symbol* to_check = dynamic_cast<Symbol*>(fetched.get());	// todo: check symbol_type? or is this unnecessary?
 
 		// only ints and floats can be signed
-		if (to_check->type_information.get_type() == INT) {
+		if (to_check->type_information.get_primary() == INT) {
 			// check the int's quality
-			bool lvalue_is_signed = true;	// ints default to being signed
-			bool exit = false;
-
-			// iterate through the qualities vector to see if we have a sign indicator
-			std::vector<SymbolQuality> qualities = to_check->type_information.get_qualities();
-			std::vector<SymbolQuality>::iterator quality_iter = qualities.begin();
-			while (quality_iter != qualities.end() && !exit) {
-				if (*quality_iter == UNSIGNED) {
-					lvalue_is_signed = false;
-					exit = true;
-				}
-				else if (*quality_iter == SIGNED) {
-					exit = true;
-				}
-				else {
-					quality_iter++;
-				}
-			}
-
-			return lvalue_is_signed;
+			return to_check->type_information.get_qualities().is_signed();
 		}
-		else if (to_check->type_information.get_type() == FLOAT) {
-			return true;
+		else if (to_check->type_information.get_primary() == FLOAT) {
+			return true;	// floats are always signed
 		}
 		else {
 			return false;
@@ -299,11 +280,11 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		Literal* literal_expression = dynamic_cast<Literal*>(to_fetch.get());
 
 		// different data types will require slightly different methods for loading
-		if (literal_expression->get_type() == INT) {
+		if (literal_expression->get_data_type() == INT) {
 			// int types just need to write a loada instruction
 			fetch_ss << "\t" << "loada #$" << std::hex << std::stoi(literal_expression->get_value()) << std::endl;
 		}
-		else if (literal_expression->get_type() == BOOL) {
+		else if (literal_expression->get_data_type() == BOOL) {
 			// bool types are also easy to write; any nonzero integer is true
 			int bool_expression_as_int;
 			if (literal_expression->get_value() == "true") {
@@ -319,7 +300,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 
 			fetch_ss << "\t" << "loada #$" << std::hex << bool_expression_as_int << std::endl;
 		}
-		else if (literal_expression->get_type() == FLOAT) {
+		else if (literal_expression->get_data_type() == FLOAT) {
 			// for now, we will only deal with a half-precision float type, though a single-precision could be implemented as well
 			// copy the bits of the float value into a uint32_t
 			float literal_value = std::stof(literal_expression->get_value());
@@ -329,7 +310,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 			uint16_t literal_float = pack_32(converted_value);
 			fetch_ss << "\t" << "loada #$" << std::hex << static_cast<int>(literal_float) << std::endl;
 		}
-		else if (literal_expression->get_type() == STRING) {
+		else if (literal_expression->get_data_type() == STRING) {
 			// first, define a constant for the string using our naming convention
 			std::string string_constant_name;
 			string_constant_name = "__STRC__NUM_" + std::to_string(this->strc_number);	// define the constant name
@@ -380,28 +361,9 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 
 		// now that the variable has been fetched, check its qualities
 
-		bool is_const = false;
-		bool is_dynamic = false;
-		bool is_signed;
-
-		std::vector<SymbolQuality> qualities = variable_symbol->type_information.get_qualities();
-		std::vector<SymbolQuality>::iterator quality_iter = qualities.begin();
-		while (quality_iter != qualities.end()) {
-			if (*quality_iter == CONSTANT) {
-				is_const = true;
-			}
-			else if (*quality_iter == DYNAMIC) {
-				is_dynamic = true;
-			}
-			else if (*quality_iter == SIGNED) {
-				is_signed = true;
-			}
-			else if (*quality_iter == UNSIGNED) {
-				is_signed = false;
-			}
-
-			quality_iter++;
-		}
+		bool is_const = variable_symbol->type_information.get_qualities().is_const();
+		bool is_dynamic = variable_symbol->type_information.get_qualities().is_dynamic();
+		bool is_signed = variable_symbol->type_information.get_qualities().is_signed();
 
 		// only fetch the value if it has been defined
 		if (variable_symbol->defined) {
@@ -409,7 +371,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 			// check the scope; we need to do different things for global and local scopes
 			if ((variable_symbol->scope_name == "global") && (variable_symbol->scope_level == 0)) {
 				// const strings operate a little differently than regular strings; they do not use indirect addressing
-				if (is_const && variable_symbol->type_information.get_type() == STRING) {
+				if (is_const && variable_symbol->type_information.get_primary() == STRING) {
 					/*
 					
 					Const strings can use direct addressing -- 
@@ -618,7 +580,7 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		// check to make sure what we are dereferencing is /actually/ a pointer
 		LValue pointed_to = dereferenced_exp->get_ptr();
 		Symbol* pointed_symbol = this->symbol_table.lookup(pointed_to.getValue()).get();
-		if (pointed_symbol->type_information.get_type() == PTR) {
+		if (pointed_symbol->type_information.get_primary() == PTR) {
 
 			fetch_ss << this->fetch_value(dereferenced_exp->get_ptr_shared(), line_number, max_offset).str();
 			fetch_ss << "\t" << "tay" << std::endl;
@@ -645,37 +607,21 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 
 		// get our qualities
 
-		bool is_const = false;
-		bool is_dynamic = false;
-		bool is_signed;
-
-		std::vector<SymbolQuality> qualities = variable_symbol->type_information.get_qualities();
-		std::vector<SymbolQuality>::iterator quality_iter = qualities.begin();
-		while (quality_iter != qualities.end()) {
-			if (*quality_iter == CONSTANT) {
-				is_const = true;
-			}
-			else if (*quality_iter == DYNAMIC) {
-				is_dynamic = true;
-			}
-			else if (*quality_iter == SIGNED) {
-				is_signed = true;
-			}
-			else if (*quality_iter == UNSIGNED) {
-				is_signed = false;
-			}
-
-			quality_iter++;
-		}
+		bool is_const = variable_symbol->type_information.get_qualities().is_const();
+		bool is_dynamic = variable_symbol->type_information.get_qualities().is_dynamic();
+		bool is_signed = variable_symbol->type_information.get_qualities().is_signed();
 
 		// todo: remove these comments? or uncomment?
 		// make sure the variable was defined
-		//if (variable_symbol->defined) {
-			if (is_dynamic) {
-				// Getting the address of a dynamic variable is easy -- we simply move the stack pointer to the proper byte, pull the value into A
+		if (is_dynamic) {
+			// Getting the address of a dynamic variable is easy -- we simply move the stack pointer to the proper byte, pull the value into A
 
-				if (variable_symbol->freed) {
-					throw CompilerException("Cannot reference dynamic memory that has already been freed", 0, line_number);
+			if (variable_symbol->freed) {
+				throw CompilerException("Cannot reference dynamic memory that has already been freed", 0, line_number);
+			}
+			else {
+				if (variable_symbol->scope_level == 0) {
+					fetch_ss << "\t" << "loada " << variable_symbol->name << std::endl;
 				}
 				else {
 					fetch_ss << this->move_sp_to_target_address(variable_symbol->stack_offset + 1).str();
@@ -685,23 +631,20 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 					this->stack_offset -= 1;
 				}
 			}
-			else {
-				if (variable_symbol->scope_name == "global") {
-					fetch_ss << "\t" << "loada #" << variable_symbol->name << std::endl;	// using  "loada var" would mean "load the A register with the value at address 'var' " while "loada #var" means "load the A register with the address of 'var' "
-				}
-				else {
-					fetch_ss << this->move_sp_to_target_address(variable_symbol->stack_offset + 1).str();
-
-					// now that the stack pointer is in the proper place to pull the variable from, increment it by one place and transfer the pointer value to A; that is the address where the variable we want lives
-					this->stack_offset -= 1;
-					fetch_ss << "\t" << "incsp" << std::endl;
-					fetch_ss << "\t" << "tspa" << std::endl;
-				}
+		}
+		else {
+			if (variable_symbol->scope_level == 0) {
+				fetch_ss << "\t" << "loada #" << variable_symbol->name << std::endl;	// using  "loada var" would mean "load the A register with the value at address 'var' " while "loada #var" means "load the A register with the address of 'var' "
 			}
-		//}
-		//else {
-		//	throw CompilerException("Variable '" + variable_symbol->name + "' referenced before assignment", 0, line_number);
-		//}
+			else {
+				fetch_ss << this->move_sp_to_target_address(variable_symbol->stack_offset + 1).str();
+
+				// now that the stack pointer is in the proper place to pull the variable from, increment it by one place and transfer the pointer value to A; that is the address where the variable we want lives
+				this->stack_offset -= 1;
+				fetch_ss << "\t" << "incsp" << std::endl;
+				fetch_ss << "\t" << "tspa" << std::endl;
+			}
+		}
 	}
 	else if (to_fetch->get_expression_type() == UNARY) {
 		Unary* unary_expression = dynamic_cast<Unary*>(to_fetch.get());
@@ -726,15 +669,15 @@ std::stringstream Compiler::fetch_value(std::shared_ptr<Expression> to_fetch, un
 		fetch_ss << this->call(to_call, max_offset).str();	// add that to the asm
 
 		// now, the returned value will be in the registers; if the type is of variable length (array or struct), handle it separately because it is on the stack
-		if (function_symbol->type_information.get_type() == ARRAY) {
+		if (function_symbol->type_information.get_primary() == ARRAY) {
 			// TODO: implement arrays
 		}
-		else if (function_symbol->type_information.get_type() == STRUCT) {
+		else if (function_symbol->type_information.get_primary() == STRUCT) {
 			// TODO: implement structs
 		}
-		else if (function_symbol->type_information.get_type() == VOID || function_symbol->type_information.get_type() == NONE) {
+		else if (function_symbol->type_information.get_primary() == VOID || function_symbol->type_information.get_primary() == NONE) {
 			// we cannot use void functions as value returning types
-			throw CompilerException("Cannot retrieve value of '" + get_string_from_type(function_symbol->type_information.get_type()) + "' type", 0, line_number);
+			throw CompilerException("Cannot retrieve value of '" + get_string_from_type(function_symbol->type_information.get_primary()) + "' type", 0, line_number);
 		}
 
 		// We are done -- the values are where they are expected to be

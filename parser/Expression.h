@@ -1,3 +1,13 @@
+/*
+
+SIN Toolchain
+Copyright 2019 Riley Lannon
+Expression.h
+
+Contains the Expression class and all of its child classes; these are used by the Parser and Compiler to contain all of the different types of expressions available in the language.
+
+*/
+
 #pragma once
 #include <memory>
 #include <vector>
@@ -6,6 +16,7 @@
 #include <exception>
 
 #include "../util/EnumeratedTypes.h"
+#include "../util/DataType.h"
 
 
 const exp_operator translate_operator(std::string op_string);	// given the string name for an exp_operator, returns that exp_operator
@@ -38,11 +49,10 @@ public:
 
 class Literal : public Expression
 {
-	Type data_type;
-	Type subtype;
+	DataType type;
 	std::string value;
 public:
-	Type get_type();
+	DataType get_data_type();
 	std::string get_value();
 	Literal(Type data_type, std::string value, Type subtype = NONE);
 	Literal();

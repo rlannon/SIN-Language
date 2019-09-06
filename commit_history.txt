@@ -4,6 +4,20 @@ A list of changes made since last git commit. This file will go into more detail
 This file now contains a history of changes.
 
 --------------------------------------------------------------------------------------------
+
+9/5 commit to master
+
+- Fixed some compiler warnings (mostly regarding signed/unsigned mismatches, control paths, etc.)
+- Implemented dynamic memory to some extent; it is still messy and will require /a lot/ of refactoring, but the proof of concept is there
+	- Split allocation function into multiple functions that execute depending on the type of allocation taking place
+- 'free' now works on pointers that reference dynamic memory
+- Added a "SymbolQualities" class to hold the quality data for a symbol; this is easier than iterating through a vector every time, as it contains booleans. Vector iteration only happens in the constructor or if qualities need to be added.
+	- As a result, the 'Definition' statement type was modified, as was all code relating to its construction
+	- Further, all code to fetch symbol qualities was changed; vector iterations are no longer needed but the local boolean variables containing this data are still used so we can see "is_const" rather than "symbol->type_information.get_qualities().is_const
+- General code cleanups and comment updates
+
+--------------------------------------------------------------------------------------------
+
 8/1 commit to master
 
 - Added Parser::has_return to recursively determine whether a given StatementBlock object contains a return statement. This is used to check to ensure function definitions return a value. Further, the compiler also checks to ensure the data type of the expression being returned matches the function's return type

@@ -256,6 +256,7 @@ std::shared_ptr<Expression> Parser::create_dereference_object() {
 	// if it is not a literal or an ident and the next character is also not an ident or asterisk, we have an error
 	else {
 		throw ParserException("Expected an identifier in pointer dereference operation", 332, current_token().line_number);
+		return nullptr;
 	}
 }
 
@@ -271,6 +272,9 @@ LValue Parser::getDereferencedLValue(Dereferenced to_eval) {
 	else if (to_eval.get_ptr_shared()->get_expression_type() == DEREFERENCED) {
 		Dereferenced* _deref = dynamic_cast<Dereferenced*>(to_eval.get_ptr_shared().get());
 		return this->getDereferencedLValue(*_deref);
+	}
+	else {
+		throw ParserException("Invalid expression type for dereferenced lvalue", 0, 0);	// todo: get line number
 	}
 }
 
@@ -302,7 +306,7 @@ std::shared_ptr<Expression> Parser::maybe_binary(std::shared_ptr<Expression> lef
 		}
 
 		// get the next op_char's data
-		int his_prec = get_precedence(next.value, next.line_number);
+		size_t his_prec = get_precedence(next.value, next.line_number);
 
 		// If the next operator is of a higher precedence than ours, we may need to parse a second binary expression first
 		if (his_prec > my_prec) {

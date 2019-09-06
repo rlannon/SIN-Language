@@ -4,7 +4,9 @@ SIN Toolchain
 DataType.h
 Copyright 2019 Riley Lannon
 
-Contains the definition of the 'DataType' class, which contains the type and subtype of a given expression alongside methods to evaluate and comapre it.
+Contains the definitions of the 'SymbolQualities' and 'DataType' classes.
+SymbolQualities contains the object used by the DataType class to store qualities so std::vector is not needed
+DataType contains the type, subtype, and qualities of a given expression alongside methods to evaluate and comapre it.
 
 */
 
@@ -13,19 +15,47 @@ Contains the definition of the 'DataType' class, which contains the type and sub
 #include <vector>
 #include "EnumeratedTypes.h"
 
+class SymbolQualities
+{
+	bool const_q;	// our qualities -- since these are almost all reserved in C++, suffix with _q, for "quality"
+	bool static_q;
+	bool dynamic_q;
+	bool signed_q;
+	bool unsigned_q;
+public:
+	bool is_const();	// accessors
+	bool is_static();
+	bool is_dynamic();
+	bool is_signed();
+	bool is_unsigned();
+
+	void add_qualities(std::vector<SymbolQuality> to_add);
+
+	SymbolQualities(std::vector<SymbolQuality> qualities);
+	SymbolQualities(bool is_const, bool is_static, bool is_dynamic, bool is_signed, bool is_unsigned);
+	SymbolQualities();
+	~SymbolQualities();
+};
+
 class DataType
 {
 	Type primary;
 	Type subtype;
-	std::vector<SymbolQuality> qualities;
+	SymbolQualities qualities;
 	size_t array_length;
 public:
 	bool operator==(const DataType right);
 	bool operator!=(const DataType right);
 
-	Type get_type();
+	bool operator==(const Type right[2]);
+	bool operator!=(const Type right[2]);
+
+	bool operator==(const Type right);
+	bool operator!=(const Type right);
+
+	Type get_primary();
 	Type get_subtype();
-	std::vector<SymbolQuality> get_qualities();
+	SymbolQualities get_qualities();
 	size_t get_array_length();
 
 	void set_primary(Type new_primary);

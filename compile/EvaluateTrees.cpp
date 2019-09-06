@@ -357,7 +357,7 @@ std::stringstream Compiler::evaluate_unary_tree(Unary unary_exp, unsigned int li
 	if (unary_exp.get_operand()->get_expression_type() == LITERAL) {
 		// cast the operand to a literal type
 		Literal* unary_operand = dynamic_cast<Literal*>(unary_exp.get_operand().get());
-		unary_operand_type = unary_operand->get_type();
+		unary_operand_type = unary_operand->get_data_type().get_primary();
 
 		// act according to its data type
 		if (unary_operand_type == BOOL) {

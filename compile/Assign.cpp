@@ -22,7 +22,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 	std::stringstream string_assign_ss;
 
 	// if we have an indexed statement, temporarily store the Y value (the index value) in LOCAL_DYNAMIC_POINTER, as we don't need that address quite yet
-	if (target_symbol->type_information.get_type() == ARRAY) {
+	if (target_symbol->type_information.get_primary() == ARRAY) {
 		string_assign_ss << "\t" << "storey $" << std::hex << _LOCAL_DYNAMIC_POINTER << std::endl;
 	}
 
@@ -76,7 +76,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 
 		// if we have a static variable
 		if (target_symbol->scope_name == "global" && target_symbol->scope_level == 0) {
-			if (target_symbol->type_information.get_type() == ARRAY) {
+			if (target_symbol->type_information.get_primary() == ARRAY) {
 				string_assign_ss << "\t" << "loady $" << _LOCAL_DYNAMIC_POINTER << std::endl;
 				string_assign_ss << "\t" << "loadb " << target_symbol->name << ", y" << std::endl;
 			}
@@ -92,7 +92,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 			string_assign_ss << this->move_sp_to_target_address(target_symbol->stack_offset + 1).str();
 
 			// if we have a string array, we need to advance to the index position in the stack, pull, and then move back as far as we moved forward
-			if (target_symbol->type_information.get_type() == ARRAY) {
+			if (target_symbol->type_information.get_primary() == ARRAY) {
 				// subtract the offset from the stack pointer
 				string_assign_ss << "\t" << "tspa" << std::endl;
 				string_assign_ss << "\t" << "sec" << std::endl;
@@ -120,7 +120,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 			string_assign_ss << this->move_sp_to_target_address(former_offset).str();	// move the stack offset back
 		}
 
-		if (target_symbol->type_information.get_type() == ARRAY) {
+		if (target_symbol->type_information.get_primary() == ARRAY) {
 			string_assign_ss << "\t" << "txa" << std::endl;
 			string_assign_ss << "\t" << "syscall #$23" << std::endl;
 		}
@@ -151,7 +151,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 		*/
 
 		// if we have an indexed variable assignment, we need to fetch the value
-		if (target_symbol->type_information.get_type() == ARRAY) {
+		if (target_symbol->type_information.get_primary() == ARRAY) {
 			// load the Y register with the value at _LOCAL_DYNAMIC_POINTER, which contains the index value; it has already been multiplied (before we stored it at the address of _LOCAL_DYNAMIC_POINTER, so we don't need to worry about that
 			string_assign_ss << "\t" << "loady $" << std::hex << _LOCAL_DYNAMIC_POINTER << std::endl;
 			string_assign_ss << "\t" << "storeb " << target_symbol->name << ", y" << std::endl;	// store the value in REG_B at the symbol name indexed by the number of bytes by which our array member is offset
@@ -195,7 +195,7 @@ std::stringstream Compiler::string_assignment(Symbol* target_symbol, std::shared
 		string_assign_ss << this->move_sp_to_target_address(target_symbol->stack_offset).str();
 
 		// if we have an indexed assignment, we must navigate further into the stack
-		if (target_symbol->type_information.get_type() == ARRAY) {
+		if (target_symbol->type_information.get_primary() == ARRAY) {
 			// preserve the A and B values by moving them to X and Y
 			string_assign_ss << "\t" << "tax" << "\n\t" << "tba" << "\n\t" << "tay" << std::endl;
 
@@ -332,28 +332,9 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 			throw CompilerException("Expected modifiable-lvalue", 0, assignment_statement.get_line_number());
 		}
 
-		bool is_const = false;
-		bool is_dynamic = false;
-		bool is_signed;
-
-		std::vector<SymbolQuality> symbol_qualities = fetched->type_information.get_qualities();
-		std::vector<SymbolQuality>::iterator quality_iter = symbol_qualities.begin();
-		while (quality_iter != symbol_qualities.end()) {
-			if (*quality_iter == CONSTANT) {
-				is_const = true;
-			}
-			else if (*quality_iter == DYNAMIC) {
-				is_dynamic = true;
-			}
-			else if (*quality_iter == SIGNED) {
-				is_signed = true;
-			}
-			else if (*quality_iter == UNSIGNED) {
-				is_signed = false;
-			}
-
-			quality_iter++;
-		}
+		bool is_const = fetched->type_information.get_qualities().is_const();
+		bool is_dynamic = fetched->type_information.get_qualities().is_dynamic();
+		bool is_signed = fetched->type_information.get_qualities().is_signed();
 
 		// if the lvalue_exp_type is 'indexed', make sure 'fetched->type' is either a string or an array -- those are the only data types we can index
 		if (lvalue_exp_type == INDEXED && ((fetched->type_information != STRING) && (fetched->type_information != ARRAY))) {
@@ -368,7 +349,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 		else if (lvalue_exp_type == DEREFERENCED) {
 			// first, make sure the symbol type is actually ptr<...> -- otherwise, throw an error
 			Dereferenced* lvalue = dynamic_cast<Dereferenced*>(assignment_statement.get_lvalue().get());
-			if (fetched->type_information.get_type() == PTR) {
+			if (fetched->type_information.get_primary() == PTR) {
 				assignment_ss << this->pointer_assignment(*lvalue, assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str();
 			}
 			else {
@@ -393,7 +374,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 
 			DataType rvalue_data_type = this->get_expression_data_type(assignment_statement.get_rvalue(), assignment_statement.get_line_number());
 			if (assignment_statement.get_rvalue()->get_expression_type() == ADDRESS_OF) {
-				rvalue_data_type.set_subtype(rvalue_data_type.get_type());
+				rvalue_data_type.set_subtype(rvalue_data_type.get_primary());
 				rvalue_data_type.set_primary(PTR);
 			}
 
@@ -403,7 +384,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 				// dynamic memory must be handled a little differently than automatic memory because under the hood, it is implemented through pointers
 				if (is_dynamic) {
 					// we don't need to check if the memory has been freed here -- we do that in string assignment
-					if (fetched->type_information.get_type() == STRING) {
+					if (fetched->type_information.get_primary() == STRING) {
 						// check to make sure the type isn't indexed; if it is, throw an exception -- string index assignment is disallowed
 						if (lvalue_exp_type == INDEXED) {
 							throw CompilerException("Index assignment on strings is forbidden", 0, assignment_statement.get_line_number());
@@ -415,9 +396,14 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 							assignment_ss << this->string_assignment(fetched, assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str();
 						}
 					}
+					else if (fetched->type_information.get_primary() == ARRAY) {
+						// todo: add support for arrays
+					}
+					else if (fetched->type_information.get_primary() == STRUCT) {
+						// todo: add support for structs
+					}
 					else {
-						// TODO: add support for other dynamic types
-						throw CompilerException("Other dynamic memory types not supported at this time");
+						assignment_ss << this->dynamic_assignment(fetched, assignment_statement.get_rvalue(), assignment_statement.get_line_number(), max_offset).str() << std::endl;
 					}
 				}
 				// automatic and static memory are a little easier to handle than dynamic
@@ -564,7 +550,7 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 			}
 			// if the types do not match, we must throw an exception
 			else {
-				throw CompilerException("Cannot match '" + get_string_from_type(fetched->type_information.get_type()) + "' and '" + get_string_from_type(rvalue_data_type.get_type()) + "'", 0, assignment_statement.get_line_number());
+				throw CompilerException("Cannot match '" + get_string_from_type(fetched->type_information.get_primary()) + "' and '" + get_string_from_type(rvalue_data_type.get_primary()) + "'", 0, assignment_statement.get_line_number());
 			}
 		}
 	}
@@ -579,8 +565,31 @@ std::stringstream Compiler::assign(Assignment assignment_statement, size_t max_o
 
 std::stringstream Compiler::dynamic_assignment(Symbol* target_symbol, std::shared_ptr<Expression> rvalue, unsigned int line_number, size_t max_offset)
 {
-	// todo: dynamic assignment implementation
-	return std::stringstream();
+	std::stringstream dynamic_ss;
+
+	// first, we need to fetch the value of the target symbol, as it is a pointer under the hood
+	if (target_symbol->scope_level == 0)
+	{
+		dynamic_ss << "\t" << "loada " << target_symbol->name << std::endl;
+	}
+	else {
+		dynamic_ss << this->move_sp_to_target_address(target_symbol->stack_offset + 1).str() << std::endl;
+		dynamic_ss << "\t" << "pla" << std::endl;
+		this->stack_offset -= 1;
+	}
+
+	// now, the A register contains the address of the dynamic data; preserve it
+	dynamic_ss << "\t" << "prsa" << std::endl;
+
+	// fetch the rvalue
+	dynamic_ss << this->fetch_value(rvalue, line_number, max_offset).str() << std::endl;
+
+	// restore the address and assign
+	dynamic_ss << "\t" << "rstb" << "\n\t" << "tby" << std::endl;
+	dynamic_ss << "\t" << "storea $00, y" << std::endl;
+
+	target_symbol->defined = true;
+	return dynamic_ss;
 }
 
 std::stringstream Compiler::pointer_assignment(Dereferenced lvalue, std::shared_ptr<Expression> rvalue, unsigned int line_number, size_t max_offset)

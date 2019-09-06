@@ -25,7 +25,7 @@ enum SymbolClass
 	U	// undefined (to be resolved by the linker)
 };
 
-typedef struct AssemblerSymbol {
+struct AssemblerSymbol {
 	/*
 	
 	A struct to contain symbols used in the Assembler. Keeps track of the symbol name, its value, its size (in bytes), and its class (Defined, Undefined, etc..).
@@ -43,7 +43,7 @@ typedef struct AssemblerSymbol {
 	~AssemblerSymbol();
 };
 
-typedef struct RelocationSymbol {
+struct RelocationSymbol {
 	/*
 	
 	A struct to keep track of elements in the assembler and linker relocation tables. These contain the symbol name and where it appears in the code so the linker can replace the data at the location with the appropriate data associated with the symbol.
@@ -58,7 +58,7 @@ typedef struct RelocationSymbol {
 	~RelocationSymbol();
 };
 
-typedef struct DataSymbol {
+struct DataSymbol {
 	/*
 	
 	A struct to keep track of elements in the assembler and linker data tables. This will handle symbols created by the @db assembler directive. These contain the symbol's name and any data associated with that symbol.

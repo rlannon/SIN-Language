@@ -26,7 +26,7 @@ This file contains the definition for the SinObjectFile class, a class to hold a
 const uint8_t sinc_version = 2;
 
 // create a data type that will hold all the data for an Assembler object that we will need to write a .sinc file; this is to avoid circular dependencies
-typedef struct AssemblerData
+struct AssemblerData
 {
 	uint8_t _wordsize;
 	std::vector<uint8_t> _text;

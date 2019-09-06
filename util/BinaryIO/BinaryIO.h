@@ -1,9 +1,7 @@
-#pragma once
-
-#include <iostream>
-#include <string>
-
 /*
+
+BinaryIO
+Copyright 2019 Riley Lannon
 
 This header lays out all of the necessary functions for writing and reading binary files. It establishes our fundamental data types and functions for reading/writing data in binary format.
 Note that these functions are used for reading and writing *unsigned* 8/16/32 bit values; for signed values, simply cast the signed integer to an unsigned value before writing and cast back to a signed value after reading.
@@ -11,6 +9,11 @@ Note that these functions are used for reading and writing *unsigned* 8/16/32 bi
 Note also that the library's default byte order is little endian, but big endian can also be used by using the byteorder parameter.
 
 */
+
+#pragma once
+
+#include <iostream>
+#include <string>
 
 // put all of these functions into a namespace
 namespace BinaryIO {

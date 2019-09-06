@@ -8,6 +8,8 @@ This header contains the numeric constants for the various signals used by the S
 
 */
 
+#pragma once
+
 #include <cinttypes>
 
 const uint8_t SINSIGRESET = 0x09;	// reset the system

@@ -286,7 +286,7 @@ void SINVM::store_in_memory(uint16_t address, uint16_t new_value, bool is_short)
 	// if we have a valid address, we are allowed to store the data in memory; otherwise, we have an access violation
 	if (address_is_valid(address)) {
 		if (is_short) {
-			this->memory[address] = new_value;
+			this->memory[address] = new_value & 0xFF;	// low byte only if we are using short addressing
 		}
 		else {
 			size_t wordsize_bytes = this->_WORDSIZE / 8;

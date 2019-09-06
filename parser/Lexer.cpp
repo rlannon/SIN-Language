@@ -12,7 +12,7 @@ lexeme::lexeme() {
 	this->line_number = 0;	// initialize to 0 by default
 }
 
-lexeme::lexeme(std::string type, std::string value, int line_number) : type(type), value(value), line_number(line_number) {
+lexeme::lexeme(std::string type, std::string value, unsigned int line_number) : type(type), value(value), line_number(line_number) {
 }
 
 
@@ -44,6 +44,9 @@ char Lexer::peek() {
 		char ch = this->stream->peek();
 		return ch;
 	}
+	else {
+		return EOF;
+	}
 }
 
 char Lexer::next() {
@@ -56,6 +59,9 @@ char Lexer::next() {
 		}
 
 		return ch;
+	}
+	else {
+		return EOF;
 	}
 }
 
@@ -73,7 +79,8 @@ bool Lexer::match_character(char ch, std::string expression) {
 		return (std::regex_match(&ch, std::regex(expression)));
 	}
 	catch (const std::regex_error &e) {
-		std::cerr << "REGEX ERROR:" << std::endl << e.what() << std::endl;	// because these functions are all static, we cannot use current_line to display the error unless it is added as a parameter for all of the static functions; do they really need to be static?
+		std::cerr << "REGEX ERROR:" << std::endl << e.what() << std::endl;	// todo: reevaluate whether these functions need to be static
+		return false;
 	}
 }
 
@@ -202,7 +209,7 @@ std::string Lexer::read_while(bool (*predicate)(char)) {
 
 	this->peek();
 	if (this->stream->eof()) {
-		std::cout << "Note from Lexer: end of file reached" << std::endl;
+		std::cout << "EOF reached" << std::endl;
 		return msg;
 	}
 
@@ -354,15 +361,22 @@ lexeme Lexer::read_next() {
 		return next_lexeme;
 
 	}
+	// the following circumstances will return a lexeme of no type with the value of NULL, EOF, or nothing; all will say it occurred on line 0
 	else if (ch == NULL) {	// if there is a NULL character
 		std::cout << ch << "   (NULL)" << std::endl;
 		std::cout << "ch == NULL; done." << std::endl;
 		this->exit_flag = true;
+		return lexeme("", "NULL", 0);
 	}
 	else if (ch == EOF) {	// if the end of file was reached
 		std::cout << ch << "   (EOF)" << std::endl;
 		std::cout << "end of file reached." << std::endl;
 		this->exit_flag = true;
+		return lexeme("", "EOF", 0);
+	}
+	else {
+		throw LexerException("Unexpected lexeme", this->position, ch);
+		return lexeme("", "", 0);
 	}
 }
 

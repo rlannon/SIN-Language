@@ -102,22 +102,22 @@ Expression::~Expression() {
 
 
 
-Type Literal::get_type() {
-	return this->data_type;
+DataType Literal::get_data_type() {
+	return this->type;
 }
 
 std::string Literal::get_value() {
 	return this->value;
 }
 
-Literal::Literal(Type data_type, std::string value, Type subtype) : value(value), data_type(data_type), subtype(subtype) {
+Literal::Literal(Type data_type, std::string value, Type subtype) : value(value) {
 	Literal::expression_type = LITERAL;
+	Literal::type = DataType(data_type, subtype);
 }
 
 Literal::Literal() {
-	Literal::data_type = NONE;	// give it a default value so we don't try to access an uninitialized value
-	Literal::subtype = NONE;	// will remain 'NONE' unless our data_type is ptr or array
 	Literal::expression_type = LITERAL;
+	Literal::type = DataType();
 }
 
 

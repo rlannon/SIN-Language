@@ -1,8 +1,8 @@
-#pragma once
-
-#include <cinttypes>
-
 /*
+
+SIN Toolchain
+Copyright 2019 Riley Lannon
+AddressingModeConstants.h
 
 This header serves the purpose of defining the addressing modes used in SINASM as constants. This way, the code will be less obfuscated, and thus more readable, and more maintainable. These constants are used both in the SIN Assembler and in the SIN VM.
 
@@ -10,12 +10,12 @@ Here is a brief overview of the following addressing modes:
 
 	The following are available for every instruction that takes an operand:
 		absolute	-	$1234		-	use memory location
-	
+
 		x_index		-	$1234, x	-	use memory location + value in x
 		y_index		-	$1234, y	-	"	"		"		+ value in y
 
 		indirect	-	($1234)		- fetches the value at memory location $1234 and uses that as an address; similar to indirect indexed/indexed indirect, but does not use X/Y registers -- operates as a simple pointer
-	
+
 		indirect indexed	-	($00), y	-	use the value at the supplied address as the address from which to fetch/store a value, indexed with a register
 		indexed indirect	-	($00, x)	-	use the value at the indexed address as the address from which to fetch/store a value
 
@@ -30,6 +30,10 @@ Here is a brief overview of the following addressing modes:
 	These modes correspond with their regular counterparts starting at 0x10
 
 */
+
+#pragma once
+
+#include <cinttypes>
 
 namespace addressingmode {
 	const uint8_t absolute = 0x00;

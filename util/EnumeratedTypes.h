@@ -1,5 +1,3 @@
-#pragma once
-
 /*
 
 SIN Toolchain
@@ -11,6 +9,7 @@ These are to be used so that this code might be more maintainable and less error
 
 */
 
+#pragma once
 
 enum stmt_type {
 	// The various types of statements we can have in SIN

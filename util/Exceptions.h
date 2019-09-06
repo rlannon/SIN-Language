@@ -8,7 +8,6 @@ A class to contain all of our custom exceptions.
 
 */
 
-
 #pragma once
 
 #include <stdexcept>

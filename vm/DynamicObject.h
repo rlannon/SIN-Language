@@ -1,3 +1,13 @@
+/*
+
+SIN Toolchain
+Copyright 2019 Riley Lannon
+DynamicObject.h
+
+Contains the definition of the DynamicObject class, which is used by the VM to track objects that have been allocated on the heap.
+
+*/
+
 #pragma once
 #include <cinttypes>		// for uint__t types
 

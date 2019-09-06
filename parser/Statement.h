@@ -198,22 +198,18 @@ public:
 class Definition : public Statement
 {
 	std::shared_ptr<Expression> name;	// todo: why are function names Expressions but names in allocations are strings?
-	std::vector<SymbolQuality> qualities;
-	Type return_type;
-	Type return_subtype;
+	DataType return_type;
 	std::vector<std::shared_ptr<Statement>> args;
 	std::shared_ptr<StatementBlock> procedure;
 
 	// TODO: add function qualities? currently, definitions just put "none" for the symbol's quality
 public:
 	std::shared_ptr<Expression> get_name();
-	std::vector<SymbolQuality> get_qualities();
-	Type get_return_type();
-	Type get_return_subtype();
+	DataType get_return_type();
 	std::shared_ptr<StatementBlock> get_procedure();
 	std::vector<std::shared_ptr<Statement>> get_args();
 
-	Definition(std::shared_ptr<Expression> name_ptr, Type return_type, Type return_subtype, std::vector<SymbolQuality> qualities, std::vector<std::shared_ptr<Statement>> args_ptr, std::shared_ptr<StatementBlock> procedure_ptr);
+	Definition(std::shared_ptr<Expression> name_ptr, DataType return_type, std::vector<std::shared_ptr<Statement>> args_ptr, std::shared_ptr<StatementBlock> procedure_ptr);
 	Definition();
 };
 

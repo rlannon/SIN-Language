@@ -1,5 +1,3 @@
-#pragma once
-
 /*
 
 For SIN VM version 1
@@ -17,6 +15,8 @@ Our addresses range from $0000 to $FFFF (65k):
 Note that the stacks in the VM grow /downward/ while the heap grows /upward/
 
 */
+
+#pragma once
 
 // declare how much memory the virtual machine has
 const size_t memory_size = 0x10000;	// 16k available to the VM

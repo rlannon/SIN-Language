@@ -78,7 +78,6 @@ int main (int argc, char* argv[]) {
 	bool link = false;
 	bool execute = false;
 	bool debug_values = false;	// if we want "SINVM::_debug_values()" after execution
-	bool parse = false;	// if we want to produce a .absn (Abstract-SIN) file
 	bool produce_asm_file = false;
 	bool include_builtins = true;
 
@@ -164,8 +163,6 @@ int main (int argc, char* argv[]) {
 				disassemble = false;
 				link = false;
 				execute = false;
-
-				parse = true;
 			}
 
 			// if the compile-only flag is set, it will both produce an AST file and compile the code to SINASM

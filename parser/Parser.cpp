@@ -69,7 +69,7 @@ void Parser::populate_token_list(std::ifstream* token_stream) {
 		std::string type;
 		std::string value;
 		std::string line_number_string;
-		int line_number = -1;	// initialize to -1
+		unsigned int line_number = 0;
 
 		// get the type
 		if (token_stream->peek() != '\n') {
@@ -106,6 +106,7 @@ void Parser::populate_token_list(std::ifstream* token_stream) {
 
 
 Parser::Parser(Lexer& lexer) {
+	std::cout << "Lexing..." << std::endl;
 	while (!lexer.eof() && !lexer.exit_flag_is_set()) {
 		lexeme token = lexer.read_next();
 

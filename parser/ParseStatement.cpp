@@ -70,8 +70,8 @@ std::shared_ptr<Statement> Parser::parse_statement(bool is_function_parameter) {
 						std::stringstream asm_code;
 
 						lexeme asm_data = this->next();
-						int current_line = asm_data.line_number;
-
+						unsigned int current_line = asm_data.line_number;
+						
 						while (!end_asm) {
 							// if we have advanced in line number, add a newline 
 							if (asm_data.line_number > current_line) {
@@ -101,6 +101,7 @@ std::shared_ptr<Statement> Parser::parse_statement(bool is_function_parameter) {
 				}
 				else {
 					throw ParserException("Inline Assembly must include the target architecture!", 000, current_lex.line_number);
+					return nullptr;
 				}
 			}
 		}
@@ -122,10 +123,12 @@ std::shared_ptr<Statement> Parser::parse_statement(bool is_function_parameter) {
 				}
 				else {
 					throw MissingSemicolonError(current_lex.line_number);
+					return nullptr;
 				}
 			}
 			else {
 				throw ParserException("Expected identifier after 'free'", 0, current_lex.line_number);
+				return nullptr;
 			}
 		}
 		// parse a declaration
@@ -163,6 +166,7 @@ std::shared_ptr<Statement> Parser::parse_statement(bool is_function_parameter) {
 		// if none of the keywords were valid, throw an error
 		else {
 			throw ParserException("Invalid keyword", 211, current_lex.line_number);
+			return nullptr;
 		}
 
 	}
@@ -174,17 +178,20 @@ std::shared_ptr<Statement> Parser::parse_statement(bool is_function_parameter) {
 		}
 		else {
 			throw ParserException("Lexeme '" + current_lex.value + "' is not a valid beginning to a statement", 000, current_lex.line_number);
+			return nullptr;
 		}
 	}
 
-	// if it is a curly brace, advance the character
+	// if it is a curly brace, advance the character and return a nullptr; the compiler will skip this
 	else if (current_lex.value == "}") {
-		this->next();
+		this->next();	// todo: return empty statement; compiler should skip empty statements (this function must return a value...)
+		return nullptr;
 	}
 
 	// otherwise, if the lexeme is not a valid beginning to a statement, abort
 	else {
 		throw ParserException("Lexeme '" + current_lex.value + "' is not a valid beginning to a statement", 000, current_lex.line_number);
+		return nullptr;
 	}
 }
 
@@ -402,6 +409,7 @@ std::shared_ptr<Statement> Parser::parse_allocation(lexeme current_lex)
 	lexeme next_token = this->next();
 	if (next_token.type == "kwd") {
 		// get the type data using Parser::get_type()
+		// this will tell us if the memory is to be dynamically allocated
 		DataType symbol_type_data = this->get_type();
 
 		// next, get the name
@@ -661,7 +669,7 @@ std::shared_ptr<Statement> Parser::parse_definition(lexeme current_lex)
 				if (returned) {
 					// Return the pointer to our function
 					std::shared_ptr<LValue> _func = std::make_shared<LValue>(func_name.value, "func");
-					stmt = std::make_shared<Definition>(_func, func_type_data.get_type(), func_type_data.get_subtype(), func_type_data.get_qualities(), args, std::make_shared<StatementBlock>(procedure));
+					stmt = std::make_shared<Definition>(_func, func_type_data, args, std::make_shared<StatementBlock>(procedure));
 					stmt->set_line_number(current_lex.line_number);
 
 					return stmt;

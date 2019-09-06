@@ -1,3 +1,16 @@
+/*
+
+SIN Toolchain
+Copyright 2019 Riley Lannon
+Lexer.h
+
+The Lexer class is used to handle the stream of input that we wish to parse. It takes a stream of input and returns tokens, each with a type and a value.
+A lexeme may be returned from the stream using the read_next() function.
+
+Note that the Lexer class does /not/ parse source files; it simply puts those files in a format that is usable by the language's parser, which is contained within the Parser class.
+
+*/
+
 #pragma once
 
 #include <string>
@@ -10,27 +23,18 @@
 #include <vector>
 #include <exception>
 
-/*
-
-The Lexer class is used to handle the stream of input that we wish to parse. It takes a stream of input and returns tokens, each with a type and a value.
-A lexeme may be returned from the stream using the read_next() function.
-
-Note that the Lexer class does /not/ parse source files; it simply puts those files in a format that is usable by the language's parser, which is contained within the Parser class.
-
-*/
-
 
 // Our lexeme data
-typedef struct lexeme {
+struct lexeme {
 	std::string type;
 	std::string value;
-	int line_number;
+	unsigned int line_number;
 	
-	// overload the == operator
+	// overload the == operator so we can compare two lexemes
 	bool operator==(const lexeme& b);
 
 	lexeme();
-	lexeme(std::string type, std::string value, int line_number);
+	lexeme(std::string type, std::string value, unsigned int line_number);
 };
 
 class Lexer

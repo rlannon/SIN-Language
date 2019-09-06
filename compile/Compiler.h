@@ -7,6 +7,8 @@ Copyright 2019 Riley Lannon
 This class defines the SIN Compiler; given an AST produced by the Parser, will produce a .sina file that can execute the given code in the SIN VM.
 Since it is such a massive class, it should always be allocated on the heap.
 
+todo: split compiler (code generator) into multiple classes
+
 */
 
 #pragma once
@@ -23,6 +25,8 @@ Since it is such a massive class, it should always be allocated on the heap.
 #include "../util/DataWidths.h"	// for maintainability and avoiding obfuscation, avoid hard coding data widths where possible
 #include "../util/FloatingPoint.h"	// contains useful utility functions for converting data to floating-point representation
 #include "../util/DataType.h"	// for DataType class, useful for storing Type and Subtype
+#include "../util/SyscallConstants.h"
+#include "../util/Signals.h"
 
 
 class Compiler
@@ -78,7 +82,10 @@ class Compiler
 
 	std::stringstream move_sp_to_target_address(size_t target_offset, bool preserve_registers = false);
 
-	std::stringstream allocate(Allocation allocation_statement, size_t* max_offset = nullptr);	// add a variable to the symbol table (using an allocation statement)
+	std::stringstream allocate(Allocation allocation_statement, size_t* max_offset = nullptr);	// handle an "alloc" statement
+	std::stringstream alloc_global(Symbol* to_allocate, unsigned int line_number, size_t max_offset, std::shared_ptr<Expression> initial_value = nullptr);	// allocate a global variable
+	std::stringstream alloc_local(Symbol* to_allocate, unsigned int line_number, size_t* max_offset, std::shared_ptr<Expression> initial_value = nullptr);	// allocate a local variable
+	std::stringstream define_global_constant(Symbol* to_allocate, unsigned int line_number, size_t max_offset, std::shared_ptr<Expression> initial_value);
 
 	std::stringstream define(Definition definition_statement);	// add a function definition (using a definition statement)
 	std::stringstream call(Call call_statement, size_t max_offset = 0);

@@ -274,19 +274,9 @@ std::shared_ptr<Expression> Definition::get_name() {
 	return this->name;
 }
 
-std::vector<SymbolQuality> Definition::get_qualities()
-{
-	return this->qualities;
-}
-
-Type Definition::get_return_type()
+DataType Definition::get_return_type()
 {
 	return this->return_type;
-}
-
-Type Definition::get_return_subtype()
-{
-	return this->return_subtype;
 }
 
 std::shared_ptr<StatementBlock> Definition::get_procedure() {
@@ -297,11 +287,9 @@ std::vector<std::shared_ptr<Statement>> Definition::get_args() {
 	return this->args;
 }
 
-Definition::Definition(std::shared_ptr<Expression> name_ptr, Type return_type, Type return_subtype, std::vector<SymbolQuality> qualities, std::vector<std::shared_ptr<Statement>> args_ptr, std::shared_ptr<StatementBlock> procedure_ptr):
+Definition::Definition(std::shared_ptr<Expression> name_ptr, DataType return_type, std::vector<std::shared_ptr<Statement>> args_ptr, std::shared_ptr<StatementBlock> procedure_ptr):
 	name(name_ptr),
 	return_type(return_type),
-	return_subtype(return_subtype),
-	qualities(qualities),
 	args(args_ptr),
 	procedure(procedure_ptr)
 {

@@ -446,7 +446,7 @@ void Assembler::construct_symbol_table() {
 					size_t str_len = constant_data.length();
 
 					// get the properly ordered big-endian bytes and create our data vector with them at the front
-					uint8_t len_bytes[2] = { ((uint8_t)str_len >> 8) & 0xFF, (uint8_t)str_len & 0xFF };
+					uint8_t len_bytes[2] = { (str_len >> 8) & 0xFF, str_len & 0xFF };
 					std::vector<uint8_t> data_array = { len_bytes[0], len_bytes[1] };
 
 					for (std::string::iterator it = constant_data.begin(); it != constant_data.end(); it++) {

@@ -50,7 +50,7 @@ void SINVM::execute_syscall() {
 		if (input_bytes.size() <= buffer_length) {
 			// store those bytes in memory
 			// use size() here because we want to index
-			for (int i = 0; i < input_bytes.size(); i++) {
+			for (size_t i = 0; i < input_bytes.size(); i++) {
 				this->memory[start_address + i] = input_bytes[i];
 			}
 
@@ -59,7 +59,7 @@ void SINVM::execute_syscall() {
 		}
 		// if the data is longer than the input buffer, only copy in as many bytes as we have available in the buffer, truncating the input data; if we don't do this, the data could overflow into the stack
 		else {
-			for (int i = 0; i < buffer_length; i++) {
+			for (size_t i = 0; i < buffer_length; i++) {
 				this->memory[start_address + i] = input_bytes[i];
 			}
 

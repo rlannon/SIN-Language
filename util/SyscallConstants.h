@@ -8,6 +8,8 @@ This file is to be used for the names of the various syscall constants so that t
 
 */
 
+#pragma once
+
 #include <cinttypes>  // for uint16_t
 
 const uint16_t STD_FILEOPEN_R = 0x10;
